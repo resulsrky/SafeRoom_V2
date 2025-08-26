@@ -31,8 +31,8 @@ public class PeerListener extends Thread {
         final Set<Integer>  sentToTarget = Collections.synchronizedSet(new HashSet<>());
         int rrCursor = 0;
 
-        volatile boolean finished = false;                // FIN aldı mı
-        volatile boolean allDoneSentToTarget = false;     // hedefe ALL_DONE yollandı mı
+        volatile boolean finished = false;    
+        volatile boolean allDoneSentToTarget = false; 
         volatile long    lastSeenMs = System.currentTimeMillis();
 
         PeerState(String host, String target, byte signal, InetAddress ip, int port) {
@@ -91,7 +91,6 @@ public class PeerListener extends Thread {
 
                     switch (sig) {
                         case LLS.SIG_HELLO, LLS.SIG_FIN -> {
-                            // parseMultiplex
                             List<Object> p = LLS.parseMultiple_Packet(buf.duplicate());
                             String sender = (String) p.get(2);
                             String target = (String) p.get(3);
@@ -111,7 +110,6 @@ public class PeerListener extends Thread {
                                         sender, ip.getHostAddress(), port, me.ports);
                             }
 
-                            // Hedef varsa push
                             PeerState tgt = STATES.get(me.target);
                             if (tgt != null) {
                                 pushAllIfReady(channel, me, tgt);
@@ -120,7 +118,6 @@ public class PeerListener extends Thread {
                         }
 
                         default -> {
-                            // server'a gelen başka tür yok
                         }
                     }
                 }
@@ -137,13 +134,11 @@ public class PeerListener extends Thread {
         }
     }
 
-    /** from tarafı FIN gönderdiyse ve ALL_DONE henüz yollanmadıysa: tüm portları to tarafına gönder + ALL_DONE */
     private void pushAllIfReady(DatagramChannel ch, PeerState from, PeerState to) throws Exception {
         if (!from.finished) return;
         if (from.allDoneSentToTarget) return;
         if (to.ports.isEmpty()) return;
 
-        // gönderilmemiş portları bul
         List<Integer> unsent = new ArrayList<>();
         for (int p : from.ports) {
             if (!from.sentToTarget.contains(p)) unsent.add(p);
@@ -160,7 +155,6 @@ public class PeerListener extends Thread {
             from.sentToTarget.add(p);
         }
 
-        // ALL_DONE
         for (int toPort : toPorts) {
             ByteBuffer donePkt = LLS.New_AllDone_Packet(from.host, to.host);
             ch.send(donePkt, new InetSocketAddress(to.ip, toPort));

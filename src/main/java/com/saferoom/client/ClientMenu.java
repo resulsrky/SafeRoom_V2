@@ -10,8 +10,8 @@ public class ClientMenu{
 	public static String Server = SafeRoomServer.ServerIP;
 	public static int Port = SafeRoomServer.grpcPort;
 	public static int UDP_Port = SafeRoomServer.udpPort1;
-	public static String myUsername = "james";
-	public static String target_username = "abkarada";
+	public static String myUsername = "abkarada";
+	public static String target_username = "james";
 
 		public static int Login(String username, String Password)
 		{
