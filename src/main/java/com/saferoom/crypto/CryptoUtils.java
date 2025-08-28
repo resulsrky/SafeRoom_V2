@@ -9,6 +9,7 @@ import java.security.MessageDigest;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.SecureRandom;
+import java.security.spec.NamedParameterSpec;
 import java.util.Base64;
 
 import javax.crypto.Cipher;
@@ -28,6 +29,26 @@ import javax.crypto.spec.SecretKeySpec;
  * 8.adım Artık tüm mesajlar AES ile şifrelenir.-Session Key = AES Key*/
 
 public class CryptoUtils {
+	
+	static final SecureRandom RNG = new SecureRandom();
+	
+	public static KeyPair x25519KeyPair() throws Exception{
+		KeyPairGenerator kpg = KeyPairGenerator.getInstance("X25519");
+		kpg.initialize(new NamedParameterSpec("X25519"));
+		
+		return kpg.generateKeyPair();
+	}
+	
+	public static byte[] x25519Public(KeyPair kp) {
+		return kp.getPublic().getEncoded();
+	}
+	
+	public static byte[] x25519PublicRaw(KeyPair kp) throws Exception {
+		    // Raw 32B public (RFC 7748)
+		    return kp.getPublic().getEncoded();
+		  }
+	
+	
 
 	public static KeyPair generatorRSAkeyPair() throws Exception {
 		KeyPairGenerator keygen = KeyPairGenerator.getInstance("RSA");
