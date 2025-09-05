@@ -51,35 +51,36 @@ public class UDPHoleImpl extends UDPHoleGrpc.UDPHoleImplBase {
 
 			DBManager.updateLoginAttempts(username);
 
-			if(DBManager.isUserBlocked(username)){
+			if(!DBManager.isUserBlocked(username)){
 				
 				if(DBManager.verifyPassword(username, hash_password)){
 					Status stat = Status.newBuilder()
 						.setMessage("ALL_GOOD")
 						.setCode(0)
 						.build();
-						DBManager.updateLastLogin(username);
+					DBManager.updateLastLogin(username);
 					response.onNext(stat);
+				}else{
+					Status stat = Status.newBuilder()
+						.setMessage("WRONG_PASSWORD")
+						.setCode(1)
+						.build();
+					response.onNext(stat);
+				}
+			}else{
+				Status blocked_stat = Status.newBuilder()
+					.setMessage("BLOCKED")
+					.setCode(1)
+					.build();
+				response.onNext(blocked_stat);
+			}
 		}else{
-			Status stat = Status.newBuilder()
-				.setMessage("WRONG_PASSWORD")
+			Status not_ex = Status.newBuilder()
+				.setMessage("N_REGISTER")
 				.setCode(1)
 				.build();
-			response.onNext(stat);
+			response.onNext(not_ex);
 		}
-		Status blocked_stat = Status.newBuilder()
-			.setMessage("BLOCKED")
-			.setCode(1)
-			.build();
-		response.onNext(blocked_stat);
-	}
-	}else{
-		Status not_ex = Status.newBuilder()
-			.setMessage("N_REGISTER")
-			.setCode(1)
-			.build();
-		response.onNext(not_ex);
-	}
 		response.onCompleted();	
 	
 	}catch(Exception e ) {

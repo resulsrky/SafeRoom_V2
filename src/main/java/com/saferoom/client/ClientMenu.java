@@ -6,6 +6,7 @@ import com.saferoom.grpc.SafeRoomProto.Verification;
 import com.saferoom.server.SafeRoomServer;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import java.util.concurrent.TimeUnit;
 public class ClientMenu{
 	public static String Server = SafeRoomServer.ServerIP;
 	public static int Port = SafeRoomServer.grpcPort;
@@ -15,38 +16,46 @@ public class ClientMenu{
 
 		public static int Login(String username, String Password)
 		{
-		ManagedChannel channel = ManagedChannelBuilder.forAddress(Server, Port)
-			.usePlaintext()
-			.build();
+		ManagedChannel channel = null;
+		try {
+			channel = ManagedChannelBuilder.forAddress(Server, Port)
+				.usePlaintext()
+				.build();
 
-		UDPHoleGrpc.UDPHoleBlockingStub client = UDPHoleGrpc.newBlockingStub(channel);
-		SafeRoomProto.Menu main_menu = SafeRoomProto.Menu.newBuilder()
-			.setUsername(username)
-			.setHashPassword(Password)
-			.build();
-		SafeRoomProto.Status stats = client.menuAns(main_menu);
-		
-		String message = stats.getMessage();
-		int code = stats.getCode();
-		switch(code){
-			case 0:
-				System.out.println("Success!");
-				return 0;
-			case 1:
-				if(message.equals("N_REGISTER")){
-					System.out.println("Not Registered");
-					return 1;
-				}else if(message.equals("WRONG_PASSWORD")){
-					System.out.println("Wrong Password");
-					return 3;
-					}else{
-						System.out.println("Blocked User");
-						return 2;
-					}
-		default:
-				System.out.println("Message has broken");
-				return 4;					
+			UDPHoleGrpc.UDPHoleBlockingStub client = UDPHoleGrpc.newBlockingStub(channel)
+				.withDeadlineAfter(10, java.util.concurrent.TimeUnit.SECONDS);
+			SafeRoomProto.Menu main_menu = SafeRoomProto.Menu.newBuilder()
+				.setUsername(username)
+				.setHashPassword(Password)
+				.build();
+			SafeRoomProto.Status stats = client.menuAns(main_menu);
+			
+			String message = stats.getMessage();
+			int code = stats.getCode();
+			switch(code){
+				case 0:
+					System.out.println("Success!");
+					return 0;
+				case 1:
+					if(message.equals("N_REGISTER")){
+						System.out.println("Not Registered");
+						return 1;
+					}else if(message.equals("WRONG_PASSWORD")){
+						System.out.println("Wrong Password");
+						return 3;
+						}else{
+							System.out.println("Blocked User");
+							return 2;
+						}
+			default:
+					System.out.println("Message has broken");
+					return 4;					
+				}
+		} finally {
+			if (channel != null) {
+				channel.shutdown();
 			}
+		}
 		}
 	public static int register_client(String username, String password, String mail)
 	{

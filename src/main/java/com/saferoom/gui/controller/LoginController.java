@@ -35,19 +35,9 @@ public class LoginController {
     private double yOffset = 0;
 
     private boolean containsSqlInjection(String input) {
-    String[] sqlKeywords = {
-        "SELECT", "INSERT", "UPDATE", "DELETE", "DROP", "CREATE", "ALTER",
-        "UNION", "OR", "AND", "--", "/*", "*/", "xp_", "sp_", "EXEC",
-        "'", "\"", ";", "=", "<", ">", "SCRIPT", "IFRAME", "ONLOAD"
-    };
-    
-    String upperInput = input.toUpperCase();
-    for (String keyword : sqlKeywords) {
-        if (upperInput.contains(keyword)) {
-            return true;
-        }
-    }
-    return false;
+    // SQL injection pattern - daha hızlı regex kullanımı
+    String sqlInjectionPattern = "(?i).*(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|UNION|OR\\s+\\d|AND\\s+\\d|--|/\\*|\\*/|xp_|sp_|'|\"|;|<|>|SCRIPT|IFRAME|ONLOAD).*";
+    return input.matches(sqlInjectionPattern);
 }
 
 private boolean isValidInput(String input) {
@@ -99,8 +89,9 @@ private void logSecurityIncident(String attemptedUsername) {
     }
 
          
-       int loginResult = ClientMenu.Login(username, password);
-       switch (loginResult) {
+       try {
+           int loginResult = ClientMenu.Login(username, password);
+           switch (loginResult) {
             case 0:
                  try {
                  Stage loginStage = (Stage) rootPane.getScene().getWindow();
@@ -125,6 +116,7 @@ private void logSecurityIncident(String attemptedUsername) {
                     e.printStackTrace();
                     showError("Ana sayfa yüklenemedi.");
                 }
+                break;
             case 1:
                 showError("You are not Registered Yet!Let's make you a member!.");
             break;
@@ -140,6 +132,20 @@ private void logSecurityIncident(String attemptedUsername) {
             default:
                 showError("An unknown error occurred. Please try again.");
             break;
+       }
+       } catch (io.grpc.StatusRuntimeException e) {
+           System.err.println("gRPC Connection Error: " + e.getMessage());
+           if (e.getStatus().getCode() == io.grpc.Status.Code.CANCELLED) {
+               showError("Server connection failed. Please check if the server is running.");
+           } else if (e.getStatus().getCode() == io.grpc.Status.Code.UNAVAILABLE) {
+               showError("Server is unavailable. Please try again later.");
+           } else {
+               showError("Connection error: " + e.getStatus().getDescription());
+           }
+       } catch (Exception e) {
+           System.err.println("Unexpected error during login: " + e.getMessage());
+           e.printStackTrace();
+           showError("An unexpected error occurred. Please try again.");
        }
    
     }
