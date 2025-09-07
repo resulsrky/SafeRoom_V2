@@ -174,7 +174,7 @@ public class EmailSender {
                             
                             <p style='color: #ffcc00;'>⚠️ <strong>Important:</strong></p>
                             <ul style='color: #e0e6f7; padding-left: 20px;'>
-                                <li>This code will expire in <strong>10 minutes</strong></li>
+                                <li>This code will expire in <strong>1 minutes</strong></li>
                                 <li>Do not share this code with anyone</li>
                                 <li>If you didn't create this account, please ignore this email</li>
                             </ul>
