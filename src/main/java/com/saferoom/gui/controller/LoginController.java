@@ -13,9 +13,10 @@ import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 
-import java.io.IOException;
+import java.io.*;
 import java.net.URL;
 import java.util.Objects;
+import java.util.Properties;
 
 public class LoginController {
 
@@ -33,6 +34,12 @@ public class LoginController {
 
     private double xOffset = 0;
     private double yOffset = 0;
+
+    // Remember Me Constants
+    private static final String USER_PREFS_FILE = "user_prefs.properties";
+    private static final String USERNAME_KEY = "saved_username";
+    private static final String PASSWORD_KEY = "saved_password";
+    private static final String REMEMBER_KEY = "remember_me";
 
     private boolean containsSqlInjection(String input) {
     // SQL injection pattern - daha hızlı regex kullanımı
@@ -68,6 +75,9 @@ private void logSecurityIncident(String attemptedUsername) {
         githubLoginButton.setOnAction(event -> handleGitHubLogin());
         passwordField.setOnAction(event -> handleSignIn());
         closeButton.setOnAction(event -> handleClose());
+        
+        // Load saved credentials if remember me was checked
+        loadSavedCredentials();
     }
 
     private void handleSignIn() {
@@ -99,6 +109,13 @@ private void logSecurityIncident(String attemptedUsername) {
            int loginResult = ClientMenu.Login(username, password);
            switch (loginResult) {
             case 0:
+                 // Save credentials if Remember Me is checked
+                 if (rememberMe.isSelected()) {
+                     saveCredentials(username, password);
+                 } else {
+                     clearSavedCredentials();
+                 }
+                 
                  try {
                  Stage loginStage = (Stage) rootPane.getScene().getWindow();
                  loginStage.close();
@@ -201,7 +218,7 @@ private void logSecurityIncident(String attemptedUsername) {
     // ... (Diğer metodlar değişmedi) ...
     private void handleForgotPassword() {
         System.out.println("Navigating to forgot password screen...");
-         
+
         try {
             Stage currentStage = (Stage) rootPane.getScene().getWindow();
             currentStage.close();
@@ -238,4 +255,103 @@ private void logSecurityIncident(String attemptedUsername) {
     private void handleGitHubLogin() { showAlert("GitHub ile Giriş", "Bu özellik yakında eklenecektir."); }
     private void showAlert(String title, String content) { AlertUtils.showInfo(title, content); }
     private void showError(String message) { AlertUtils.showError("Hata", message); }
+
+    // Remember Me Helper Methods
+    private void loadSavedCredentials() {
+        try {
+            File prefsFile = new File(USER_PREFS_FILE);
+            if (prefsFile.exists()) {
+                Properties props = new Properties();
+                try (FileInputStream fis = new FileInputStream(prefsFile)) {
+                    props.load(fis);
+                    
+                    String savedUsername = props.getProperty(USERNAME_KEY);
+                    String savedPassword = props.getProperty(PASSWORD_KEY);
+                    String rememberMeValue = props.getProperty(REMEMBER_KEY);
+                    
+                    if (savedUsername != null && "true".equals(rememberMeValue)) {
+                        usernameField.setText(savedUsername);
+                        
+                        if (savedPassword != null) {
+                            // Decrypt password
+                            String decryptedPassword = simpleDecrypt(savedPassword);
+                            passwordField.setText(decryptedPassword);
+                        }
+                        
+                        rememberMe.setSelected(true);
+                        signInButton.requestFocus(); // Focus signin button if both fields are filled
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to load saved credentials: " + e.getMessage());
+        }
+    }
+
+    private void saveCredentials(String username, String password) {
+        try {
+            Properties props = new Properties();
+            props.setProperty(USERNAME_KEY, username);
+            
+            // Encrypt password before saving
+            String encryptedPassword = simpleEncrypt(password);
+            props.setProperty(PASSWORD_KEY, encryptedPassword);
+            props.setProperty(REMEMBER_KEY, "true");
+            
+            try (FileOutputStream fos = new FileOutputStream(USER_PREFS_FILE)) {
+                props.store(fos, "SafeRoom User Preferences");
+            }
+            System.out.println("Credentials saved successfully.");
+        } catch (Exception e) {
+            System.err.println("Failed to save credentials: " + e.getMessage());
+        }
+    }
+
+    private void clearSavedCredentials() {
+        try {
+            File prefsFile = new File(USER_PREFS_FILE);
+            if (prefsFile.exists()) {
+                prefsFile.delete();
+            }
+            System.out.println("Saved credentials cleared.");
+        } catch (Exception e) {
+            System.err.println("Failed to clear saved credentials: " + e.getMessage());
+        }
+    }
+
+    // Simple XOR encryption for local password storage
+    // NOT cryptographically secure, but better than plain text
+    private String simpleEncrypt(String text) {
+        StringBuilder result = new StringBuilder();
+        String key = "SafeRoomKey2025"; // Simple key
+        
+        for (int i = 0; i < text.length(); i++) {
+            char textChar = text.charAt(i);
+            char keyChar = key.charAt(i % key.length());
+            char encryptedChar = (char) (textChar ^ keyChar);
+            result.append(String.format("%02X", (int) encryptedChar));
+        }
+        
+        return result.toString();
+    }
+
+    private String simpleDecrypt(String encryptedText) {
+        StringBuilder result = new StringBuilder();
+        String key = "SafeRoomKey2025"; // Same key
+        
+        try {
+            for (int i = 0; i < encryptedText.length(); i += 2) {
+                String hexByte = encryptedText.substring(i, i + 2);
+                int encryptedChar = Integer.parseInt(hexByte, 16);
+                char keyChar = key.charAt((i / 2) % key.length());
+                char decryptedChar = (char) (encryptedChar ^ keyChar);
+                result.append(decryptedChar);
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to decrypt password: " + e.getMessage());
+            return "";
+        }
+        
+        return result.toString();
+    }
 }
