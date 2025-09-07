@@ -40,9 +40,9 @@ public class LoginController {
     return input.matches(sqlInjectionPattern);
 }
 
-private boolean isValidInput(String input) {
-    // Username için kısıtlayıcı kontrol
-    return input.matches("^[a-zA-Z0-9._-]+$");
+private boolean isValidUsernameOrEmail(String input) {
+    // Username veya email için kontrol (@ karakteri dahil)
+    return input.matches("^[a-zA-Z0-9._@-]+$");
 }
 
 private boolean isValidPassword(String password) {
@@ -89,7 +89,7 @@ private void logSecurityIncident(String attemptedUsername) {
         return;
         }
     
-         if (!isValidInput(username) || !isValidPassword(password)) {
+         if (!isValidUsernameOrEmail(username) || !isValidPassword(password)) {
             showError("Invalid characters detected. This will report on your IP!");
         return;
     }

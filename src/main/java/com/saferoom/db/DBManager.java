@@ -284,6 +284,19 @@ public class DBManager {
 	        	return stmt.executeUpdate() > 0;
 	    }
 	}
+	
+	public static boolean resetLoginAttempts(String usernameOrEmail) throws SQLException {
+	    // Önce gerçek username'i bul (email girilmişse)
+	    String actualUsername = getUsernameFromUsernameOrEmail(usernameOrEmail);
+	    
+	    String query = "DELETE FROM login_attempts WHERE username = ?";
+	    
+	    try (Connection conn = getConnection();
+	         PreparedStatement stmt = conn.prepareStatement(query)) {
+	        stmt.setString(1, actualUsername);
+	        return stmt.executeUpdate() >= 0; // 0 da olabilir (kayıt yoksa)
+	    }
+	}
 
 	
 	

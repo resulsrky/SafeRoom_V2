@@ -43,11 +43,11 @@ public class UDPHoleImpl extends UDPHoleGrpc.UDPHoleImplBase {
 	boolean user_exist = DBManager.userExists(usernameOrEmail);
 		if(user_exist){
 
-			DBManager.updateLoginAttempts(usernameOrEmail);
-
 			if(!DBManager.isUserBlocked(usernameOrEmail)){ // ! eklendi (blocked değilse)
 				
 				if(DBManager.verifyPassword(usernameOrEmail, hash_password)){
+					// Doğru şifre: attempt sayısını sıfırla
+					DBManager.resetLoginAttempts(usernameOrEmail);
 					Status stat = Status.newBuilder()
 						.setMessage("ALL_GOOD")
 						.setCode(0)
@@ -55,6 +55,8 @@ public class UDPHoleImpl extends UDPHoleGrpc.UDPHoleImplBase {
 					DBManager.updateLastLogin(usernameOrEmail);
 					response.onNext(stat);
 				}else{
+					// Yanlış şifre: attempt sayısını artır
+					DBManager.updateLoginAttempts(usernameOrEmail);
 					Status stat = Status.newBuilder()
 						.setMessage("WRONG_PASSWORD")
 						.setCode(1)
