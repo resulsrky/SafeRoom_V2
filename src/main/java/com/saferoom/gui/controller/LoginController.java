@@ -20,6 +20,7 @@ import java.util.Properties;
 
 import com.saferoom.oauth.OAuthManager;
 import com.saferoom.oauth.UserInfo;
+import com.saferoom.gui.utils.UserSession;
 
 public class LoginController {
 
@@ -305,6 +306,9 @@ private void logSecurityIncident(String attemptedUsername) {
      */
     private void handleOAuthSuccess(UserInfo userInfo) {
         try {
+            // Save user session
+            UserSession.getInstance().setCurrentUser(userInfo, "oauth");
+            
             // TODO: Check if user exists in database
             // If not, create user account with OAuth info
             

@@ -2,13 +2,12 @@ package com.saferoom.gui.controller;
 
 import com.jfoenix.controls.JFXButton;
 import com.saferoom.gui.MainApp;
+import com.saferoom.gui.utils.UserSession;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Pos;
 import javafx.geometry.Side;
-import javafx.scene.Cursor;
 import javafx.scene.Parent;
-import javafx.scene.Scene;
 import com.saferoom.gui.utils.AlertUtils;
 import com.saferoom.gui.utils.WindowStateManager;
 import javafx.scene.control.ContextMenu;
@@ -77,7 +76,15 @@ public class MainController {
     private List<MenuItem> mainMenuItems = new ArrayList<>();
     private List<MenuItem> statusMenuItems = new ArrayList<>();
     private boolean showingStatusSheet = false;
-    private final String currentUserName = "Username"; // Replace when user model is available
+    
+    // User Info
+    private String getCurrentUserName() {
+        return UserSession.getInstance().getDisplayName();
+    }
+    
+    private String getCurrentUserInitials() {
+        return UserSession.getInstance().getUserInitials();
+    }
     
     // Window state manager instance
     private WindowStateManager windowStateManager = new WindowStateManager();
@@ -244,9 +251,10 @@ public class MainController {
         // Header with avatar and name
         HBox header = new HBox(10);
         header.setAlignment(Pos.CENTER_LEFT);
-        Label avatar = new Label("U");
+        Label avatar = new Label(getCurrentUserInitials());
         avatar.getStyleClass().add("user-avatar-header");
-        Label nameLabel = new Label(currentUserName);
+        // Name and status
+        Label nameLabel = new Label(getCurrentUserName());
         nameLabel.getStyleClass().add("user-name");
         header.getChildren().addAll(avatar, nameLabel);
         CustomMenuItem headerItem = new CustomMenuItem(header, false);
