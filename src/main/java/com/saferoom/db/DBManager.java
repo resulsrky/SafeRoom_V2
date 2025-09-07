@@ -137,13 +137,14 @@ public class DBManager {
 			return false;
 		}
 	}
-	public static boolean userExists(String username) throws SQLException {
-		String query = "SELECT COUNT(*) FROM users WHERE username = (?)";
+	public static boolean userExists(String usernameOrEmail) throws SQLException {
+		String query = "SELECT COUNT(*) FROM users WHERE username = (?) OR email = (?)";
 		
 		try(Connection conn = getConnection();
 				PreparedStatement stmt = conn.prepareStatement(query)){
 			
-			stmt.setString(1, username);
+			stmt.setString(1, usernameOrEmail);
+			stmt.setString(2, usernameOrEmail);
 			ResultSet rs =stmt.executeQuery();
 			
 			if(rs.next()) {
@@ -178,15 +179,16 @@ public class DBManager {
 			
 		}
 	}
-	public static boolean isUserBlocked(String username) throws Exception{
-		String query = "SELECT username FROM blocked_users WHERE username =(?)";
+	public static boolean isUserBlocked(String usernameOrEmail) throws Exception{
+		String query = "SELECT username FROM blocked_users WHERE username =(?) OR username = (SELECT username FROM users WHERE email = (?))";
 		try(Connection con = getConnection();
 			PreparedStatement st = con.prepareStatement(query)){
-			st.setString(1, username);
+			st.setString(1, usernameOrEmail);
+			st.setString(2, usernameOrEmail);
 			
 			ResultSet rs = st.executeQuery();
 			
-			if(rs.next() && username.equals(rs.getString("username"))) {
+			if(rs.next()) {
 				return true;
 			}
 			return false;
@@ -268,13 +270,16 @@ public class DBManager {
 		}
 	
 	
-	public static boolean updateLastLogin(String username) throws SQLException {
+	public static boolean updateLastLogin(String usernameOrEmail) throws SQLException {
+	    // Önce gerçek username'i bul
+	    String actualUsername = getUsernameFromUsernameOrEmail(usernameOrEmail);
+	    
 	    String query = "UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE username = ?";
 
 	    try (Connection conn = getConnection();
 	         PreparedStatement stmt = conn.prepareStatement(query)) {
 	        
-	        stmt.setString(1, username);
+	        stmt.setString(1, actualUsername);
 	        
 	        	return stmt.executeUpdate() > 0;
 	    }
@@ -282,27 +287,47 @@ public class DBManager {
 
 	
 	
-	public static boolean updateLoginAttempts(String username) throws SQLException {
+	public static boolean updateLoginAttempts(String usernameOrEmail) throws SQLException {
+	    // Önce gerçek username'i bul (email girilmişse)
+	    String actualUsername = getUsernameFromUsernameOrEmail(usernameOrEmail);
+	    
 	    String query = "INSERT INTO login_attempts (username, attempt_count, last_attempt) " +
 	                   "VALUES (?, 1, CURRENT_TIMESTAMP) " +
 	                   "ON DUPLICATE KEY UPDATE attempt_count = attempt_count + 1, last_attempt = CURRENT_TIMESTAMP";
 
 	    try (Connection conn = getConnection();
 	         PreparedStatement stmt = conn.prepareStatement(query)) {
-	        stmt.setString(1, username);
+	        stmt.setString(1, actualUsername);
 
 	        boolean updated = stmt.executeUpdate() > 0;
 	        
 	        String checkQuery = "SELECT attempt_count FROM login_attempts WHERE username = ?";
 
 	        try (PreparedStatement checkStmt = conn.prepareStatement(checkQuery)) {
-	            checkStmt.setString(1, username);
+	            checkStmt.setString(1, actualUsername);
 	            ResultSet rs = checkStmt.executeQuery();
 	            if (rs.next() && rs.getInt("attempt_count") >= 5) {
-	                blockUser(username, "0.0.0.0");
+	                blockUser(actualUsername, "0.0.0.0");
 	            }
 	        }
 	        return updated;
+	    }
+	}
+	
+	/**
+	 * Username veya email'den gerçek username'i döndürür
+	 */
+	private static String getUsernameFromUsernameOrEmail(String usernameOrEmail) throws SQLException {
+	    String query = "SELECT username FROM users WHERE username = ? OR email = ?";
+	    try (Connection conn = getConnection();
+	         PreparedStatement stmt = conn.prepareStatement(query)) {
+	        stmt.setString(1, usernameOrEmail);
+	        stmt.setString(2, usernameOrEmail);
+	        ResultSet rs = stmt.executeQuery();
+	        if (rs.next()) {
+	            return rs.getString("username");
+	        }
+	        return usernameOrEmail; // Fallback
 	    }
 	}
 	public static boolean updateVerificationAttempts(String username) throws Exception {
@@ -438,14 +463,15 @@ public class DBManager {
 	
 	
 
-	public static boolean verifyPassword(String username, String plainPassword) throws Exception {
+	public static boolean verifyPassword(String usernameOrEmail, String plainPassword) throws Exception {
 
-		String query = "SELECT username, salt, password_hash FROM users WHERE username = (?);";
+		String query = "SELECT username, salt, password_hash FROM users WHERE username = (?) OR email = (?)";
 		
 		try(Connection conn = getConnection();
 				PreparedStatement prpstmt = conn.prepareStatement(query)){
 			
-			prpstmt.setString(1, username);
+			prpstmt.setString(1, usernameOrEmail);
+			prpstmt.setString(2, usernameOrEmail);
 			
 			ResultSet rsm = prpstmt.executeQuery();
 			if(rsm.next()) {
@@ -464,6 +490,4 @@ public class DBManager {
 			
 		}
 	
-	}
-	
-}
+	}}

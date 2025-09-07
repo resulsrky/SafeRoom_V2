@@ -35,26 +35,24 @@ import io.grpc.stub.StreamObserver;
 
 public class UDPHoleImpl extends UDPHoleGrpc.UDPHoleImplBase {
 	
-	// Static alanları kaldırıyoruz çünkü her kullanıcı için farklı kod olmalı
-	
 	@Override
 	public void menuAns(Menu request, StreamObserver<Status> response){
-	String username = request.getUsername();
+	String usernameOrEmail = request.getUsername(); // Artık username veya email olabilir
 	String hash_password = request.getHashPassword();
 	try {
-	boolean user_exist = DBManager.userExists(username);
+	boolean user_exist = DBManager.userExists(usernameOrEmail);
 		if(user_exist){
 
-			DBManager.updateLoginAttempts(username);
+			DBManager.updateLoginAttempts(usernameOrEmail);
 
-			if(DBManager.isUserBlocked(username)){
+			if(!DBManager.isUserBlocked(usernameOrEmail)){ // ! eklendi (blocked değilse)
 				
-				if(DBManager.verifyPassword(username, hash_password)){
+				if(DBManager.verifyPassword(usernameOrEmail, hash_password)){
 					Status stat = Status.newBuilder()
 						.setMessage("ALL_GOOD")
 						.setCode(0)
 						.build();
-					DBManager.updateLastLogin(username);
+					DBManager.updateLastLogin(usernameOrEmail);
 					response.onNext(stat);
 				}else{
 					Status stat = Status.newBuilder()
