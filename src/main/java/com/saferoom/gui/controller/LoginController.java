@@ -201,6 +201,7 @@ private void logSecurityIncident(String attemptedUsername) {
     // ... (Diğer metodlar değişmedi) ...
     private void handleForgotPassword() {
         System.out.println("Navigating to forgot password screen...");
+         
         try {
             Stage currentStage = (Stage) rootPane.getScene().getWindow();
             currentStage.close();

@@ -5,6 +5,7 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import com.saferoom.gui.utils.AlertUtils;
+import com.saferoom.client.ClientMenu;
 import javafx.scene.control.Button;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.control.TextField;
@@ -52,12 +53,14 @@ public class ForgotPasswordController {
         boolean isValidEmail = !email.isEmpty() && EMAIL_PATTERN.matcher(email).matches();
         
         sendCodeButton.setDisable(!isValidEmail);
+
         
         // Visual feedback for email field
         if (email.isEmpty()) {
             emailField.setStyle(""); // Default style
         } else if (isValidEmail) {
             emailField.setStyle("-fx-border-color: #22d3ee; -fx-border-width: 1px;");
+            
         } else {
             emailField.setStyle("-fx-border-color: #ef4444; -fx-border-width: 1px;");
         }
@@ -76,6 +79,9 @@ public class ForgotPasswordController {
             return;
         }
 
+        boolean is_mail_exists = ClientMenu.verify_email(email);
+
+        if(is_mail_exists){
         // Simulate sending verification code
         System.out.println("Verification code sent to: " + email);
         
@@ -89,20 +95,23 @@ public class ForgotPasswordController {
             showError("Failed to navigate to verification screen.");
         }
     }
+    }
 
     private void navigateToVerifyResetCode(String email) throws IOException {
+        
+        System.out.println("YYYYYYY");
         Stage currentStage = (Stage) rootPane.getScene().getWindow();
         currentStage.close();
-
+        System.out.println("XXXXXXX");
         FXMLLoader loader = new FXMLLoader(getClass().getResource("/view/VerifyResetCodeView.fxml"));
         Parent root = loader.load();
         
         // Pass email to the next controller
         VerifyResetCodeController controller = loader.getController();
         controller.setEmail(email);
-
+        
         Stage verifyStage = new Stage();
-        verifyStage.initStyle(StageStyle.UNDECORATED);
+        verifyStage.initStyle(StageStyle.TRANSPARENT);
         
         // Setup window dragging
         root.setOnMousePressed(event -> {
@@ -115,6 +124,7 @@ public class ForgotPasswordController {
         });
 
         Scene scene = new Scene(root);
+        scene.setFill(javafx.scene.paint.Color.TRANSPARENT);
         String cssPath = "/styles/styles.css";
         URL cssUrl = getClass().getResource(cssPath);
         if (cssUrl != null) {

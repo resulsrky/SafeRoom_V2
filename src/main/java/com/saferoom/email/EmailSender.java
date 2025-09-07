@@ -193,6 +193,58 @@ public class EmailSender {
         return sendEmailWithHtml(toEmail, subject, htmlBody);
     }
 
+    public static boolean sendPasswordResetEmail(String toEmail, String username, String resetCode) throws Exception {
+        String subject = "🔒 Reset Your SafeRoom Password";
+        
+        String htmlBody = """
+                <div style='min-height:100vh; background: radial-gradient(ellipse at 70% 30%, #2b2d42 0%, #1a1a2e 100%), url(https://www.transparenttextures.com/patterns/stardust.png); padding: 0; margin: 0;'>
+                    <div style='max-width: 500px; margin: 48px auto; background: rgba(30,34,60,0.85); border-radius: 18px; box-shadow: 0 8px 32px #0008, 0 1.5px 8px #ff6b6b44; padding: 40px 28px; border: 1.5px solid #ff6b6b33; backdrop-filter: blur(4px);'>
+                        <div style='text-align:center; margin-bottom: 28px;'>
+                            <img src='cid:verificateimg' alt='SafeRoom' style='width:72px; height:72px; border-radius:12px; box-shadow:0 0 16px #ff6b6b88; background:#111;'/>
+                        </div>
+                        <h2 style='color:#ff6b6b; margin-bottom:18px; font-family: "Orbitron", Arial, sans-serif; letter-spacing:1px; text-shadow:0 2px 8px #ff6b6b44; text-align:center;'>🔒 Password Reset Request</h2>
+                        
+                        <div style='color:#e0e6f7; font-size:17px; line-height:1.7; text-shadow:0 1px 4px #0006;'>
+                            <p>Hello <strong style='color:#ff6b6b;'>""" + username + """
+                            </strong>,</p>
+                            
+                            <p>We received a request to reset your <strong style='color:#ff6b6b;'>SafeRoom</strong> account password. 🔐</p>
+                            
+                            <p>If you requested this password reset, please use the verification code below to proceed:</p>
+                            
+                            <div style='background: rgba(255,107,107,0.1); border: 2px solid #ff6b6b; border-radius: 12px; padding: 20px; margin: 24px 0; text-align: center;'>
+                                <p style='margin: 0; color: #fff; font-size: 14px; margin-bottom: 8px;'>Your Password Reset Code:</p>
+                                <p style='margin: 0; color: #ff6b6b; font-size: 32px; font-weight: bold; letter-spacing: 4px; font-family: "Courier New", monospace; text-shadow: 0 0 12px #ff6b6b44;'>""" + resetCode + """
+                                </p>
+                            </div>
+                            
+                            <p style='color: #ffcc00;'>⚠️ <strong>Security Notice:</strong></p>
+                            <ul style='color: #e0e6f7; padding-left: 20px;'>
+                                <li>This reset code will expire in <strong>15 minutes</strong></li>
+                                <li><strong>Never share this code</strong> with anyone</li>
+                                <li>If you didn't request this reset, please <strong>ignore this email</strong></li>
+                                <li>Your account remains secure until you complete the reset process</li>
+                            </ul>
+                            
+                            <div style='background: rgba(255,193,7,0.1); border-left: 4px solid #ffc107; padding: 16px; margin: 20px 0; border-radius: 4px;'>
+                                <p style='margin: 0; color: #ffc107; font-weight: bold;'>🛡️ Didn't request this?</p>
+                                <p style='margin: 8px 0 0 0; color: #e0e6f7; font-size: 15px;'>If you didn't request a password reset, someone may be trying to access your account. Please contact our security team immediately.</p>
+                            </div>
+                            
+                            <p>Stay secure with SafeRoom! 💪</p>
+                        </div>
+                        
+                        <div style='margin-top:36px; text-align:center; color:#ff6b6bcc; font-size:14px; letter-spacing:1px; text-shadow:0 1px 8px #ff6b6b44;'>
+                            SafeRoom Security Team<br>
+                            <span style='font-size:11px; color:#fff8; text-shadow:none;'>🔐 Your Security is Our Priority 🔐</span>
+                        </div>
+                    </div>
+                </div>
+        """;
+
+        return sendEmailWithHtml(toEmail, subject, htmlBody);
+    }
+
     private static boolean sendEmailWithHtml(String toEmail, String subject, String htmlBody) throws Exception {
         Properties props = new Properties();
         props.put("mail.smtp.auth", "true");

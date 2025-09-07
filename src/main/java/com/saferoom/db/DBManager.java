@@ -137,6 +137,32 @@ public class DBManager {
 			return false;
 		}
 	}
+
+	public static String return_usersname_from_email(String mail)throws SQLException{
+		String query = "SELECT username FROM users WHERE email = (?)";
+		try(Connection conn = getConnection();
+				PreparedStatement stmt = conn.prepareStatement(query)){
+					stmt.setString(1, mail);
+					ResultSet rs = stmt.executeQuery();
+					if(rs.next()){
+						return rs.getString(1);
+					}
+				}
+		return null;
+	}
+	public static boolean change_verification_code(String username, String new_code)throws SQLException{
+		String query = "UPDATE users SET verification_code = (?) WHERE username = (?)";
+		try(Connection conn = getConnection();
+				PreparedStatement stmt = conn.prepareStatement(query)){
+					stmt.setString(1, username);
+					stmt.setString(2, new_code);
+					
+					if(stmt.executeUpdate() > 0){
+						return true;
+					}
+				}
+				return false;
+	}
 	public static boolean userExists(String usernameOrEmail) throws SQLException {
 		String query = "SELECT COUNT(*) FROM users WHERE username = (?) OR email = (?)";
 		

@@ -85,7 +85,6 @@ public class UDPHoleImpl extends UDPHoleGrpc.UDPHoleImplBase {
 
 	}
 	}
-			
 	
 	@Override
 	public void insertUser(Create_User request, StreamObserver<Status> response){
@@ -190,6 +189,41 @@ public class UDPHoleImpl extends UDPHoleGrpc.UDPHoleImplBase {
 
 	    responseObserver.onNext(response);
 	    responseObserver.onCompleted();
+	}
+	
+	@Override
+	public void verifyEmail(Request_Client req, StreamObserver<Status> responseObserver){
+		String candicate_email = req.getUsername();
+		Status response = null;
+		try{
+		boolean is_mail_exists = DBManager.check_email(candicate_email);
+		if(is_mail_exists){
+			 response = Status.newBuilder()
+				.setMessage("EXISTS")
+				.setCode(0)
+				.build();
+				
+				String username = DBManager.return_usersname_from_email(candicate_email);
+				String verificationCode = VerificationCodeGenerator.generateVerificationCode();
+				
+				DBManager.change_verification_code(username, verificationCode);					
+					
+				if(EmailSender.sendPasswordResetEmail(candicate_email, username, verificationCode)) {
+						System.out.println("Successfully Registered and verification email sent!");
+					}
+
+		}else{
+			 response = Status.newBuilder()
+				.setMessage("NOT_EXISTS")
+				.setCode(1)
+				.build();
+		}
+		responseObserver.onNext(response);
+		responseObserver.onCompleted();
+		}
+		catch(Exception e){
+			System.err.println("Database Error[Email Verification]: " + e);
+		}
 	}
 
 	@Override

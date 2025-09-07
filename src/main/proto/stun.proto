@@ -11,6 +11,8 @@ rpc InsertUser(Create_User) returns (Status);
 
 rpc VerifyUser(Verification) returns (Status);
 
+rpc VerifyEmail(Request_Client) returns (Status);
+
 rpc RegisterClient(Stun_Info) returns (Status);
 
 rpc GetStunInfo(Request_Client) returns (Stun_Info);

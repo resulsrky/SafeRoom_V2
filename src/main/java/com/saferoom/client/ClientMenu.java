@@ -138,7 +138,40 @@ public class ClientMenu{
 				channel.shutdown();
 			}
 		}
-	}	
+	}
+
+	public static boolean verify_email(String mail){
+		ManagedChannel channel = null;
+		try{
+			channel = ManagedChannelBuilder.forAddress(Server, Port)
+				.usePlaintext()
+				.build();
+
+			UDPHoleGrpc.UDPHoleBlockingStub client = UDPHoleGrpc.newBlockingStub(channel)
+				.withDeadlineAfter(10, java.util.concurrent.TimeUnit.SECONDS);
+			
+			SafeRoomProto.Request_Client request = SafeRoomProto.Request_Client.newBuilder()
+				.setUsername(mail)
+				.build();
+			
+			SafeRoomProto.Status status = client.verifyEmail(request);
+
+			int code = status.getCode();
+
+			if(code == 1){
+				return true;
+			}
+			
+		}catch(Exception e){
+			System.err.println("Verify Channel Error: " + e);
+		}finally{
+			if(channel != null){
+				channel.shutdown();
+			}
+		}
+
+		return false;
+	}
 
 	}
 
