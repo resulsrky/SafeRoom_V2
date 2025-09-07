@@ -206,7 +206,8 @@ public class UDPHoleImpl extends UDPHoleGrpc.UDPHoleImplBase {
 				String username = DBManager.return_usersname_from_email(candicate_email);
 				String verificationCode = VerificationCodeGenerator.generateVerificationCode();
 				
-				DBManager.change_verification_code(username, verificationCode);					
+				if(DBManager.change_verification_code(username, verificationCode)){System.out.println("Code set");}
+				else{System.out.println("IT FAILED");}					
 					
 				if(EmailSender.sendPasswordResetEmail(candicate_email, username, verificationCode)) {
 						System.out.println("Successfully Registered and verification email sent!");

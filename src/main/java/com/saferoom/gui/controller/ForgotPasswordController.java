@@ -82,19 +82,19 @@ public class ForgotPasswordController {
         boolean is_mail_exists = ClientMenu.verify_email(email);
 
         if(is_mail_exists){
-        // Simulate sending verification code
-        System.out.println("Verification code sent to: " + email);
-        
-        // TODO: Backend integration - send verification code via email
-        // For now, simulate success and navigate to verification screen
-        
-        try {
-            navigateToVerifyResetCode(email);
-        } catch (IOException e) {
-            e.printStackTrace();
-            showError("Failed to navigate to verification screen.");
+            // Email exists, send reset code and navigate to verification
+            System.out.println("Email exists! Sending reset code to: " + email);
+            
+            try {
+                navigateToVerifyResetCode(email);
+            } catch (IOException e) {
+                e.printStackTrace();
+                showError("Failed to navigate to verification screen.");
+            }
+        } else {
+            // Email doesn't exist in database
+            showError("Email address not found in our records. Please check your email or register a new account.");
         }
-    }
     }
 
     private void navigateToVerifyResetCode(String email) throws IOException {
@@ -109,7 +109,7 @@ public class ForgotPasswordController {
         // Pass email to the next controller
         VerifyResetCodeController controller = loader.getController();
         controller.setEmail(email);
-        
+
         Stage verifyStage = new Stage();
         verifyStage.initStyle(StageStyle.TRANSPARENT);
         
