@@ -22,11 +22,11 @@
                         <Label styleClass="settings-section-title" text="Profil" />
                         <HBox alignment="CENTER_LEFT" spacing="20.0" styleClass="setting-row">
                             <children>
-                                <Label styleClass="user-avatar" text="U" />
+                                <Label fx:id="userAvatarLabel" styleClass="user-avatar" text="U" />
                                 <VBox>
                                     <children>
-                                        <Label styleClass="setting-title" text="Kullanıcı Adı" />
-                                        <Label styleClass="setting-description" text="kullanici@saferoom.com" />
+                                        <Label fx:id="userNameLabel" styleClass="setting-title" text="Kullanıcı Adı" />
+                                        <Label fx:id="userEmailLabel" styleClass="setting-description" text="kullanici@saferoom.com" />
                                     </children>
                                 </VBox>
                                 <Pane HBox.hgrow="ALWAYS" />

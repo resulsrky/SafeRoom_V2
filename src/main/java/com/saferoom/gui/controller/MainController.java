@@ -618,4 +618,32 @@ public class MainController {
     private void clearActiveButton() {
         navBox.getChildren().forEach(node -> node.getStyleClass().remove("active"));
     }
+    
+    /**
+     * Refresh user information in all views after login
+     */
+    public void refreshUserInfo() {
+        // Update user menu header with new user info
+        buildUserContextMenu();
+        
+        // If currently showing dashboard or settings, refresh those views
+        if (contentArea.getChildren().size() > 0) {
+            try {
+                Parent currentView = (Parent) contentArea.getChildren().get(0);
+                
+                // Check if it's dashboard view and refresh
+                if (currentView.getId() != null && currentView.getId().equals("dashboardView")) {
+                    handleDashboard(); // Reload dashboard
+                }
+                
+                // Check if it's settings view and refresh  
+                if (currentView.getId() != null && currentView.getId().equals("settingsView")) {
+                    handleSettings(); // Reload settings
+                }
+                
+            } catch (Exception e) {
+                System.err.println("Error refreshing user info: " + e.getMessage());
+            }
+        }
+    }
 }

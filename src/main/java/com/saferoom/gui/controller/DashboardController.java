@@ -1,7 +1,9 @@
 package com.saferoom.gui.controller;
 
 import com.saferoom.gui.controller.cards.ActionCardController;
+import com.saferoom.gui.utils.UserSession;
 import javafx.fxml.FXML;
+import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.layout.VBox;
 
@@ -16,9 +18,13 @@ public class DashboardController {
     @FXML private ActionCardController scheduleRoomCardController;
     @FXML private ActionCardController encryptedFilesCardController;
     @FXML private ListView<String> activityListView;
+    @FXML private Label welcomeLabel;
 
     @FXML
     public void initialize() {
+        // Update welcome message with user's name
+        updateWelcomeMessage();
+        
         if (newMeetingCardController != null) {
             newMeetingCardController.setData("fas-plus", "New Meeting", "Instant Secure Room");
         }
@@ -46,6 +52,13 @@ public class DashboardController {
                 "You shared 'design_final_v3.zip' in File Vault",
                 "New message from Ahmet Çelik"
         );
+    }
+    
+    private void updateWelcomeMessage() {
+        if (welcomeLabel != null) {
+            String userName = UserSession.getInstance().getDisplayName();
+            welcomeLabel.setText("Welcome back, " + userName + "!");
+        }
     }
 
     private void handleNewMeeting() {

@@ -41,7 +41,7 @@ public class UserSession {
                 return currentUser.getEmail().split("@")[0]; // Email'den username
             }
         }
-        return "User";
+        return "Username";
     }
     
     public String getUserInitials() {

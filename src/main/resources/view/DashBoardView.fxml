@@ -17,7 +17,7 @@
     <children>
         <VBox styleClass="welcome-banner">
             <children>
-                <Label styleClass="welcome-title" text="Welcome back, Username!" />
+                <Label fx:id="welcomeLabel" styleClass="welcome-title" text="Welcome back, Username!" />
                 <Label styleClass="welcome-subtitle" text="You have 2 new notifications and 1 pending room invite." />
             </children>
         </VBox>

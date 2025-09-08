@@ -120,6 +120,13 @@ private void logSecurityIncident(String attemptedUsername) {
                      clearSavedCredentials();
                  }
                  
+                 // Create UserInfo for traditional login and save to session
+                 UserInfo traditionalUser = new UserInfo();
+                 traditionalUser.setName(username); // Use username as display name
+                 traditionalUser.setEmail(username.contains("@") ? username : username + "@saferoom.local");
+                 traditionalUser.setProvider("Traditional");
+                 UserSession.getInstance().setCurrentUser(traditionalUser, "traditional");
+                 
                  try {
                  Stage loginStage = (Stage) rootPane.getScene().getWindow();
                  loginStage.close();
@@ -139,6 +146,14 @@ private void logSecurityIncident(String attemptedUsername) {
                 mainStage.setMinWidth(1024);
                 mainStage.setMinHeight(768);
                 mainStage.show();
+                
+                // Refresh user info in MainController after successful traditional login
+                Platform.runLater(() -> {
+                    MainController mainController = MainController.getInstance();
+                    if (mainController != null) {
+                        mainController.refreshUserInfo();
+                    }
+                });
                 } catch (IOException e) {
                     e.printStackTrace();
                     showError("Ana sayfa yüklenemedi.");
@@ -348,6 +363,13 @@ private void logSecurityIncident(String attemptedUsername) {
             mainStage.setMinWidth(1024);
             mainStage.setMinHeight(768);
             mainStage.show();
+            
+            // Refresh user info in MainController after OAuth login
+            Platform.runLater(() -> {
+                if (MainController.getInstance() != null) {
+                    MainController.getInstance().refreshUserInfo();
+                }
+            });
             
             System.out.println("Successfully logged in with " + userInfo.getProvider() + ": " + userInfo.getEmail());
             
