@@ -423,16 +423,16 @@ public void getProfile(ProfileRequest request, StreamObserver<ProfileResponse> r
         SimpleDateFormat dateFormat = new SimpleDateFormat("MMM dd, yyyy");
         SimpleDateFormat timeFormat = new SimpleDateFormat("MMM dd, yyyy HH:mm");
         
-        // Stats bilgilerini al
+        // Stats bilgilerini al - Null kontrolü ile
         @SuppressWarnings("unchecked")
         java.util.Map<String, Object> statsData = (java.util.Map<String, Object>) profileData.get("stats");
         
         UserStats stats = UserStats.newBuilder()
-            .setRoomsCreated((Integer) statsData.get("roomsCreated"))
-            .setRoomsJoined((Integer) statsData.get("roomsJoined"))
-            .setFilesShared((Integer) statsData.get("filesShared"))
-            .setMessagesSent((Integer) statsData.get("messagesSent"))
-            .setSecurityScore((Double) statsData.get("securityScore"))
+            .setRoomsCreated(statsData.get("roomsCreated") != null ? (Integer) statsData.get("roomsCreated") : 0)
+            .setRoomsJoined(statsData.get("roomsJoined") != null ? (Integer) statsData.get("roomsJoined") : 0)
+            .setFilesShared(statsData.get("filesShared") != null ? (Integer) statsData.get("filesShared") : 0)
+            .setMessagesSent(statsData.get("messagesSent") != null ? (Integer) statsData.get("messagesSent") : 0)
+            .setSecurityScore(statsData.get("activityScore") != null ? (Double) statsData.get("activityScore") : 0.0) // activityScore kullan ama proto'da securityScore field'ına koy
             .build();
         
         // Activities bilgilerini al
