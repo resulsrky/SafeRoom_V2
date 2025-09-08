@@ -52,25 +52,130 @@ public class FriendsController {
         // Search functionality setup
         setupSearchFunctionality();
         
-        // Örnek veriler
-        allFriends.addAll(
-                new Friend("John Doe", "Online - Active 2 mins ago", "Playing", "VALORANT"),
-                new Friend("Jane Smith", "Online - Active now", "Writing", "code"),
-                new Friend("Mike Johnson", "Online - Active 5 mins ago", "Listening to", "Spotify"),
-                new Friend("Emily White", "Offline", "Last online 3 hours ago", "")
-        );
-        pendingFriends.addAll(
-                new Friend("Alex Green", "Pending", "", "")
-        );
+        // Load real data from backend
+        loadFriendsData();
+        loadStats();
 
-        ObservableList<Friend> onlineFriends = allFriends.stream()
-                .filter(Friend::isOnline)
-                .collect(Collectors.toCollection(FXCollections::observableArrayList));
+        // Setup filter buttons
+        setupFilterButtons();
 
+        // Set "All" as the default active tab on initialization
+        filterBar.getChildren().get(1).getStyleClass().add("active-tab");
+        loadAllFriends();
+    }
+
+    /**
+     * Gerçek arkadaş verilerini backend'den yükle
+     */
+    private void loadFriendsData() {
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                String currentUser = UserSession.getInstance().getDisplayName();
+                
+                // Arkadaş listesini getir
+                com.saferoom.grpc.SafeRoomProto.FriendsListResponse friendsResponse = 
+                    ClientMenu.getFriendsList(currentUser);
+                
+                // Pending istekleri getir
+                com.saferoom.grpc.SafeRoomProto.PendingRequestsResponse pendingResponse = 
+                    ClientMenu.getPendingFriendRequests(currentUser);
+                
+                if (friendsResponse.getSuccess()) {
+                    // Friends listesini güncelle
+                    allFriends.clear();
+                    for (com.saferoom.grpc.SafeRoomProto.FriendInfo friendInfo : friendsResponse.getFriendsList()) {
+                        String status = friendInfo.getIsVerified() ? "Verified" : "Not Verified";
+                        String lastSeen = friendInfo.getLastSeen().isEmpty() ? "Never" : friendInfo.getLastSeen();
+                        Friend friend = new Friend(
+                            friendInfo.getUsername(), 
+                            "Offline", // Burada online durumu kontrol edilebilir
+                            "Last seen: " + lastSeen, 
+                            status
+                        );
+                        allFriends.add(friend);
+                    }
+                }
+                
+                if (pendingResponse.getSuccess()) {
+                    // Pending listesini güncelle
+                    pendingFriends.clear();
+                    for (com.saferoom.grpc.SafeRoomProto.FriendRequestInfo requestInfo : pendingResponse.getRequestsList()) {
+                        Friend pendingFriend = new Friend(
+                            requestInfo.getSender(),
+                            "Friend Request",
+                            "Sent: " + requestInfo.getSentAt(),
+                            "Pending"
+                        );
+                        pendingFriends.add(pendingFriend);
+                    }
+                }
+                
+                return true;
+            } catch (Exception e) {
+                System.err.println("❌ Error loading friends data: " + e.getMessage());
+                e.printStackTrace();
+                return false;
+            }
+        }).thenAcceptAsync(success -> {
+            Platform.runLater(() -> {
+                if (success) {
+                    System.out.println("✅ Friends data loaded successfully");
+                    updateStats();
+                } else {
+                    System.out.println("❌ Failed to load friends data");
+                }
+            });
+        });
+    }
+
+    /**
+     * İstatistikleri yükle
+     */
+    private void loadStats() {
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                String currentUser = UserSession.getInstance().getDisplayName();
+                com.saferoom.grpc.SafeRoomProto.FriendshipStatsResponse statsResponse = 
+                    ClientMenu.getFriendshipStats(currentUser);
+                
+                if (statsResponse.getSuccess()) {
+                    return statsResponse.getStats();
+                }
+                return null;
+            } catch (Exception e) {
+                System.err.println("❌ Error loading stats: " + e.getMessage());
+                return null;
+            }
+        }).thenAcceptAsync(stats -> {
+            Platform.runLater(() -> {
+                if (stats != null) {
+                    totalFriendsLabel.setText(String.valueOf(stats.getTotalFriends()));
+                    pendingFriendsLabel.setText(String.valueOf(stats.getPendingRequests()));
+                    // Online friends için basit hesaplama (gerçek implementation'da online tracking gerekir)
+                    onlineFriendsLabel.setText("0"); // TODO: Implement online tracking
+                }
+            });
+        });
+    }
+
+    /**
+     * İstatistikleri güncelle
+     */
+    private void updateStats() {
         totalFriendsLabel.setText(String.valueOf(allFriends.size()));
-        onlineFriendsLabel.setText(String.valueOf(onlineFriends.size()));
         pendingFriendsLabel.setText(String.valueOf(pendingFriends.size()));
+        
+        // Online friends hesapla
+        long onlineCount = allFriends.stream()
+            .filter(Friend::isOnline)
+            .count();
+        onlineFriendsLabel.setText(String.valueOf(onlineCount));
+    }
 
+    /**
+     * Filter buttonlarını ayarla
+     */
+    private void setupFilterButtons() {
         for (Node node : filterBar.getChildren()) {
             JFXButton button = (JFXButton) node;
             button.setOnAction(event -> {
@@ -81,13 +186,16 @@ public class FriendsController {
 
                 switch (button.getText()) {
                     case "Online":
-                        updateFriendsList(onlineFriends, "Online");
+                        loadOnlineFriends();
                         break;
                     case "All":
-                        updateFriendsList(allFriends, "All Friends");
+                        loadAllFriends();
                         break;
                     case "Pending":
-                        updateFriendsList(pendingFriends, "Pending");
+                        loadPendingRequests();
+                        break;
+                    case "Blocked":
+                        loadBlockedUsers();
                         break;
                     default:
                         friendsContainer.getChildren().clear();
@@ -95,10 +203,59 @@ public class FriendsController {
                 }
             });
         }
+    }
 
-        // Set "Online" as the default active tab on initialization
-        filterBar.getChildren().get(0).getStyleClass().add("active-tab");
-        updateFriendsList(onlineFriends, "Online");
+    /**
+     * Tüm arkadaşları göster
+     */
+    private void loadAllFriends() {
+        updateFriendsList(allFriends, "All Friends");
+    }
+
+    /**
+     * Online arkadaşları göster
+     */
+    private void loadOnlineFriends() {
+        ObservableList<Friend> onlineFriends = allFriends.stream()
+            .filter(Friend::isOnline)
+            .collect(Collectors.toCollection(FXCollections::observableArrayList));
+        updateFriendsList(onlineFriends, "Online Friends");
+    }
+
+    /**
+     * Bekleyen istekleri göster
+     */
+    private void loadPendingRequests() {
+        // Pending requests için özel bir cell factory kullan
+        updatePendingRequestsList();
+    }
+
+    /**
+     * Pending requests için özel liste
+     */
+    private void updatePendingRequestsList() {
+        friendsContainer.getChildren().clear();
+        if (!pendingFriends.isEmpty()) {
+            ListView<Friend> listView = new ListView<>(pendingFriends);
+            listView.getStyleClass().add("friends-list-view");
+            listView.setCellFactory(param -> new PendingRequestCell());
+            VBox.setVgrow(listView, Priority.ALWAYS);
+            friendsContainer.getChildren().add(listView);
+        } else {
+            Label noRequestsLabel = new Label("No pending friend requests");
+            noRequestsLabel.getStyleClass().add("no-data-label");
+            friendsContainer.getChildren().add(noRequestsLabel);
+        }
+    }
+
+    /**
+     * Blocked users (placeholder)
+     */
+    private void loadBlockedUsers() {
+        friendsContainer.getChildren().clear();
+        Label noBlockedLabel = new Label("No blocked users");
+        noBlockedLabel.getStyleClass().add("no-data-label");
+        friendsContainer.getChildren().add(noBlockedLabel);
     }
 
     private void setupSearchFunctionality() {
@@ -171,69 +328,6 @@ public class FriendsController {
         }
     }
 
-    // ✅ Boş hücrelerde hover engellendi ve görünüm optimize edildi
-    static class FriendCell extends ListCell<Friend> {
-        private final HBox hbox = new HBox(15);
-        private final Label avatar = new Label();
-        private final VBox infoBox = new VBox(2);
-        private final Label nameLabel = new Label();
-        private final Label statusLabel = new Label();
-        private final HBox activityBox = new HBox(5);
-        private final Label activityTypeLabel = new Label();
-        private final Label activityLabel = new Label();
-        private final Pane spacer = new Pane();
-        private final HBox actionButtons = new HBox(10);
-
-        public FriendCell() {
-            super();
-            avatar.getStyleClass().add("friend-avatar");
-            nameLabel.getStyleClass().add("friend-name");
-            statusLabel.getStyleClass().add("friend-status");
-            activityTypeLabel.getStyleClass().add("friend-activity-type");
-            activityLabel.getStyleClass().add("friend-activity");
-
-            FontIcon messageIcon = new FontIcon("fas-comment-dots");
-            FontIcon callIcon = new FontIcon("fas-phone");
-            messageIcon.getStyleClass().add("action-icon");
-            callIcon.getStyleClass().add("action-icon");
-
-            actionButtons.getChildren().addAll(messageIcon, callIcon);
-            actionButtons.setAlignment(Pos.CENTER);
-
-            activityBox.getChildren().addAll(activityTypeLabel, activityLabel);
-            infoBox.getChildren().addAll(nameLabel, statusLabel, activityBox);
-
-            HBox.setHgrow(spacer, Priority.ALWAYS);
-            hbox.getChildren().addAll(avatar, infoBox, spacer, actionButtons);
-            hbox.setAlignment(Pos.CENTER_LEFT);
-        }
-
-        @Override
-        protected void updateItem(Friend friend, boolean empty) {
-            super.updateItem(friend, empty);
-            if (empty || friend == null) {
-                setGraphic(null);
-                setText(null);
-                setStyle("");
-                setDisable(true);
-                setMouseTransparent(true);
-                setOnMouseEntered(null);
-                setOnMouseExited(null);
-            } else {
-                avatar.setText(friend.getAvatarChar());
-                nameLabel.setText(friend.getName());
-                statusLabel.setText(friend.getStatus());
-                activityTypeLabel.setText(friend.getActivityType());
-                activityLabel.setText(friend.getActivity());
-                activityBox.setVisible(!friend.getActivity().isEmpty());
-
-                setGraphic(hbox);
-                setDisable(false);
-                setMouseTransparent(false);
-            }
-        }
-    }
-
     // Search result cell for user search
     static class SearchResultCell extends ListCell<Map<String, Object>> {
         private final HBox hbox = new HBox(10);
@@ -299,7 +393,223 @@ public class FriendsController {
 
     private static void sendFriendRequest(String username) {
         System.out.println("Sending friend request to: " + username);
-        // TODO: Implement friend request logic
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                String currentUser = UserSession.getInstance().getDisplayName();
+                com.saferoom.grpc.SafeRoomProto.FriendResponse response = 
+                    ClientMenu.sendFriendRequest(currentUser, username);
+                return response;
+            } catch (Exception e) {
+                System.err.println("❌ Error sending friend request: " + e.getMessage());
+                return null;
+            }
+        }).thenAcceptAsync(response -> {
+            Platform.runLater(() -> {
+                if (response != null && response.getSuccess()) {
+                    System.out.println("✅ Friend request sent successfully!");
+                    // TODO: Show success message to user
+                } else {
+                    System.out.println("❌ Failed to send friend request");
+                    // TODO: Show error message to user
+                }
+            });
+        });
+    }
+    
+    /**
+     * Arkadaşlık isteğini kabul et
+     */
+    private static void acceptFriendRequest(int requestId, String senderUsername) {
+        System.out.println("Accepting friend request from: " + senderUsername);
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                String currentUser = UserSession.getInstance().getDisplayName();
+                com.saferoom.grpc.SafeRoomProto.Status response = 
+                    ClientMenu.acceptFriendRequest(requestId, currentUser);
+                return response;
+            } catch (Exception e) {
+                System.err.println("❌ Error accepting friend request: " + e.getMessage());
+                return null;
+            }
+        }).thenAcceptAsync(response -> {
+            Platform.runLater(() -> {
+                if (response != null && response.getCode() == 0) {
+                    System.out.println("✅ Friend request accepted successfully!");
+                    // Refresh the friends list
+                    FriendsController instance = getCurrentInstance();
+                    if (instance != null) {
+                        instance.loadFriendsData();
+                    }
+                } else {
+                    System.out.println("❌ Failed to accept friend request");
+                }
+            });
+        });
+    }
+    
+    /**
+     * Arkadaşlık isteğini reddet
+     */
+    private static void rejectFriendRequest(int requestId, String senderUsername) {
+        System.out.println("Rejecting friend request from: " + senderUsername);
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                String currentUser = UserSession.getInstance().getDisplayName();
+                com.saferoom.grpc.SafeRoomProto.Status response = 
+                    ClientMenu.rejectFriendRequest(requestId, currentUser);
+                return response;
+            } catch (Exception e) {
+                System.err.println("❌ Error rejecting friend request: " + e.getMessage());
+                return null;
+            }
+        }).thenAcceptAsync(response -> {
+            Platform.runLater(() -> {
+                if (response != null && response.getCode() == 0) {
+                    System.out.println("✅ Friend request rejected successfully!");
+                    // Refresh the friends list
+                    FriendsController instance = getCurrentInstance();
+                    if (instance != null) {
+                        instance.loadFriendsData();
+                    }
+                } else {
+                    System.out.println("❌ Failed to reject friend request");
+                }
+            });
+        });
+    }
+    
+    private static FriendsController currentInstance;
+    
+    public FriendsController() {
+        currentInstance = this;
+    }
+    
+    private static FriendsController getCurrentInstance() {
+        return currentInstance;
+    }
+
+    // ===============================
+    // CELL FACTORIES
+    // ===============================
+
+    // ✅ Boş hücrelerde hover engellendi ve görünüm optimize edildi
+    static class FriendCell extends ListCell<Friend> {
+        private final HBox hbox = new HBox(15);
+        private final Label avatar = new Label();
+        private final VBox infoBox = new VBox(2);
+        private final Label nameLabel = new Label();
+        private final Label statusLabel = new Label();
+        private final HBox activityBox = new HBox(5);
+        private final Label activityTypeLabel = new Label();
+        private final Label activityLabel = new Label();
+        private final Pane spacer = new Pane();
+        private final HBox actionButtons = new HBox(10);
+
+        public FriendCell() {
+            super();
+            avatar.getStyleClass().add("friend-avatar");
+            nameLabel.getStyleClass().add("friend-name");
+            statusLabel.getStyleClass().add("friend-status");
+            activityTypeLabel.getStyleClass().add("friend-activity-type");
+            activityLabel.getStyleClass().add("friend-activity");
+
+            FontIcon messageIcon = new FontIcon("fas-comment-dots");
+            FontIcon callIcon = new FontIcon("fas-phone");
+            messageIcon.getStyleClass().add("action-icon");
+            callIcon.getStyleClass().add("action-icon");
+
+            actionButtons.getChildren().addAll(messageIcon, callIcon);
+            actionButtons.setAlignment(Pos.CENTER);
+
+            activityBox.getChildren().addAll(activityTypeLabel, activityLabel);
+            infoBox.getChildren().addAll(nameLabel, statusLabel, activityBox);
+
+            HBox.setHgrow(spacer, Priority.ALWAYS);
+            hbox.getChildren().addAll(avatar, infoBox, spacer, actionButtons);
+            hbox.setAlignment(Pos.CENTER_LEFT);
+        }
+
+        @Override
+        protected void updateItem(Friend friend, boolean empty) {
+            super.updateItem(friend, empty);
+            if (empty || friend == null) {
+                setGraphic(null);
+                setText(null);
+                setStyle("");
+                setDisable(true);
+                setMouseTransparent(true);
+                setOnMouseEntered(null);
+                setOnMouseExited(null);
+            } else {
+                avatar.setText(friend.getAvatarChar());
+                nameLabel.setText(friend.getName());
+                statusLabel.setText(friend.getStatus());
+                activityTypeLabel.setText(friend.getActivityType());
+                activityLabel.setText(friend.getActivity());
+                activityBox.setVisible(!friend.getActivity().isEmpty());
+
+                setGraphic(hbox);
+                setDisable(false);
+                setMouseTransparent(false);
+            }
+        }
+    }
+
+    // Pending friend requests cell
+    static class PendingRequestCell extends ListCell<Friend> {
+        private final HBox hbox = new HBox(15);
+        private final Label avatar = new Label();
+        private final VBox infoBox = new VBox(2);
+        private final Label nameLabel = new Label();
+        private final Label statusLabel = new Label();
+        private final Pane spacer = new Pane();
+        private final HBox actionButtons = new HBox(10);
+        private final JFXButton acceptButton = new JFXButton("Accept");
+        private final JFXButton rejectButton = new JFXButton("Reject");
+
+        public PendingRequestCell() {
+            super();
+            avatar.getStyleClass().add("friend-avatar");
+            nameLabel.getStyleClass().add("friend-name");
+            statusLabel.getStyleClass().add("friend-status");
+            
+            acceptButton.getStyleClass().add("accept-button");
+            rejectButton.getStyleClass().add("reject-button");
+
+            actionButtons.getChildren().addAll(acceptButton, rejectButton);
+            actionButtons.setAlignment(Pos.CENTER);
+
+            infoBox.getChildren().addAll(nameLabel, statusLabel);
+
+            HBox.setHgrow(spacer, Priority.ALWAYS);
+            hbox.getChildren().addAll(avatar, infoBox, spacer, actionButtons);
+            hbox.setAlignment(Pos.CENTER_LEFT);
+        }
+
+        @Override
+        protected void updateItem(Friend friend, boolean empty) {
+            super.updateItem(friend, empty);
+            if (empty || friend == null) {
+                setGraphic(null);
+                setText(null);
+                setStyle("");
+                setDisable(true);
+                setMouseTransparent(true);
+            } else {
+                avatar.setText(friend.getAvatarChar());
+                nameLabel.setText(friend.getName());
+                statusLabel.setText(friend.getStatus());
+
+                // Button actions - burada requestId'yi friend nesnesinden almamız gerekir
+                // Şimdilik friend name'i kullanıyoruz, gerçek uygulamada requestId olmalı
+                acceptButton.setOnAction(e -> acceptFriendRequest(1, friend.getName())); // TODO: Real requestId
+                rejectButton.setOnAction(e -> rejectFriendRequest(1, friend.getName())); // TODO: Real requestId
+
+                setGraphic(hbox);
+                setDisable(false);
+                setMouseTransparent(false);
+            }
+        }
     }
     
     private static void openProfile(String username) {

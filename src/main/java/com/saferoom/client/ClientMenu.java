@@ -293,5 +293,213 @@ public class ClientMenu{
 		}
 	}
 
+	// ===============================
+	// FRIEND SYSTEM CLIENT METHODS
+	// ===============================
+
+	/**
+	 * Bekleyen arkadaşlık isteklerini getir (gelen istekler)
+	 */
+	public static SafeRoomProto.PendingRequestsResponse getPendingFriendRequests(String username) throws Exception {
+		ManagedChannel channel = null;
+		try {
+			channel = ManagedChannelBuilder.forAddress(Server, Port)
+				.usePlaintext()
+				.build();
+			
+			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
+				.withDeadlineAfter(10, TimeUnit.SECONDS);
+			
+			SafeRoomProto.Request_Client request = SafeRoomProto.Request_Client.newBuilder()
+				.setUsername(username)
+				.build();
+				
+			return blockingStub.getPendingFriendRequests(request);
+		} finally {
+			if (channel != null) {
+				channel.shutdown();
+			}
+		}
+	}
+
+	/**
+	 * Gönderilen arkadaşlık isteklerini getir (giden istekler)
+	 */
+	public static SafeRoomProto.SentRequestsResponse getSentFriendRequests(String username) throws Exception {
+		ManagedChannel channel = null;
+		try {
+			channel = ManagedChannelBuilder.forAddress(Server, Port)
+				.usePlaintext()
+				.build();
+			
+			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
+				.withDeadlineAfter(10, TimeUnit.SECONDS);
+			
+			SafeRoomProto.Request_Client request = SafeRoomProto.Request_Client.newBuilder()
+				.setUsername(username)
+				.build();
+				
+			return blockingStub.getSentFriendRequests(request);
+		} finally {
+			if (channel != null) {
+				channel.shutdown();
+			}
+		}
+	}
+
+	/**
+	 * Arkadaşlık isteğini kabul et
+	 */
+	public static SafeRoomProto.Status acceptFriendRequest(int requestId, String username) throws Exception {
+		ManagedChannel channel = null;
+		try {
+			channel = ManagedChannelBuilder.forAddress(Server, Port)
+				.usePlaintext()
+				.build();
+			
+			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
+				.withDeadlineAfter(10, TimeUnit.SECONDS);
+			
+			SafeRoomProto.FriendRequestAction request = SafeRoomProto.FriendRequestAction.newBuilder()
+				.setRequestId(requestId)
+				.setUsername(username)
+				.build();
+				
+			return blockingStub.acceptFriendRequest(request);
+		} finally {
+			if (channel != null) {
+				channel.shutdown();
+			}
+		}
+	}
+
+	/**
+	 * Arkadaşlık isteğini reddet
+	 */
+	public static SafeRoomProto.Status rejectFriendRequest(int requestId, String username) throws Exception {
+		ManagedChannel channel = null;
+		try {
+			channel = ManagedChannelBuilder.forAddress(Server, Port)
+				.usePlaintext()
+				.build();
+			
+			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
+				.withDeadlineAfter(10, TimeUnit.SECONDS);
+			
+			SafeRoomProto.FriendRequestAction request = SafeRoomProto.FriendRequestAction.newBuilder()
+				.setRequestId(requestId)
+				.setUsername(username)
+				.build();
+				
+			return blockingStub.rejectFriendRequest(request);
+		} finally {
+			if (channel != null) {
+				channel.shutdown();
+			}
+		}
+	}
+
+	/**
+	 * Gönderilen arkadaşlık isteğini iptal et
+	 */
+	public static SafeRoomProto.Status cancelFriendRequest(int requestId, String username) throws Exception {
+		ManagedChannel channel = null;
+		try {
+			channel = ManagedChannelBuilder.forAddress(Server, Port)
+				.usePlaintext()
+				.build();
+			
+			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
+				.withDeadlineAfter(10, TimeUnit.SECONDS);
+			
+			SafeRoomProto.FriendRequestAction request = SafeRoomProto.FriendRequestAction.newBuilder()
+				.setRequestId(requestId)
+				.setUsername(username)
+				.build();
+				
+			return blockingStub.cancelFriendRequest(request);
+		} finally {
+			if (channel != null) {
+				channel.shutdown();
+			}
+		}
+	}
+
+	/**
+	 * Arkadaş listesini getir
+	 */
+	public static SafeRoomProto.FriendsListResponse getFriendsList(String username) throws Exception {
+		ManagedChannel channel = null;
+		try {
+			channel = ManagedChannelBuilder.forAddress(Server, Port)
+				.usePlaintext()
+				.build();
+			
+			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
+				.withDeadlineAfter(10, TimeUnit.SECONDS);
+			
+			SafeRoomProto.Request_Client request = SafeRoomProto.Request_Client.newBuilder()
+				.setUsername(username)
+				.build();
+				
+			return blockingStub.getFriendsList(request);
+		} finally {
+			if (channel != null) {
+				channel.shutdown();
+			}
+		}
+	}
+
+	/**
+	 * Arkadaşı kaldır
+	 */
+	public static SafeRoomProto.Status removeFriend(String user1, String user2) throws Exception {
+		ManagedChannel channel = null;
+		try {
+			channel = ManagedChannelBuilder.forAddress(Server, Port)
+				.usePlaintext()
+				.build();
+			
+			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
+				.withDeadlineAfter(10, TimeUnit.SECONDS);
+			
+			SafeRoomProto.RemoveFriendRequest request = SafeRoomProto.RemoveFriendRequest.newBuilder()
+				.setUser1(user1)
+				.setUser2(user2)
+				.build();
+				
+			return blockingStub.removeFriend(request);
+		} finally {
+			if (channel != null) {
+				channel.shutdown();
+			}
+		}
+	}
+
+	/**
+	 * Arkadaşlık istatistiklerini getir
+	 */
+	public static SafeRoomProto.FriendshipStatsResponse getFriendshipStats(String username) throws Exception {
+		ManagedChannel channel = null;
+		try {
+			channel = ManagedChannelBuilder.forAddress(Server, Port)
+				.usePlaintext()
+				.build();
+			
+			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
+				.withDeadlineAfter(10, TimeUnit.SECONDS);
+			
+			SafeRoomProto.Request_Client request = SafeRoomProto.Request_Client.newBuilder()
+				.setUsername(username)
+				.build();
+				
+			return blockingStub.getFriendshipStats(request);
+		} finally {
+			if (channel != null) {
+				channel.shutdown();
+			}
+		}
+	}
+
 	}
 

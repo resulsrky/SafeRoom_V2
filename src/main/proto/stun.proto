@@ -23,6 +23,22 @@ rpc SendFriendRequest(FriendRequest) returns (FriendResponse);
 
 rpc RegisterClient(Stun_Info) returns (Status);
 
+rpc GetPendingFriendRequests(Request_Client) returns (PendingRequestsResponse);
+
+rpc GetSentFriendRequests(Request_Client) returns (SentRequestsResponse);
+
+rpc AcceptFriendRequest(FriendRequestAction) returns (Status);
+
+rpc RejectFriendRequest(FriendRequestAction) returns (Status);
+
+rpc CancelFriendRequest(FriendRequestAction) returns (Status);
+
+rpc GetFriendsList(Request_Client) returns (FriendsListResponse);
+
+rpc RemoveFriend(RemoveFriendRequest) returns (Status);
+
+rpc GetFriendshipStats(Request_Client) returns (FriendshipStatsResponse);
+
 rpc GetStunInfo(Request_Client) returns (Stun_Info);
 
 rpc PunchTest(FromTo) returns (Status);
@@ -203,4 +219,62 @@ message FriendResponse {
     bool success = 1;
     string message = 2;
     string status = 3; // sent, accepted, declined, blocked
+}
+
+message FriendRequestAction {
+    int32 requestId = 1;
+    string username = 2;
+}
+
+message RemoveFriendRequest {
+    string user1 = 1;
+    string user2 = 2;
+}
+
+message FriendRequestInfo {
+    int32 requestId = 1;
+    string sender = 2;
+    string receiver = 3;
+    string message = 4;
+    string sentAt = 5;
+    string senderEmail = 6;
+    string senderLastSeen = 7;
+}
+
+message PendingRequestsResponse {
+    bool success = 1;
+    string message = 2;
+    repeated FriendRequestInfo requests = 3;
+}
+
+message SentRequestsResponse {
+    bool success = 1;
+    string message = 2;
+    repeated FriendRequestInfo requests = 3;
+}
+
+message FriendInfo {
+    string username = 1;
+    string email = 2;
+    string friendshipDate = 3;
+    string lastSeen = 4;
+    bool isVerified = 5;
+}
+
+message FriendsListResponse {
+    bool success = 1;
+    string message = 2;
+    repeated FriendInfo friends = 3;
+}
+
+message FriendshipStats {
+    int32 totalFriends = 1;
+    int32 pendingRequests = 2;
+    int32 sentRequests = 3;
+}
+
+message FriendshipStatsResponse {
+    bool success = 1;
+    string message = 2;
+    FriendshipStats stats = 3;
 }

@@ -804,6 +804,309 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
 		response.onNext(ReturnedAESKey);
 		response.onCompleted();
 	}
+
+		// ...existing code...
+	
+	// ===============================
+	// FRIEND SYSTEM - EKSIK METODLAR
+	// ===============================
+	
+	@Override
+	public void getPendingFriendRequests(Request_Client request, StreamObserver<SafeRoomProto.PendingRequestsResponse> responseObserver) {
+		try {
+			String username = request.getUsername();
+			
+			System.out.println("👥 Getting pending friend requests for: " + username);
+			
+			List<Map<String, Object>> requests = DBManager.getPendingFriendRequests(username);
+			
+			SafeRoomProto.PendingRequestsResponse.Builder responseBuilder = 
+				SafeRoomProto.PendingRequestsResponse.newBuilder()
+					.setSuccess(true)
+					.setMessage("Pending requests retrieved successfully");
+			
+			SimpleDateFormat dateFormat = new SimpleDateFormat("MMM dd, yyyy HH:mm");
+			
+			for (Map<String, Object> friendRequest : requests) {
+				SafeRoomProto.FriendRequestInfo friendRequestInfo = SafeRoomProto.FriendRequestInfo.newBuilder()
+					.setRequestId((Integer) friendRequest.get("requestId"))
+					.setSender((String) friendRequest.get("sender"))
+					.setReceiver(username)
+					.setMessage((String) friendRequest.get("message"))
+					.setSentAt(dateFormat.format((Timestamp) friendRequest.get("sentAt")))
+					.setSenderEmail((String) friendRequest.get("senderEmail"))
+					.setSenderLastSeen(friendRequest.get("senderLastSeen") != null ? 
+						dateFormat.format((Timestamp) friendRequest.get("senderLastSeen")) : "")
+					.build();
+				
+				responseBuilder.addRequests(friendRequestInfo);
+			}
+			
+			System.out.println("✅ Found " + requests.size() + " pending requests");
+			responseObserver.onNext(responseBuilder.build());
+			responseObserver.onCompleted();
+			
+		} catch (Exception e) {
+			System.err.println("❌ Error getting pending requests: " + e.getMessage());
+			responseObserver.onNext(SafeRoomProto.PendingRequestsResponse.newBuilder()
+				.setSuccess(false)
+				.setMessage("Error: " + e.getMessage())
+				.build());
+			responseObserver.onCompleted();
+		}
+	}
+	
+	@Override
+	public void getSentFriendRequests(Request_Client request, StreamObserver<SafeRoomProto.SentRequestsResponse> responseObserver) {
+		try {
+			String username = request.getUsername();
+			
+			List<Map<String, Object>> requests = DBManager.getSentFriendRequests(username);
+			
+			SafeRoomProto.SentRequestsResponse.Builder responseBuilder = 
+				SafeRoomProto.SentRequestsResponse.newBuilder()
+					.setSuccess(true)
+					.setMessage("Sent requests retrieved successfully");
+			
+			SimpleDateFormat dateFormat = new SimpleDateFormat("MMM dd, yyyy HH:mm");
+			
+			for (Map<String, Object> sentRequest : requests) {
+				SafeRoomProto.FriendRequestInfo friendRequestInfo = SafeRoomProto.FriendRequestInfo.newBuilder()
+					.setRequestId((Integer) sentRequest.get("requestId"))
+					.setSender(username)
+					.setReceiver((String) sentRequest.get("receiver"))
+					.setMessage((String) sentRequest.get("message"))
+					.setSentAt(dateFormat.format((Timestamp) sentRequest.get("sentAt")))
+					.setSenderEmail((String) sentRequest.get("receiverEmail"))
+					.setSenderLastSeen(sentRequest.get("receiverLastSeen") != null ? 
+						dateFormat.format((Timestamp) sentRequest.get("receiverLastSeen")) : "")
+					.build();
+				
+				responseBuilder.addRequests(friendRequestInfo);
+			}
+			
+			responseObserver.onNext(responseBuilder.build());
+			responseObserver.onCompleted();
+			
+		} catch (Exception e) {
+			System.err.println("❌ Error getting sent requests: " + e.getMessage());
+			responseObserver.onNext(SafeRoomProto.SentRequestsResponse.newBuilder()
+				.setSuccess(false)
+				.setMessage("Error: " + e.getMessage())
+				.build());
+			responseObserver.onCompleted();
+		}
+	}
+	
+	@Override
+	public void acceptFriendRequest(SafeRoomProto.FriendRequestAction request, StreamObserver<Status> responseObserver) {
+		try {
+			int requestId = request.getRequestId();
+			String username = request.getUsername();
+			
+			System.out.println("✅ Accepting friend request: " + requestId + " by " + username);
+			
+			boolean success = DBManager.acceptFriendRequest(requestId, username);
+			
+			Status response;
+			if (success) {
+				response = Status.newBuilder()
+					.setMessage("Friend request accepted successfully")
+					.setCode(0)
+					.build();
+			} else {
+				response = Status.newBuilder()
+					.setMessage("Failed to accept friend request")
+					.setCode(1)
+					.build();
+			}
+			
+			responseObserver.onNext(response);
+			responseObserver.onCompleted();
+			
+		} catch (Exception e) {
+			System.err.println("❌ Error accepting friend request: " + e.getMessage());
+			responseObserver.onNext(Status.newBuilder()
+				.setMessage("Error: " + e.getMessage())
+				.setCode(2)
+				.build());
+			responseObserver.onCompleted();
+		}
+	}
+	
+	@Override
+	public void rejectFriendRequest(SafeRoomProto.FriendRequestAction request, StreamObserver<Status> responseObserver) {
+		try {
+			int requestId = request.getRequestId();
+			String username = request.getUsername();
+			
+			System.out.println("❌ Rejecting friend request: " + requestId + " by " + username);
+			
+			boolean success = DBManager.rejectFriendRequest(requestId, username);
+			
+			Status response;
+			if (success) {
+				response = Status.newBuilder()
+					.setMessage("Friend request rejected successfully")
+					.setCode(0)
+					.build();
+			} else {
+				response = Status.newBuilder()
+					.setMessage("Failed to reject friend request")
+					.setCode(1)
+					.build();
+			}
+			
+			responseObserver.onNext(response);
+			responseObserver.onCompleted();
+			
+		} catch (Exception e) {
+			System.err.println("❌ Error rejecting friend request: " + e.getMessage());
+			responseObserver.onNext(Status.newBuilder()
+				.setMessage("Error: " + e.getMessage())
+				.setCode(2)
+				.build());
+			responseObserver.onCompleted();
+		}
+	}
+	
+	@Override
+	public void cancelFriendRequest(SafeRoomProto.FriendRequestAction request, StreamObserver<Status> responseObserver) {
+		try {
+			int requestId = request.getRequestId();
+			String username = request.getUsername();
+			
+			boolean success = DBManager.cancelFriendRequest(requestId, username);
+			
+			Status response;
+			if (success) {
+				response = Status.newBuilder()
+					.setMessage("Friend request cancelled successfully")
+					.setCode(0)
+					.build();
+			} else {
+				response = Status.newBuilder()
+					.setMessage("Failed to cancel friend request")
+					.setCode(1)
+					.build();
+			}
+			
+			responseObserver.onNext(response);
+			responseObserver.onCompleted();
+			
+		} catch (Exception e) {
+			responseObserver.onNext(Status.newBuilder()
+				.setMessage("Error: " + e.getMessage())
+				.setCode(2)
+				.build());
+			responseObserver.onCompleted();
+		}
+	}
+	
+	@Override
+	public void getFriendsList(Request_Client request, StreamObserver<SafeRoomProto.FriendsListResponse> responseObserver) {
+		try {
+			String username = request.getUsername();
+			
+			List<Map<String, Object>> friends = DBManager.getFriendsList(username);
+			
+			SafeRoomProto.FriendsListResponse.Builder responseBuilder = 
+				SafeRoomProto.FriendsListResponse.newBuilder()
+					.setSuccess(true)
+					.setMessage("Friends list retrieved successfully");
+			
+			SimpleDateFormat dateFormat = new SimpleDateFormat("MMM dd, yyyy");
+			
+			for (Map<String, Object> friend : friends) {
+				SafeRoomProto.FriendInfo friendInfo = SafeRoomProto.FriendInfo.newBuilder()
+					.setUsername((String) friend.get("username"))
+					.setEmail((String) friend.get("email"))
+					.setFriendshipDate(dateFormat.format((Timestamp) friend.get("friendshipDate")))
+					.setLastSeen(friend.get("lastSeen") != null ? 
+						dateFormat.format((Timestamp) friend.get("lastSeen")) : "")
+					.setIsVerified((Boolean) friend.get("isVerified"))
+					.build();
+				
+				responseBuilder.addFriends(friendInfo);
+			}
+			
+			responseObserver.onNext(responseBuilder.build());
+			responseObserver.onCompleted();
+			
+		} catch (Exception e) {
+			responseObserver.onNext(SafeRoomProto.FriendsListResponse.newBuilder()
+				.setSuccess(false)
+				.setMessage("Error: " + e.getMessage())
+				.build());
+			responseObserver.onCompleted();
+		}
+	}
+	
+	@Override
+	public void removeFriend(SafeRoomProto.RemoveFriendRequest request, StreamObserver<Status> responseObserver) {
+		try {
+			String user1 = request.getUser1();
+			String user2 = request.getUser2();
+			
+			boolean success = DBManager.removeFriend(user1, user2);
+			
+			Status response;
+			if (success) {
+				response = Status.newBuilder()
+					.setMessage("Friend removed successfully")
+					.setCode(0)
+					.build();
+			} else {
+				response = Status.newBuilder()
+					.setMessage("Failed to remove friend")
+					.setCode(1)
+					.build();
+			}
+			
+			responseObserver.onNext(response);
+			responseObserver.onCompleted();
+			
+		} catch (Exception e) {
+			responseObserver.onNext(Status.newBuilder()
+				.setMessage("Error: " + e.getMessage())
+				.setCode(2)
+				.build());
+			responseObserver.onCompleted();
+		}
+	}
+	
+	@Override
+	public void getFriendshipStats(Request_Client request, StreamObserver<SafeRoomProto.FriendshipStatsResponse> responseObserver) {
+		try {
+			String username = request.getUsername();
+			
+			Map<String, Object> stats = DBManager.getFriendshipStats(username);
+			
+			SafeRoomProto.FriendshipStats friendshipStats = SafeRoomProto.FriendshipStats.newBuilder()
+				.setTotalFriends((Integer) stats.get("totalFriends"))
+				.setPendingRequests((Integer) stats.get("pendingRequests"))
+				.setSentRequests((Integer) stats.get("sentRequests"))
+				.build();
+			
+			SafeRoomProto.FriendshipStatsResponse response = SafeRoomProto.FriendshipStatsResponse.newBuilder()
+				.setSuccess(true)
+				.setMessage("Stats retrieved successfully")
+				.setStats(friendshipStats)
+				.build();
+			
+			responseObserver.onNext(response);
+			responseObserver.onCompleted();
+			
+		} catch (Exception e) {
+			responseObserver.onNext(SafeRoomProto.FriendshipStatsResponse.newBuilder()
+				.setSuccess(false)
+				.setMessage("Error: " + e.getMessage())
+				.build());
+			responseObserver.onCompleted();
+		}
+	}
+	
+	// ...existing code...
 	
 
 

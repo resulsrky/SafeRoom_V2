@@ -910,4 +910,310 @@ public class DBManager {
 			System.out.println("Failed to update security score: " + e.getMessage());
 		}
 	}
+// ...existing code...
+
+    /**
+     * Kullanıcının bekleyen arkadaşlık isteklerini getir (gelen istekler)
+     */
+    public static java.util.List<java.util.Map<String, Object>> getPendingFriendRequests(String username) throws SQLException {
+        String query = """
+            SELECT fr.id, fr.sender, fr.message, fr.created_at, u.email, u.last_login
+            FROM friend_requests fr
+            JOIN users u ON fr.sender = u.username
+            WHERE fr.receiver = ? AND fr.status = 'pending'
+            ORDER BY fr.created_at DESC
+        """;
+        
+        java.util.List<java.util.Map<String, Object>> requests = new java.util.ArrayList<>();
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+            
+            stmt.setString(1, username);
+            ResultSet rs = stmt.executeQuery();
+            
+            while (rs.next()) {
+                java.util.Map<String, Object> request = new java.util.HashMap<>();
+                request.put("requestId", rs.getInt("id"));
+                request.put("sender", rs.getString("sender"));
+                request.put("message", rs.getString("message"));
+                request.put("sentAt", rs.getTimestamp("created_at"));
+                request.put("senderEmail", rs.getString("email"));
+                request.put("senderLastSeen", rs.getTimestamp("last_login"));
+                requests.add(request);
+            }
+        }
+        return requests;
+    }
+    
+    /**
+     * Kullanıcının gönderdiği arkadaşlık isteklerini getir (giden istekler)
+     */
+    public static java.util.List<java.util.Map<String, Object>> getSentFriendRequests(String username) throws SQLException {
+        String query = """
+            SELECT fr.id, fr.receiver, fr.message, fr.created_at, fr.status, u.email, u.last_login
+            FROM friend_requests fr
+            JOIN users u ON fr.receiver = u.username
+            WHERE fr.sender = ? AND fr.status = 'pending'
+            ORDER BY fr.created_at DESC
+        """;
+        
+        java.util.List<java.util.Map<String, Object>> requests = new java.util.ArrayList<>();
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+            
+            stmt.setString(1, username);
+            ResultSet rs = stmt.executeQuery();
+            
+            while (rs.next()) {
+                java.util.Map<String, Object> request = new java.util.HashMap<>();
+                request.put("requestId", rs.getInt("id"));
+                request.put("receiver", rs.getString("receiver"));
+                request.put("message", rs.getString("message"));
+                request.put("sentAt", rs.getTimestamp("created_at"));
+                request.put("status", rs.getString("status"));
+                request.put("receiverEmail", rs.getString("email"));
+                request.put("receiverLastSeen", rs.getTimestamp("last_login"));
+                requests.add(request);
+            }
+        }
+        return requests;
+    }
+    
+    /**
+     * Arkadaşlık isteğini kabul et
+     */
+    public static boolean acceptFriendRequest(int requestId, String receiver) throws SQLException {
+        String selectQuery = "SELECT sender, receiver FROM friend_requests WHERE id = ? AND receiver = ? AND status = 'pending'";
+        String updateQuery = "UPDATE friend_requests SET status = 'accepted', responded_at = CURRENT_TIMESTAMP WHERE id = ?";
+        String insertFriendshipQuery = "INSERT INTO friendships (user1, user2, created_at) VALUES (?, ?, CURRENT_TIMESTAMP)";
+        
+        try (Connection conn = getConnection()) {
+            conn.setAutoCommit(false); // Transaction başlat
+            
+            try {
+                // İsteği kontrol et
+                String sender = null;
+                try (PreparedStatement stmt = conn.prepareStatement(selectQuery)) {
+                    stmt.setInt(1, requestId);
+                    stmt.setString(2, receiver);
+                    
+                    ResultSet rs = stmt.executeQuery();
+                    if (rs.next()) {
+                        sender = rs.getString("sender");
+                    } else {
+                        return false; // İstek bulunamadı
+                    }
+                }
+                
+                // İsteği kabul edildi olarak işaretle
+                try (PreparedStatement stmt = conn.prepareStatement(updateQuery)) {
+                    stmt.setInt(1, requestId);
+                    stmt.executeUpdate();
+                }
+                
+                // Arkadaşlık kaydı oluştur (alfabetik sıralama ile)
+                String user1 = sender.compareTo(receiver) < 0 ? sender : receiver;
+                String user2 = sender.compareTo(receiver) < 0 ? receiver : sender;
+                
+                try (PreparedStatement stmt = conn.prepareStatement(insertFriendshipQuery)) {
+                    stmt.setString(1, user1);
+                    stmt.setString(2, user2);
+                    stmt.executeUpdate();
+                }
+                
+                // Aktivite kayıtları
+                logUserActivity(sender, "friend_request_accepted", "Friend request accepted by " + receiver, null);
+                logUserActivity(receiver, "friend_added", "Added " + sender + " as friend", null);
+                
+                conn.commit(); // Transaction'ı tamamla
+                return true;
+                
+            } catch (SQLException e) {
+                conn.rollback(); // Hata durumunda geri al
+                throw e;
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        }
+    }
+    
+    /**
+     * Arkadaşlık isteğini reddet
+     */
+    public static boolean rejectFriendRequest(int requestId, String receiver) throws SQLException {
+        String selectQuery = "SELECT sender FROM friend_requests WHERE id = ? AND receiver = ? AND status = 'pending'";
+        String updateQuery = "UPDATE friend_requests SET status = 'rejected', responded_at = CURRENT_TIMESTAMP WHERE id = ?";
+        
+        try (Connection conn = getConnection()) {
+            // İsteği kontrol et
+            String sender = null;
+            try (PreparedStatement stmt = conn.prepareStatement(selectQuery)) {
+                stmt.setInt(1, requestId);
+                stmt.setString(2, receiver);
+                
+                ResultSet rs = stmt.executeQuery();
+                if (rs.next()) {
+                    sender = rs.getString("sender");
+                } else {
+                    return false; // İstek bulunamadı
+                }
+            }
+            
+            // İsteği reddet
+            try (PreparedStatement stmt = conn.prepareStatement(updateQuery)) {
+                stmt.setInt(1, requestId);
+                int affected = stmt.executeUpdate();
+                
+                if (affected > 0) {
+                    // Aktivite kayıtları
+                    logUserActivity(sender, "friend_request_rejected", "Friend request rejected by " + receiver, null);
+                    logUserActivity(receiver, "friend_request_rejected", "Rejected friend request from " + sender, null);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * Gönderilen arkadaşlık isteğini iptal et
+     */
+    public static boolean cancelFriendRequest(int requestId, String sender) throws SQLException {
+        String deleteQuery = "DELETE FROM friend_requests WHERE id = ? AND sender = ? AND status = 'pending'";
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(deleteQuery)) {
+            
+            stmt.setInt(1, requestId);
+            stmt.setString(2, sender);
+            
+            int affected = stmt.executeUpdate();
+            if (affected > 0) {
+                logUserActivity(sender, "friend_request_cancelled", "Cancelled a friend request", null);
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * Kullanıcının arkadaş listesini getir
+     */
+    public static java.util.List<java.util.Map<String, Object>> getFriendsList(String username) throws SQLException {
+        String query = """
+            SELECT 
+                CASE 
+                    WHEN f.user1 = ? THEN f.user2 
+                    ELSE f.user1 
+                END as friend_username,
+                f.created_at as friendship_date,
+                u.email, u.last_login, u.is_verified
+            FROM friendships f
+            JOIN users u ON (
+                CASE 
+                    WHEN f.user1 = ? THEN f.user2 = u.username
+                    ELSE f.user1 = u.username
+                END
+            )
+            WHERE f.user1 = ? OR f.user2 = ?
+            ORDER BY f.created_at DESC
+        """;
+        
+        java.util.List<java.util.Map<String, Object>> friends = new java.util.ArrayList<>();
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+            
+            stmt.setString(1, username);
+            stmt.setString(2, username);
+            stmt.setString(3, username);
+            stmt.setString(4, username);
+            
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                java.util.Map<String, Object> friend = new java.util.HashMap<>();
+                friend.put("username", rs.getString("friend_username"));
+                friend.put("email", rs.getString("email"));
+                friend.put("friendshipDate", rs.getTimestamp("friendship_date"));
+                friend.put("lastSeen", rs.getTimestamp("last_login"));
+                friend.put("isVerified", rs.getBoolean("is_verified"));
+                friends.add(friend);
+            }
+        }
+        return friends;
+    }
+    
+    /**
+     * Arkadaşlığı sonlandır
+     */
+    public static boolean removeFriend(String user1, String user2) throws SQLException {
+        String deleteQuery = "DELETE FROM friendships WHERE (user1 = ? AND user2 = ?) OR (user1 = ? AND user2 = ?)";
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(deleteQuery)) {
+            
+            String minUser = user1.compareTo(user2) < 0 ? user1 : user2;
+            String maxUser = user1.compareTo(user2) < 0 ? user2 : user1;
+            
+            stmt.setString(1, minUser);
+            stmt.setString(2, maxUser);
+            stmt.setString(3, minUser);
+            stmt.setString(4, maxUser);
+            
+            int affected = stmt.executeUpdate();
+            if (affected > 0) {
+                logUserActivity(user1, "friend_removed", "Removed " + user2 + " from friends", null);
+                logUserActivity(user2, "friend_removed", "Removed by " + user1 + " from friends", null);
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * Arkadaşlık istatistiklerini getir
+     */
+    public static java.util.Map<String, Object> getFriendshipStats(String username) throws SQLException {
+        java.util.Map<String, Object> stats = new java.util.HashMap<>();
+        
+        try (Connection conn = getConnection()) {
+            // Toplam arkadaş sayısı
+            String friendCountQuery = "SELECT COUNT(*) FROM friendships WHERE user1 = ? OR user2 = ?";
+            try (PreparedStatement stmt = conn.prepareStatement(friendCountQuery)) {
+                stmt.setString(1, username);
+                stmt.setString(2, username);
+                ResultSet rs = stmt.executeQuery();
+                if (rs.next()) {
+                    stats.put("totalFriends", rs.getInt(1));
+                }
+            }
+            
+            // Bekleyen gelen istekler
+            String pendingInQuery = "SELECT COUNT(*) FROM friend_requests WHERE receiver = ? AND status = 'pending'";
+            try (PreparedStatement stmt = conn.prepareStatement(pendingInQuery)) {
+                stmt.setString(1, username);
+                ResultSet rs = stmt.executeQuery();
+                if (rs.next()) {
+                    stats.put("pendingRequests", rs.getInt(1));
+                }
+            }
+            
+            // Bekleyen giden istekler
+            String pendingOutQuery = "SELECT COUNT(*) FROM friend_requests WHERE sender = ? AND status = 'pending'";
+            try (PreparedStatement stmt = conn.prepareStatement(pendingOutQuery)) {
+                stmt.setString(1, username);
+                ResultSet rs = stmt.executeQuery();
+                if (rs.next()) {
+                    stats.put("sentRequests", rs.getInt(1));
+                }
+            }
+        }
+        
+        return stats;
+    }
+
+// ...existing code...
+
 }
