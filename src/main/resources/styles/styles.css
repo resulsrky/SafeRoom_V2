@@ -791,6 +791,238 @@
   -fx-icon-color: white;
 }
 
+/* ===== Clean and Compact Friends View Styles ===== */
+.search-field-compact {
+  -fx-background-color: rgba(30, 43, 59, 0.8);
+  -fx-background-radius: 8px;
+  -fx-border-color: rgba(51, 65, 85, 0.6);
+  -fx-border-radius: 8px;
+  -fx-border-width: 1px;
+  -fx-text-fill: white;
+  -fx-prompt-text-fill: #94a3b8;
+  -fx-padding: 12px 16px;
+  -fx-font-size: 14px;
+  -fx-pref-height: 44px;
+}
+
+.search-field-compact:focused {
+  -fx-border-color: #3b82f6;
+  -fx-background-color: rgba(30, 43, 59, 1.0);
+}
+
+.add-friend-button {
+  -fx-background-color: #3b82f6;
+  -fx-background-radius: 8px;
+  -fx-cursor: hand;
+  -fx-effect: dropshadow(gaussian, rgba(59, 130, 246, 0.5), 10, 0.4, 0, 3);
+  -fx-pref-width: 120px;
+  -fx-pref-height: 44px;
+  -fx-min-height: 44px;
+  -fx-font-size: 14px;
+  -fx-font-weight: bold;
+}
+
+.add-friend-icon {
+  -fx-icon-color: white;
+  -fx-icon-size: 16px;
+}
+
+.stat-card-compact {
+  -fx-background-color: rgba(30, 43, 59, 0.6);
+  -fx-background-radius: 10px;
+  -fx-padding: 16px 12px;
+  -fx-border-color: rgba(51, 65, 85, 0.4);
+  -fx-border-radius: 10px;
+  -fx-border-width: 1px;
+  -fx-alignment: center;
+  -fx-min-width: 80px;
+  -fx-pref-width: 100px;
+}
+
+/* ===== FIXED STATS CARDS - UNIFIED STYLE ===== */
+.stat-card-enhanced {
+  -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, rgba(30, 43, 59, 0.95) 0%, rgba(15, 23, 42, 1.0) 100%);
+  -fx-background-radius: 14px;
+  -fx-padding: 24px 20px;
+  -fx-border-radius: 14px;
+  -fx-alignment: center;
+  -fx-min-width: 120px;
+  -fx-pref-width: 150px;
+  -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.8), 20, 0.6, 0, 6);
+}
+
+.stat-card-enhanced:hover {
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.9), 25, 0.7, 0, 8);
+    -fx-cursor: hand;
+}
+
+.stat-number-large {
+  -fx-font-size: 36px;
+  -fx-font-family: "System Bold";
+  -fx-text-fill: white;
+  -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.5), 2, 0.3, 0, 1);
+}
+
+.stat-label-enhanced {
+  -fx-font-size: 14px;
+  -fx-text-fill: #cbd5e1;
+  -fx-font-weight: 600;
+  -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.3), 1, 0.2, 0, 1);
+}
+
+.filter-tabs {
+  -fx-background-color: rgba(15, 23, 42, 0.6);
+  -fx-background-radius: 8px;
+  -fx-padding: 4px;
+  -fx-border-color: rgba(51, 65, 85, 0.3);
+  -fx-border-width: 1px;
+  -fx-border-radius: 8px;
+}
+
+.filter-tab {
+  -fx-background-color: transparent;
+  -fx-text-fill: #cbd5e1;
+  -fx-font-size: 14px;
+  -fx-font-weight: bold;
+  -fx-padding: 8px 16px;
+  -fx-background-radius: 6px;
+  -fx-cursor: hand;
+  -fx-min-width: 70px;
+}
+
+.filter-tab:hover {
+  -fx-background-color: rgba(51, 65, 85, 0.3);
+  -fx-text-fill: #e2e8f0;
+}
+
+.filter-tab.active-tab {
+  -fx-background-color: #3b82f6;
+  -fx-text-fill: white;
+}
+
+/* Special style for the active "Online" tab to make it stand out */
+#onlineFilterButton.active-tab {
+    -fx-background-color: #10b981; /* Vibrant Green Background */
+    -fx-text-fill: white;
+    -fx-font-size: 15px; /* Slightly larger font */
+    -fx-effect: dropshadow(gaussian, rgba(74, 222, 128, 0.7), 15, 0.5, 0, 0); /* Green Glow */
+}
+
+.friends-scroll,
+.friends-scroll .viewport {
+  -fx-background-color: transparent;
+  -fx-padding: 0;
+  -fx-min-height: 350px; /* Prevents collapsing when list is empty */
+}
+
+.friends-list-container {
+  -fx-background-color: rgba(30, 43, 59, 0.3);
+  -fx-background-radius: 10px;
+  -fx-padding: 12px;
+  -fx-border-color: rgba(51, 65, 85, 0.3);
+  -fx-border-width: 1px;
+  -fx-border-radius: 10px;
+  -fx-min-height: 400px; /* Sabit minimum yükseklik */
+}
+
+/* Override old styles */
+.page-title {
+  -fx-font-size: 32px;
+  -fx-font-family: "System Bold";
+  -fx-text-fill: white;
+  -fx-padding: 0 0 8 0;
+}
+
+.friends-header-section {
+  -fx-background-color: transparent;
+}
+
+.friends-stats-section {
+  -fx-background-color: rgba(15, 23, 42, 0.6);
+  -fx-background-radius: 16px;
+  -fx-padding: 20px;
+  -fx-border-color: rgba(51, 65, 85, 0.3);
+  -fx-border-width: 1px;
+  -fx-border-radius: 16px;
+}
+
+.summary-card-enhanced {
+  -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, rgba(30, 43, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
+  -fx-background-radius: 12px;
+  -fx-padding: 18px 16px;
+  -fx-border-color: rgba(51, 65, 85, 0.4);
+  -fx-border-radius: 12px;
+  -fx-border-width: 1px;
+  -fx-alignment: center;
+  -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 8, 0.3, 0, 2);
+}
+
+.summary-card-enhanced.online-card {
+  -fx-border-color: rgba(34, 197, 94, 0.3);
+  -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, rgba(15, 23, 42, 0.9) 0%, rgba(22, 163, 74, 0.1) 100%);
+}
+
+.summary-card-enhanced.pending-card {
+  -fx-border-color: rgba(249, 115, 22, 0.3);
+  -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, rgba(15, 23, 42, 0.9) 0%, rgba(249, 115, 22, 0.1) 100%);
+}
+
+.summary-card-title-large {
+  -fx-font-size: 32px;
+  -fx-font-family: "System Bold";
+  -fx-text-fill: white;
+}
+
+.friends-filter-section {
+  -fx-background-color: transparent;
+}
+
+.filter-bar-enhanced {
+  -fx-padding: 6px;
+  -fx-background-color: rgba(15, 23, 42, 0.7);
+  -fx-background-radius: 12px;
+  -fx-border-color: rgba(51, 65, 85, 0.3);
+  -fx-border-width: 1px;
+  -fx-border-radius: 12px;
+}
+
+.filter-button-enhanced {
+  -fx-background-color: transparent;
+  -fx-text-fill: #94a3b8;
+  -fx-font-size: 13px;
+  -fx-font-weight: 600;
+  -fx-padding: 10px 18px;
+  -fx-background-radius: 8px;
+  -fx-cursor: hand;
+  -fx-transition-duration: 200ms;
+}
+
+.filter-button-enhanced:hover {
+  -fx-background-color: rgba(51, 65, 85, 0.4);
+  -fx-text-fill: white;
+}
+
+.filter-button-enhanced.active {
+  -fx-background-color: linear-gradient(from 0% 0% to 100% 0%, #3b82f6 0%, #a855f7 100%);
+  -fx-text-fill: white;
+  -fx-effect: dropshadow(gaussian, rgba(59, 130, 246, 0.4), 6, 0.4, 0, 2);
+}
+
+.friends-section-box-enhanced,
+.friends-section-box-enhanced .viewport {
+  -fx-background-color: transparent;
+  -fx-padding: 0;
+}
+
+.friends-container-enhanced {
+  -fx-background-color: rgba(30, 43, 59, 0.4);
+  -fx-background-radius: 12px;
+  -fx-padding: 16px;
+  -fx-border-color: rgba(51, 65, 85, 0.3);
+  -fx-border-width: 1px;
+  -fx-border-radius: 12px;
+}
+
 /* =================================================================
    7. FILE VAULT
    ================================================================= */
@@ -1654,7 +1886,8 @@
   -fx-background-color: #ef4444; /* Bright red */
 }
 .status-dot-offline {
-  -fx-background-color: #6b7280; /* Gray */
+  -fx-background-color: #6b7280; /* Gray text for offline */
+  -fx-background-color: transparent; /* No background */
 }
 
 /* Özel Pop-up Menü Kapsayıcısı */

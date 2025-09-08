@@ -74,8 +74,10 @@ public class FriendsController {
         for (Node node : filterBar.getChildren()) {
             JFXButton button = (JFXButton) node;
             button.setOnAction(event -> {
-                filterBar.getChildren().forEach(btn -> btn.getStyleClass().remove("active"));
-                button.getStyleClass().add("active");
+                // Remove 'active-tab' from all buttons
+                filterBar.getChildren().forEach(btn -> btn.getStyleClass().remove("active-tab"));
+                // Add 'active-tab' to the clicked button
+                button.getStyleClass().add("active-tab");
 
                 switch (button.getText()) {
                     case "Online":
@@ -94,7 +96,8 @@ public class FriendsController {
             });
         }
 
-        filterBar.getChildren().get(0).getStyleClass().add("active");
+        // Set "Online" as the default active tab on initialization
+        filterBar.getChildren().get(0).getStyleClass().add("active-tab");
         updateFriendsList(onlineFriends, "Online");
     }
 
