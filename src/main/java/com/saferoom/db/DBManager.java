@@ -633,7 +633,7 @@ public class DBManager {
 	 */
 	public static java.util.Map<String, Object> getUserProfile(String username, String requestedBy) throws SQLException {
 		String query = """
-			SELECT u.username, u.email, u.created_at, u.last_login, u.is_verified,
+			SELECT u.username, u.email, u.last_login, u.is_verified,
 				   COALESCE(s.rooms_created, 0) as rooms_created,
 				   COALESCE(s.rooms_joined, 0) as rooms_joined,
 				   COALESCE(s.files_shared, 0) as files_shared,
@@ -654,7 +654,7 @@ public class DBManager {
 				java.util.Map<String, Object> profile = new java.util.HashMap<>();
 				profile.put("username", rs.getString("username"));
 				profile.put("email", rs.getString("email"));
-				profile.put("joinDate", rs.getTimestamp("created_at"));
+				profile.put("joinDate", rs.getTimestamp("last_login")); // last_login'i joinDate olarak kullan
 				profile.put("lastSeen", rs.getTimestamp("last_login"));
 				profile.put("isVerified", rs.getBoolean("is_verified"));
 				
