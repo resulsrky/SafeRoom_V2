@@ -244,5 +244,54 @@ public class ClientMenu{
 		}
 	}
 
+	public static SafeRoomProto.ProfileResponse getProfile(String targetUsername, String currentUser) throws Exception {
+		ManagedChannel channel = null;
+		try {
+			channel = ManagedChannelBuilder.forAddress(Server, Port)
+				.usePlaintext()
+				.build();
+			
+			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
+				.withDeadlineAfter(10, TimeUnit.SECONDS);
+			
+			SafeRoomProto.ProfileRequest request = SafeRoomProto.ProfileRequest.newBuilder()
+				.setUsername(targetUsername)
+				.setRequestedBy(currentUser)
+				.build();
+				
+			SafeRoomProto.ProfileResponse response = blockingStub.getProfile(request);
+			return response;
+		} finally {
+			if (channel != null) {
+				channel.shutdown();
+			}
+		}
+	}
+
+	public static SafeRoomProto.FriendResponse sendFriendRequest(String fromUser, String toUser) throws Exception {
+		ManagedChannel channel = null;
+		try {
+			channel = ManagedChannelBuilder.forAddress(Server, Port)
+				.usePlaintext()
+				.build();
+			
+			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
+				.withDeadlineAfter(10, TimeUnit.SECONDS);
+			
+			SafeRoomProto.FriendRequest request = SafeRoomProto.FriendRequest.newBuilder()
+				.setSender(fromUser)
+				.setReceiver(toUser)
+				.setMessage("") // Boş mesaj
+				.build();
+				
+			SafeRoomProto.FriendResponse response = blockingStub.sendFriendRequest(request);
+			return response;
+		} finally {
+			if (channel != null) {
+				channel.shutdown();
+			}
+		}
+	}
+
 	}
 

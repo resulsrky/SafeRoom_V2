@@ -532,8 +532,25 @@ public class MainController {
     private void handleDashboard() { setActiveButton(dashboardButton); loadView("DashBoardView.fxml"); }
     public void handleRooms() { setActiveButton(roomsButton); loadView("RoomsView.fxml"); }
     private void handleMessages() { setActiveButton(messagesButton); loadView("MessagesView.fxml"); }
-    private void handleFriends() { setActiveButton(friendsButton); loadView("FriendsView.fxml"); }
+    public void handleFriends() { setActiveButton(friendsButton); loadView("FriendsView.fxml"); }
     public void handleFileVault() { setActiveButton(fileVaultButton); loadView("FileVaultView.fxml"); }
+    
+    public void handleProfile(String username) {
+        try {
+            FXMLLoader loader = new FXMLLoader(Objects.requireNonNull(MainApp.class.getResource("/view/ProfileView.fxml")));
+            Parent root = loader.load();
+            
+            // Get the controller and set profile data
+            ProfileController profileController = loader.getController();
+            profileController.setProfileData(username);
+            
+            contentArea.getChildren().setAll(root);
+            clearActiveButton(); // No specific button for profile view
+        } catch (IOException | NullPointerException e) {
+            e.printStackTrace();
+            showErrorInContentArea("Profil görünümü yüklenemedi");
+        }
+    }
     // private void handleSettings() { ... } <-- METOT KALDIRILDI
 
     public void loadSecureRoomView() {

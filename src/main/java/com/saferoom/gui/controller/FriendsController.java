@@ -281,6 +281,13 @@ public class FriendsController {
                     hbox.getChildren().set(0, avatarText);
                 }
                 
+                // Add click handler for profile view
+                setOnMouseClicked(e -> {
+                    if (e.getClickCount() == 1) { // Single click to view profile
+                        openProfile(username);
+                    }
+                });
+                
                 addButton.setOnAction(e -> sendFriendRequest(username));
                 setGraphic(hbox);
             }
@@ -290,5 +297,17 @@ public class FriendsController {
     private static void sendFriendRequest(String username) {
         System.out.println("Sending friend request to: " + username);
         // TODO: Implement friend request logic
+    }
+    
+    private static void openProfile(String username) {
+        System.out.println("Opening profile for: " + username);
+        try {
+            MainController mainController = MainController.getInstance();
+            if (mainController != null) {
+                mainController.handleProfile(username);
+            }
+        } catch (Exception e) {
+            System.err.println("Error opening profile: " + e.getMessage());
+        }
     }
 }

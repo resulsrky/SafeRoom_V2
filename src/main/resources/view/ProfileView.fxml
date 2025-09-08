@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import com.jfoenix.controls.JFXButton?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
+
+<VBox xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.saferoom.gui.controller.ProfileController">
+   <children>
+      <!-- Profile Header -->
+      <HBox styleClass="profile-header" spacing="20.0">
+         <children>
+            <!-- Back Button -->
+            <VBox alignment="CENTER_LEFT">
+               <children>
+                  <JFXButton fx:id="backButton" onAction="#handleBack" styleClass="back-button">
+                     <graphic>
+                        <FontIcon iconLiteral="fas-arrow-left" iconSize="20" />
+                     </graphic>
+                  </JFXButton>
+               </children>
+            </VBox>
+            
+            <!-- Profile Picture and Basic Info -->
+            <VBox alignment="CENTER" spacing="10.0">
+               <children>
+                  <Label fx:id="profileAvatar" styleClass="profile-avatar-large" text="U" />
+                  <Label fx:id="usernameLabel" styleClass="profile-username" text="Username" />
+                  <HBox alignment="CENTER" spacing="5.0">
+                     <children>
+                        <Label fx:id="statusDot" styleClass="status-dot" />
+                        <Label fx:id="statusLabel" styleClass="profile-status" text="Online" />
+                     </children>
+                  </HBox>
+               </children>
+            </VBox>
+            
+            <!-- User Info and Actions -->
+            <VBox spacing="15.0" HBox.hgrow="ALWAYS">
+               <children>
+                  <!-- User Details -->
+                  <VBox spacing="8.0">
+                     <children>
+                        <HBox spacing="10.0">
+                           <children>
+                              <FontIcon iconLiteral="fas-envelope" iconSize="16" styleClass="info-icon" />
+                              <Label fx:id="emailLabel" styleClass="profile-info" text="user@example.com" />
+                           </children>
+                        </HBox>
+                        <HBox spacing="10.0">
+                           <children>
+                              <FontIcon iconLiteral="fas-calendar" iconSize="16" styleClass="info-icon" />
+                              <Label fx:id="joinDateLabel" styleClass="profile-info" text="Joined" />
+                           </children>
+                        </HBox>
+                        <HBox spacing="10.0">
+                           <children>
+                              <FontIcon iconLiteral="fas-clock" iconSize="16" styleClass="info-icon" />
+                              <Label fx:id="lastSeenLabel" styleClass="profile-info" text="Last seen" />
+                           </children>
+                        </HBox>
+                     </children>
+                  </VBox>
+                  
+                  <!-- Action Buttons -->
+                  <HBox spacing="15.0">
+                     <children>
+                        <JFXButton fx:id="friendActionButton" onAction="#handleFriendAction" styleClass="friend-action-button" text="Add Friend" />
+                        <JFXButton fx:id="messageButton" onAction="#handleMessage" styleClass="message-button" text="Message" />
+                        <JFXButton fx:id="blockButton" onAction="#handleBlock" styleClass="block-button" text="Block" />
+                     </children>
+                  </HBox>
+               </children>
+            </VBox>
+         </children>
+         <padding>
+            <Insets bottom="20.0" left="30.0" right="30.0" top="20.0" />
+         </padding>
+      </HBox>
+      
+      <!-- Profile Content Tabs -->
+      <TabPane fx:id="profileTabs" styleClass="profile-tabs" tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS">
+         <tabs>
+            <!-- Overview Tab -->
+            <Tab text="Overview">
+               <content>
+                  <ScrollPane fitToWidth="true" styleClass="profile-scroll">
+                     <content>
+                        <VBox spacing="25.0">
+                           <children>
+                              <!-- Stats Cards -->
+                              <HBox spacing="20.0" styleClass="stats-container">
+                                 <children>
+                                    <!-- Rooms Stats -->
+                                    <VBox styleClass="stats-card" HBox.hgrow="ALWAYS">
+                                       <children>
+                                          <HBox alignment="CENTER_LEFT" spacing="10.0">
+                                             <children>
+                                                <FontIcon iconLiteral="fas-door-open" iconSize="24" styleClass="stats-icon-rooms" />
+                                                <Label styleClass="stats-title" text="Rooms" />
+                                             </children>
+                                          </HBox>
+                                          <VBox spacing="8.0">
+                                             <children>
+                                                <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                                   <children>
+                                                      <Label fx:id="roomsCreatedLabel" styleClass="stats-number" text="0" />
+                                                      <Label styleClass="stats-description" text="Created" />
+                                                   </children>
+                                                </HBox>
+                                                <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                                   <children>
+                                                      <Label fx:id="roomsJoinedLabel" styleClass="stats-number" text="0" />
+                                                      <Label styleClass="stats-description" text="Joined" />
+                                                   </children>
+                                                </HBox>
+                                             </children>
+                                          </VBox>
+                                       </children>
+                                    </VBox>
+                                    
+                                    <!-- Communication Stats -->
+                                    <VBox styleClass="stats-card" HBox.hgrow="ALWAYS">
+                                       <children>
+                                          <HBox alignment="CENTER_LEFT" spacing="10.0">
+                                             <children>
+                                                <FontIcon iconLiteral="fas-comments" iconSize="24" styleClass="stats-icon-messages" />
+                                                <Label styleClass="stats-title" text="Messages" />
+                                             </children>
+                                          </HBox>
+                                          <VBox spacing="8.0">
+                                             <children>
+                                                <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                                   <children>
+                                                      <Label fx:id="messagesSentLabel" styleClass="stats-number" text="0" />
+                                                      <Label styleClass="stats-description" text="Sent" />
+                                                   </children>
+                                                </HBox>
+                                                <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                                   <children>
+                                                      <Label fx:id="filesSharedLabel" styleClass="stats-number" text="0" />
+                                                      <Label styleClass="stats-description" text="Files Shared" />
+                                                   </children>
+                                                </HBox>
+                                             </children>
+                                          </VBox>
+                                       </children>
+                                    </VBox>
+                                    
+                                    <!-- Security Stats -->
+                                    <VBox styleClass="stats-card" HBox.hgrow="ALWAYS">
+                                       <children>
+                                          <HBox alignment="CENTER_LEFT" spacing="10.0">
+                                             <children>
+                                                <FontIcon iconLiteral="fas-shield-alt" iconSize="24" styleClass="stats-icon-security" />
+                                                <Label styleClass="stats-title" text="Security" />
+                                             </children>
+                                          </HBox>
+                                          <VBox spacing="8.0">
+                                             <children>
+                                                <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                                   <children>
+                                                      <Label fx:id="securityScoreLabel" styleClass="stats-number" text="0.0" />
+                                                      <Label styleClass="stats-description" text="Score" />
+                                                   </children>
+                                                </HBox>
+                                                <ProgressBar fx:id="securityProgressBar" prefWidth="120.0" styleClass="security-progress" />
+                                             </children>
+                                          </VBox>
+                                       </children>
+                                    </VBox>
+                                 </children>
+                              </HBox>
+                              
+                              <!-- Recent Activity -->
+                              <VBox spacing="15.0" styleClass="activity-section">
+                                 <children>
+                                    <HBox alignment="CENTER_LEFT" spacing="10.0">
+                                       <children>
+                                          <FontIcon iconLiteral="fas-history" iconSize="20" styleClass="section-icon" />
+                                          <Label styleClass="section-title" text="Recent Activity" />
+                                       </children>
+                                    </HBox>
+                                    <VBox fx:id="activitiesContainer" spacing="10.0" styleClass="activities-container">
+                                       <!-- Activities will be loaded dynamically -->
+                                    </VBox>
+                                 </children>
+                              </VBox>
+                           </children>
+                           <padding>
+                              <Insets bottom="20.0" left="30.0" right="30.0" top="20.0" />
+                           </padding>
+                        </VBox>
+                     </content>
+                  </ScrollPane>
+               </content>
+            </Tab>
+            
+            <!-- Rooms Tab -->
+            <Tab text="Rooms">
+               <content>
+                  <ScrollPane fitToWidth="true" styleClass="profile-scroll">
+                     <content>
+                        <VBox spacing="15.0">
+                           <children>
+                              <Label styleClass="section-title" text="User's Rooms" />
+                              <VBox fx:id="roomsContainer" spacing="10.0">
+                                 <!-- Rooms will be loaded dynamically -->
+                                 <Label styleClass="empty-state" text="No rooms to display" />
+                              </VBox>
+                           </children>
+                           <padding>
+                              <Insets bottom="20.0" left="30.0" right="30.0" top="20.0" />
+                           </padding>
+                        </VBox>
+                     </content>
+                  </ScrollPane>
+               </content>
+            </Tab>
+            
+            <!-- Activity Tab -->
+            <Tab text="Activity">
+               <content>
+                  <ScrollPane fitToWidth="true" styleClass="profile-scroll">
+                     <content>
+                        <VBox spacing="15.0">
+                           <children>
+                              <Label styleClass="section-title" text="All Activity" />
+                              <VBox fx:id="allActivitiesContainer" spacing="8.0">
+                                 <!-- All activities will be loaded dynamically -->
+                                 <Label styleClass="empty-state" text="No activity to display" />
+                              </VBox>
+                           </children>
+                           <padding>
+                              <Insets bottom="20.0" left="30.0" right="30.0" top="20.0" />
+                           </padding>
+                        </VBox>
+                     </content>
+                  </ScrollPane>
+               </content>
+            </Tab>
+         </tabs>
+      </TabPane>
+   </children>
+</VBox>
