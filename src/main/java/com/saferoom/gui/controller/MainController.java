@@ -353,6 +353,12 @@ public class MainController {
 
     public void handleLogout() {
         try {
+            // Stop heartbeat service
+            com.saferoom.gui.utils.HeartbeatService.getInstance().stopHeartbeat();
+            
+            // Clear user session
+            UserSession.getInstance().clearSession();
+            
             // Close current main window
             Stage currentStage = (Stage) mainPane.getScene().getWindow();
             currentStage.close();

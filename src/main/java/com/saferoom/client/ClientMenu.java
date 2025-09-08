@@ -501,5 +501,30 @@ public class ClientMenu{
 		}
 	}
 
+	/**
+	 * Heartbeat gönder
+	 */
+	public static SafeRoomProto.HeartbeatResponse sendHeartbeat(String username, String sessionId) throws Exception {
+		ManagedChannel channel = null;
+		try {
+			channel = ManagedChannelBuilder.forAddress(Server, Port)
+				.usePlaintext()
+				.build();
+			
+			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
+				.withDeadlineAfter(5, TimeUnit.SECONDS);
+			
+			SafeRoomProto.HeartbeatRequest request = SafeRoomProto.HeartbeatRequest.newBuilder()
+				.setUsername(username)
+				.setSessionId(sessionId)
+				.build();
+				
+			return blockingStub.sendHeartbeat(request);
+		} finally {
+			if (channel != null) {
+				channel.shutdown();
+			}
+		}
 	}
 
+}

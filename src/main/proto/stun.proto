@@ -39,6 +39,8 @@ rpc RemoveFriend(RemoveFriendRequest) returns (Status);
 
 rpc GetFriendshipStats(Request_Client) returns (FriendshipStatsResponse);
 
+rpc SendHeartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+
 rpc GetStunInfo(Request_Client) returns (Stun_Info);
 
 rpc PunchTest(FromTo) returns (Status);
@@ -278,4 +280,15 @@ message FriendshipStatsResponse {
     bool success = 1;
     string message = 2;
     FriendshipStats stats = 3;
+}
+
+// Heartbeat messages for online status
+message HeartbeatRequest {
+    string username = 1;
+    string sessionId = 2;
+}
+
+message HeartbeatResponse {
+    bool success = 1;
+    string message = 2;
 }

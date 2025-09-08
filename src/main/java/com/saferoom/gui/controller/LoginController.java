@@ -150,6 +150,9 @@ private void logSecurityIncident(String attemptedUsername) {
                traditionalUser.setProvider("Traditional");
                UserSession.getInstance().setCurrentUser(traditionalUser, "traditional");
                
+               // Start heartbeat service
+               com.saferoom.gui.utils.HeartbeatService.getInstance().startHeartbeat(traditionalUser.getName());
+               
                try {
                  Stage loginStage = (Stage) rootPane.getScene().getWindow();
                  loginStage.close();
@@ -330,6 +333,9 @@ private void logSecurityIncident(String attemptedUsername) {
         try {
             // Save user session
             UserSession.getInstance().setCurrentUser(userInfo, "oauth");
+            
+            // Start heartbeat service
+            com.saferoom.gui.utils.HeartbeatService.getInstance().startHeartbeat(userInfo.getName());
             
             // TODO: Check if user exists in database
             // If not, create user account with OAuth info

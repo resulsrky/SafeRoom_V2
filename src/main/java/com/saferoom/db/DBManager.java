@@ -1109,11 +1109,7 @@ public class DBManager {
                     ELSE f.user1 
                 END as friend_username,
                 f.created_at as friendship_date,
-                u.email, u.last_login, u.is_verified,
-                CASE 
-                    WHEN u.last_login >= DATE_SUB(NOW(), INTERVAL 5 MINUTE) THEN 1
-                    ELSE 0
-                END as is_online
+                u.email, u.last_login, u.is_verified
             FROM friendships f
             JOIN users u ON (
                 CASE 
@@ -1122,7 +1118,7 @@ public class DBManager {
                 END
             )
             WHERE f.user1 = ? OR f.user2 = ?
-            ORDER BY is_online DESC, f.created_at DESC
+            ORDER BY f.created_at DESC
         """;
         
         java.util.List<java.util.Map<String, Object>> friends = new java.util.ArrayList<>();
@@ -1137,13 +1133,21 @@ public class DBManager {
             
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
+                String friendUsername = rs.getString("friend_username");
                 java.util.Map<String, Object> friend = new java.util.HashMap<>();
-                friend.put("username", rs.getString("friend_username"));
+                friend.put("username", friendUsername);
                 friend.put("email", rs.getString("email"));
                 friend.put("friendshipDate", rs.getTimestamp("friendship_date"));
                 friend.put("lastSeen", rs.getTimestamp("last_login"));
                 friend.put("isVerified", rs.getBoolean("is_verified"));
-                friend.put("isOnline", rs.getBoolean("is_online"));
+                
+                // Online durumunu kontrol et
+                try {
+                    friend.put("isOnline", isUserOnline(friendUsername));
+                } catch (SQLException e) {
+                    friend.put("isOnline", false); // Hata durumunda offline olarak kabul et
+                }
+                
                 friends.add(friend);
             }
         }
@@ -1217,6 +1221,91 @@ public class DBManager {
         }
         
         return stats;
+    }
+
+    // ===============================
+    // HEARTBEAT & ONLINE STATUS METHODS
+    // ===============================
+    
+    /**
+     * Kullanıcının heartbeat'ini güncelle
+     */
+    public static boolean updateHeartbeat(String username, String sessionId) throws SQLException {
+        String query = """
+            INSERT INTO user_sessions (username, session_id, last_heartbeat, status) 
+            VALUES (?, ?, CURRENT_TIMESTAMP, 'online')
+            ON DUPLICATE KEY UPDATE 
+                last_heartbeat = CURRENT_TIMESTAMP,
+                status = 'online'
+        """;
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+            
+            stmt.setString(1, username);
+            stmt.setString(2, sessionId);
+            
+            return stmt.executeUpdate() > 0;
+        }
+    }
+    
+    /**
+     * Kullanıcının online durumunu kontrol et (son 30 saniye)
+     */
+    public static boolean isUserOnline(String username) throws SQLException {
+        String query = """
+            SELECT COUNT(*) FROM user_sessions 
+            WHERE username = ? 
+            AND status = 'online'
+            AND last_heartbeat >= DATE_SUB(NOW(), INTERVAL 30 SECOND)
+        """;
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+            
+            stmt.setString(1, username);
+            ResultSet rs = stmt.executeQuery();
+            
+            if (rs.next()) {
+                return rs.getInt(1) > 0;
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * Eski session'ları temizle (5 dakika önce)
+     */
+    public static void cleanupOldSessions() throws SQLException {
+        String query = """
+            DELETE FROM user_sessions 
+            WHERE last_heartbeat < DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+        """;
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+            
+            int deleted = stmt.executeUpdate();
+            if (deleted > 0) {
+                System.out.println("🧹 Cleaned up " + deleted + " old sessions");
+            }
+        }
+    }
+    
+    /**
+     * Kullanıcının session'ını sonlandır
+     */
+    public static boolean endUserSession(String username, String sessionId) throws SQLException {
+        String query = "DELETE FROM user_sessions WHERE username = ? AND session_id = ?";
+        
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+            
+            stmt.setString(1, username);
+            stmt.setString(2, sessionId);
+            
+            return stmt.executeUpdate() > 0;
+        }
     }
 
 // ...existing code...

@@ -84,13 +84,16 @@ public class FriendsController {
                     // Friends listesini güncelle
                     allFriends.clear();
                     for (com.saferoom.grpc.SafeRoomProto.FriendInfo friendInfo : friendsResponse.getFriendsList()) {
-                        String status = friendInfo.getIsVerified() ? "Verified" : "Not Verified";
+                        String status = friendInfo.getIsOnline() ? "Online" : 
+                                       (friendInfo.getIsVerified() ? "Offline" : "Not Verified");
                         String lastSeen = friendInfo.getLastSeen().isEmpty() ? "Never" : friendInfo.getLastSeen();
+                        String activity = friendInfo.getIsOnline() ? "Active now" : "Last seen: " + lastSeen;
+                        
                         Friend friend = new Friend(
                             friendInfo.getUsername(), 
-                            "Offline", // Burada online durumu kontrol edilebilir
-                            "Last seen: " + lastSeen, 
-                            status
+                            status,
+                            activity, 
+                            friendInfo.getIsOnline() ? "🟢" : "🔴"
                         );
                         allFriends.add(friend);
                     }

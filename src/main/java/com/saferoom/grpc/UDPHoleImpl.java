@@ -1025,6 +1025,7 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
 					.setLastSeen(friend.get("lastSeen") != null ? 
 						dateFormat.format((Timestamp) friend.get("lastSeen")) : "")
 					.setIsVerified((Boolean) friend.get("isVerified"))
+					.setIsOnline((Boolean) friend.get("isOnline"))
 					.build();
 				
 				responseBuilder.addFriends(friendInfo);
@@ -1099,6 +1100,42 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
 			
 		} catch (Exception e) {
 			responseObserver.onNext(SafeRoomProto.FriendshipStatsResponse.newBuilder()
+				.setSuccess(false)
+				.setMessage("Error: " + e.getMessage())
+				.build());
+			responseObserver.onCompleted();
+		}
+	}
+	
+	@Override
+	public void sendHeartbeat(SafeRoomProto.HeartbeatRequest request, StreamObserver<SafeRoomProto.HeartbeatResponse> responseObserver) {
+		try {
+			String username = request.getUsername();
+			String sessionId = request.getSessionId();
+			
+			System.out.println("💓 Heartbeat from: " + username + " (session: " + sessionId + ")");
+			
+			boolean success = DBManager.updateHeartbeat(username, sessionId);
+			
+			SafeRoomProto.HeartbeatResponse response;
+			if (success) {
+				response = SafeRoomProto.HeartbeatResponse.newBuilder()
+					.setSuccess(true)
+					.setMessage("Heartbeat received")
+					.build();
+			} else {
+				response = SafeRoomProto.HeartbeatResponse.newBuilder()
+					.setSuccess(false)
+					.setMessage("Failed to update heartbeat")
+					.build();
+			}
+			
+			responseObserver.onNext(response);
+			responseObserver.onCompleted();
+			
+		} catch (Exception e) {
+			System.err.println("❌ Error processing heartbeat: " + e.getMessage());
+			responseObserver.onNext(SafeRoomProto.HeartbeatResponse.newBuilder()
 				.setSuccess(false)
 				.setMessage("Error: " + e.getMessage())
 				.build());
