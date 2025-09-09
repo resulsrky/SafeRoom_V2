@@ -111,14 +111,18 @@ public class P2PSignalingServer extends Thread {
                                         sender, ip.getHostAddress(), port, me.ports);
                             }
 
-                            // Cross-matching: Target'ın state'ini kontrol et
+                            // Cross-matching: MUTUAL TARGETING kontrolü
                             PeerState tgt = STATES.get(me.target);
-                            if (tgt != null) {
-                                System.out.printf("🔗 Cross-match found: %s ↔ %s%n", me.host, tgt.host);
+                            if (tgt != null && tgt.target.equals(me.host)) {
+                                // TRUE CROSS-MATCH: A->B && B->A
+                                System.out.printf("🎯 TRUE Cross-match: %s ↔ %s (mutual targeting)%n", me.host, tgt.host);
                                 System.out.printf("📡 Sharing ports - %s: %s | %s: %s%n", 
                                     me.host, me.ports, tgt.host, tgt.ports);
                                 pushAllIfReady(channel, me, tgt);
                                 pushAllIfReady(channel, tgt, me);
+                            } else if (tgt != null) {
+                                System.out.printf("❌ One-way targeting: %s->%s but %s->%s (not mutual!)%n", 
+                                    me.host, me.target, tgt.host, tgt.target);
                             } else {
                                 System.out.printf("⏰ Waiting for target: %s (requested by %s)%n", me.target, sender);
                             }
