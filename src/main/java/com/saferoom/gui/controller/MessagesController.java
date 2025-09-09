@@ -9,6 +9,8 @@ import javafx.fxml.FXML;
 import javafx.scene.control.ListView;
 import javafx.scene.control.SplitPane;
 import javafx.application.Platform;
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.ObservableValue;
 import java.util.concurrent.CompletableFuture;
 
 public class MessagesController {
@@ -23,6 +25,9 @@ public class MessagesController {
     
     // P2P Manager
     private P2PConnectionManager p2pManager;
+    
+    // Contact selection listener - infinite loop prevention için
+    private ChangeListener<Contact> contactSelectionListener;
 
     @FXML
     public void initialize() {
@@ -53,7 +58,7 @@ public class MessagesController {
     }
 
     private void setupContactSelectionListener() {
-        contactListView.getSelectionModel().selectedItemProperty().addListener((obs, oldSelection, newSelection) -> {
+        contactSelectionListener = (obs, oldSelection, newSelection) -> {
             if (newSelection != null && chatViewController != null) {
                 chatViewController.initChannel(newSelection.getId());
                 chatViewController.setHeader(
@@ -66,7 +71,8 @@ public class MessagesController {
                 // P2P connection status bildirilim
                 checkP2PConnectionStatus(newSelection.getId());
             }
-        });
+        };
+        contactListView.getSelectionModel().selectedItemProperty().addListener(contactSelectionListener);
     }
     
     /**
@@ -126,6 +132,11 @@ public class MessagesController {
         for (int i = 0; i < contactListView.getItems().size(); i++) {
             Contact contact = contactListView.getItems().get(i);
             if (contact.getId().equals(username)) {
+                // Mevcut status aynıysa güncelleme yapma - infinite loop prevention
+                if (contact.getStatus().equals(newStatus)) {
+                    return;
+                }
+                
                 Contact updatedContact = new Contact(
                     contact.getId(),
                     contact.getName(),
@@ -135,8 +146,13 @@ public class MessagesController {
                     contact.getUnreadCount(),
                     contact.isGroup()
                 );
+                
+                // Selection listener'ı geçici olarak devre dışı bırak
+                contactListView.getSelectionModel().selectedItemProperty().removeListener(contactSelectionListener);
                 contactListView.getItems().set(i, updatedContact);
                 contactListView.refresh();
+                // Selection listener'ı tekrar aktif et
+                contactListView.getSelectionModel().selectedItemProperty().addListener(contactSelectionListener);
                 break;
             }
         }
