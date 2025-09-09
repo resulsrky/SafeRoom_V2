@@ -1,6 +1,7 @@
 package com.saferoom.p2p;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
@@ -199,8 +200,9 @@ public class P2PHolePuncher {
             List<Object> parsed = LLS.parseLLSPacket(buf);
             
             // parsed[0] = signal, parsed[1] = len, parsed[2] = username, 
-            // parsed[3] = target, parsed[4] = IP, parsed[5] = port
-            String targetIP = (String) parsed.get(4);
+            // parsed[3] = target, parsed[4] = InetAddress, parsed[5] = port
+            InetAddress targetInetAddr = (InetAddress) parsed.get(4);
+            String targetIP = targetInetAddr.getHostAddress();
             Integer port = (Integer) parsed.get(5);
             
             System.out.printf("🔍 Parsed PORT_INFO: IP=%s, port=%d%n", targetIP, port);

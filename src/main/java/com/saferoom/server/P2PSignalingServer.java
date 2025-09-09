@@ -91,37 +91,68 @@ public class P2PSignalingServer extends Thread {
 
                     switch (sig) {
                         case LLS.SIG_HELLO, LLS.SIG_FIN -> {
-                            List<Object> p = LLS.parseMultiple_Packet(buf.duplicate());
-                            String sender = (String) p.get(2);
-                            String target = (String) p.get(3);
-                            byte signal = sig;
-
+                            String tempSender;
+                            String tempTarget;
+                            InetAddress tempClientIP; 
+                            
+                            // Packet boyutuna göre parse et
+                            if (buf.remaining() >= 51) { // LLS packet (IP içerir)
+                                try {
+                                    List<Object> p = LLS.parseLLSPacket(buf.duplicate());
+                                    tempSender = (String) p.get(2);
+                                    tempTarget = (String) p.get(3);
+                                    tempClientIP = (InetAddress) p.get(4); // STUN'dan gelen public IP
+                                    System.out.printf("🌐 LLS packet: sender='%s' target='%s' publicIP=%s%n", 
+                                        tempSender, tempTarget, tempClientIP.getHostAddress());
+                                } catch (Exception e) {
+                                    System.err.println("❌ LLS parse error, falling back to basic: " + e.getMessage());
+                                    List<Object> p2 = LLS.parseMultiple_Packet(buf.duplicate());
+                                    tempSender = (String) p2.get(2);
+                                    tempTarget = (String) p2.get(3);
+                                    tempClientIP = ip; // Packet geldiği IP
+                                }
+                            } else { // Basic packet (IP yok)
+                                List<Object> p = LLS.parseMultiple_Packet(buf.duplicate());
+                                tempSender = (String) p.get(2);
+                                tempTarget = (String) p.get(3);
+                                tempClientIP = ip; // Packet geldiği IP
+                                System.out.printf("📦 Basic packet: sender='%s' target='%s' localIP=%s%n", 
+                                    tempSender, tempTarget, tempClientIP.getHostAddress());
+                            }
+                            
+                            final String sender = tempSender;
+                            final String target = tempTarget;
+                            final InetAddress clientIP = tempClientIP;
+                            
+                            final byte signal = sig;
+                            final InetAddress finalClientIP = clientIP;
+                            final String finalSender = sender;
+                            final String finalTarget = target;
+                            
                             // DEBUG: Packet içeriğini logla
                             System.out.printf("🔍 DEBUG Packet: sender='%s' target='%s' (sig=%d)%n", 
-                                sender, target, signal);
+                                finalSender, finalTarget, signal);
 
                             // Sender için state oluştur/güncelle
-                            PeerState me = STATES.compute(sender, (k, old) -> {
+                            PeerState me = STATES.compute(finalSender, (k, old) -> {
                                 if (old == null) {
-                                    return new PeerState(sender, target, signal, ip, port);
+                                    return new PeerState(finalSender, finalTarget, signal, finalClientIP, port);
                                 }
                                 // ÖNEMLI: Target değişmişse yeni state oluştur!
-                                if (!old.target.equals(target)) {
+                                if (!old.target.equals(finalTarget)) {
                                     System.out.printf("🔄 Target changed %s: %s -> %s (creating new state)%n", 
-                                        sender, old.target, target);
-                                    return new PeerState(sender, target, signal, ip, port);
+                                        finalSender, old.target, finalTarget);
+                                    return new PeerState(finalSender, finalTarget, signal, finalClientIP, port);
                                 }
                                 // Target aynıysa sadece port ekle
-                                old.add(ip, port);
+                                old.add(finalClientIP, port);
                                 return old;
-                            });
-
-                            if (sig == LLS.SIG_FIN) {
+                            });                            if (sig == LLS.SIG_FIN) {
                                 me.finished = true;
-                                System.out.printf("🏁 FIN from %s (ports=%s)%n", sender, me.ports);
+                                System.out.printf("🏁 FIN from %s (ports=%s)%n", finalSender, me.ports);
                             } else {
                                 System.out.printf("👋 HELLO %s @ %s:%d (ports=%s)%n",
-                                        sender, ip.getHostAddress(), port, me.ports);
+                                        finalSender, finalClientIP.getHostAddress(), port, me.ports);
                             }
 
                             // Cross-matching: MUTUAL TARGETING kontrolü
