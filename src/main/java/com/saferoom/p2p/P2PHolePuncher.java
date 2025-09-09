@@ -103,6 +103,9 @@ public class P2PHolePuncher {
                     } else if (signal == 0x13) { // SIG_PEER_NOT_FOUND
                         System.err.println("❌ Peer not found: " + targetUsername);
                         return null;
+                    } else if (signal == 0x14) { // SIG_PEER_PENDING
+                        System.out.println("⏰ Peer " + targetUsername + " is pending, continuing to wait...");
+                        // Continue waiting - don't return, keep looping
                     }
                 }
             }
