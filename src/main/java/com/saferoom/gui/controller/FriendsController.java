@@ -389,19 +389,24 @@ public class FriendsController {
                 }
                 
                 // Update button based on friendship status
+                System.out.println("🔍 UpdateItem for " + username + ":");
+                System.out.println("  - is_friend: " + isFriend);
+                System.out.println("  - has_pending_request: " + hasPending);
+                
                 if (isFriend != null && isFriend) {
-                    addButton.setText("Friends");
-                    addButton.getStyleClass().removeAll("search-add-button");
-                    addButton.getStyleClass().add("friends-button");
-                    addButton.setDisable(true);
+                    addButton.setText("Delete Friend");
+                    addButton.getStyleClass().removeAll("search-add-button", "pending-button");
+                    addButton.getStyleClass().add("delete-friend-button");
+                    addButton.setDisable(false);
+                    addButton.setOnAction(e -> removeFriend(username));
                 } else if (hasPending != null && hasPending) {
                     addButton.setText("Pending");
-                    addButton.getStyleClass().removeAll("search-add-button");
+                    addButton.getStyleClass().removeAll("search-add-button", "delete-friend-button");
                     addButton.getStyleClass().add("pending-button");
                     addButton.setDisable(true);
                 } else {
                     addButton.setText("Add Friend");
-                    addButton.getStyleClass().removeAll("friends-button", "pending-button");
+                    addButton.getStyleClass().removeAll("friends-button", "pending-button", "delete-friend-button");
                     addButton.getStyleClass().add("search-add-button");
                     addButton.setDisable(false);
                     addButton.setOnAction(e -> sendFriendRequest(username));
@@ -709,5 +714,40 @@ public class FriendsController {
         } catch (Exception e) {
             System.err.println("Error opening messages: " + e.getMessage());
         }
+    }
+    
+    /**
+     * Arkadaşlığı sonlandır
+     */
+    private static void removeFriend(String username) {
+        System.out.println("🗑️ Removing friend: " + username);
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                String currentUser = UserSession.getInstance().getDisplayName();
+                com.saferoom.grpc.SafeRoomProto.Status response = 
+                    ClientMenu.removeFriend(currentUser, username);
+                return response;
+            } catch (Exception e) {
+                System.err.println("❌ Error removing friend: " + e.getMessage());
+                return null;
+            }
+        }).thenAcceptAsync(response -> {
+            Platform.runLater(() -> {
+                if (response != null && response.getCode() == 0) {
+                    System.out.println("✅ Friend removed successfully!");
+                    // Refresh search results
+                    FriendsController instance = getCurrentInstance();
+                    if (instance != null && instance.searchField.getText().length() >= 2) {
+                        instance.performSearch();
+                    }
+                    // Refresh friends list
+                    if (instance != null) {
+                        instance.loadFriendsData();
+                    }
+                } else {
+                    System.out.println("❌ Failed to remove friend");
+                }
+            });
+        });
     }
 }

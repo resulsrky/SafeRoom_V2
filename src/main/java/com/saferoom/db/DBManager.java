@@ -588,14 +588,18 @@ public class DBManager {
 	 */
 	public static java.util.List<java.util.Map<String, Object>> searchUsers(String searchTerm, String currentUser, int limit) throws SQLException {
 		String query = """
-			SELECT username, email, last_login, is_verified 
-			FROM users 
-			WHERE (username LIKE ? OR email LIKE ?) 
-			AND username != ? 
-			AND is_verified = TRUE 
+			SELECT u.username, u.email, u.last_login, u.is_verified,
+			       CASE WHEN f.user1 IS NOT NULL THEN TRUE ELSE FALSE END as is_friend,
+			       CASE WHEN fr.id IS NOT NULL THEN TRUE ELSE FALSE END as has_pending_request
+			FROM users u
+			LEFT JOIN friends f ON (f.user1 = ? AND f.user2 = u.username) OR (f.user2 = ? AND f.user1 = u.username)
+			LEFT JOIN friend_requests fr ON fr.sender = ? AND fr.receiver = u.username AND fr.status = 'pending'
+			WHERE (u.username LIKE ? OR u.email LIKE ?) 
+			AND u.username != ? 
+			AND u.is_verified = TRUE 
 			ORDER BY 
-				CASE WHEN username LIKE ? THEN 1 ELSE 2 END,
-				last_login DESC 
+				CASE WHEN u.username LIKE ? THEN 1 ELSE 2 END,
+				u.last_login DESC 
 			LIMIT ?
 		""";
 		
@@ -606,11 +610,18 @@ public class DBManager {
 		try (Connection conn = getConnection();
 			 PreparedStatement stmt = conn.prepareStatement(query)) {
 			
-			stmt.setString(1, searchPattern);
-			stmt.setString(2, searchPattern); 
-			stmt.setString(3, currentUser);
-			stmt.setString(4, exactPattern);
-			stmt.setInt(5, limit);
+			stmt.setString(1, currentUser);  // f.user1 = ?
+			stmt.setString(2, currentUser);  // f.user2 = ?
+			stmt.setString(3, currentUser);  // fr.sender = ?
+			stmt.setString(4, searchPattern);
+			stmt.setString(5, searchPattern); 
+			stmt.setString(6, currentUser);
+			stmt.setString(7, exactPattern);
+			stmt.setInt(8, limit);
+			
+			System.out.println("🔍 SearchUsers SQL Debug:");
+			System.out.println("  - currentUser: " + currentUser);
+			System.out.println("  - searchPattern: " + searchPattern);
 			
 			ResultSet rs = stmt.executeQuery();
 			while (rs.next()) {
@@ -619,6 +630,13 @@ public class DBManager {
 				user.put("email", rs.getString("email"));
 				user.put("lastLogin", rs.getTimestamp("last_login"));
 				user.put("isVerified", rs.getBoolean("is_verified"));
+				user.put("is_friend", rs.getBoolean("is_friend"));
+				user.put("has_pending_request", rs.getBoolean("has_pending_request"));
+				
+				System.out.println("  - Found user: " + rs.getString("username"));
+				System.out.println("    - is_friend from DB: " + rs.getBoolean("is_friend"));
+				System.out.println("    - has_pending_request from DB: " + rs.getBoolean("has_pending_request"));
+				
 				results.add(user);
 			}
 		}

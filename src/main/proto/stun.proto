@@ -167,6 +167,8 @@ message UserResult {
     string email = 2;
     bool isOnline = 3;
     string lastSeen = 4;
+    bool is_friend = 5;
+    bool has_pending_request = 6;
 }
 
 message SearchResponse {

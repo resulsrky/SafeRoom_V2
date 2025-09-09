@@ -354,13 +354,9 @@ public class ProfileController {
                 // TODO: MessagesController'da belirli kullanıcıyla sohbet başlatma işlevselliği
                 // Bu kısım daha sonra Messages controller'da implement edilecek
                 System.out.println("📱 Switched to Messages tab for user: " + targetUsername);
-                
-                // Notification göster
-                showNotification("Switched to Messages - Chat with " + targetUsername + " will be implemented soon!", "info");
             }
         } catch (Exception e) {
             System.err.println("Error opening messages: " + e.getMessage());
-            showNotification("Error opening messages", "error");
         }
     }
     

@@ -233,6 +233,14 @@ public class ClientMenu{
 					userMap.put("email", user.getEmail());
 					userMap.put("isOnline", user.getIsOnline());
 					userMap.put("lastSeen", user.getLastSeen());
+					userMap.put("is_friend", user.getIsFriend());
+					userMap.put("has_pending_request", user.getHasPendingRequest());
+					
+					// Debug log
+					System.out.println("🔍 Search Result for " + user.getUsername() + ":");
+					System.out.println("  - is_friend: " + user.getIsFriend());
+					System.out.println("  - has_pending_request: " + user.getHasPendingRequest());
+					
 					results.add(userMap);
 				}
 			}

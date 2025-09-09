@@ -364,11 +364,16 @@ public class UDPHoleImpl extends UDPHoleGrpc.UDPHoleImplBase {
 			SearchResponse.Builder responseBuilder = SearchResponse.newBuilder().setSuccess(true);
 				
 			for (java.util.Map<String, Object> user : results) {
+				Boolean isFriend = (Boolean) user.get("is_friend");
+				Boolean hasPending = (Boolean) user.get("has_pending_request");
+				
 				responseBuilder.addUsers(UserResult.newBuilder()
 					.setUsername((String) user.get("username"))
 					.setEmail((String) user.get("email"))
 					.setIsOnline(false)
 					.setLastSeen(user.get("lastLogin") != null ? user.get("lastLogin").toString() : "")
+					.setIsFriend(isFriend != null ? isFriend : false)
+					.setHasPendingRequest(hasPending != null ? hasPending : false)
 					.build());
 			}
 			

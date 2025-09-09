@@ -3583,6 +3583,20 @@
   -fx-text-fill: white;
 }
 
+.delete-friend-button {
+  -fx-background-color: #ef4444;
+  -fx-text-fill: white;
+  -fx-background-radius: 8;
+  -fx-padding: 8 16;
+  -fx-font-size: 12px;
+  -fx-font-weight: 600;
+  -fx-cursor: hand;
+}
+
+.delete-friend-button:hover {
+  -fx-background-color: #dc2626;
+}
+
 /* Profile Tabs */
 .profile-tabs {
   -fx-background-color: #1e2b3b;
