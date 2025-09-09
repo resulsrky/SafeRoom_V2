@@ -1,5 +1,7 @@
 package com.saferoom.server;
 
+import com.saferoom.natghost.LLS;
+
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -11,60 +13,47 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * P2P Signaling Server - Sadece peer bilgilerini eşleştirme yapar
- * HELLO/FIN paketleri peer'lar arasında direkt gönderilir
+ * P2P Signaling Server - Eski PeerListener mantığı ile cross-matching
+ * HELLO/FIN paketleri ile sender/target eşleştirme yapar
  */
 public class P2PSignalingServer extends Thread {
 
-    static final class PeerInfo {
-        final String username;
-        final InetAddress publicIP;
-        final List<Integer> publicPorts;
-        final long registrationTime;
+    static final class PeerState {
+        final String host;
+        final String target;
+        final byte signal;
+        InetAddress ip;
         
-        PeerInfo(String username, InetAddress publicIP) {
-            this.username = username;
-            this.publicIP = publicIP;
-            this.publicPorts = Collections.synchronizedList(new ArrayList<>());
-            this.registrationTime = System.currentTimeMillis();
+        final List<Integer> ports = Collections.synchronizedList(new ArrayList<>());
+        final Set<Integer> sentToTarget = Collections.synchronizedSet(new HashSet<>());
+        int rrCursor = 0;
+        
+        volatile boolean finished = false;
+        volatile boolean allDoneSentToTarget = false;
+        volatile long lastSeenMs = System.currentTimeMillis();
+        
+        PeerState(String host, String target, byte signal, InetAddress ip, int port) {
+            this.host = host;
+            this.target = target;
+            this.signal = signal;
+            this.ip = ip;
+            this.ports.add(port);
         }
         
-        void addPort(int port) {
-            if (!publicPorts.contains(port)) {
-                publicPorts.add(port);
+        void add(InetAddress ip, int port) {
+            this.ip = ip;
+            // Duplicate port kontrolü - aynı portu tekrar ekleme
+            if (!this.ports.contains(port)) {
+                this.ports.add(port);
             }
-        }
-    }
-    
-    // Pending peer requests - waiting for target peer to come online
-    static final class PendingRequest {
-        final String requesterUsername;
-        final InetSocketAddress requesterAddress;
-        final String targetUsername;
-        final long requestTime;
-        
-        PendingRequest(String requesterUsername, InetSocketAddress requesterAddress, String targetUsername) {
-            this.requesterUsername = requesterUsername;
-            this.requesterAddress = requesterAddress;
-            this.targetUsername = targetUsername;
-            this.requestTime = System.currentTimeMillis();
+            this.lastSeenMs = System.currentTimeMillis();
         }
     }
 
-    // Protokol signalleri
-    private static final byte SIG_REGISTER_PEER = 0x10;
-    private static final byte SIG_REQUEST_PEER = 0x11;
-    private static final byte SIG_PEER_INFO = 0x12;
-    private static final byte SIG_PEER_NOT_FOUND = 0x13;
-    private static final byte SIG_PEER_PENDING = 0x14; // Yeni: "peer henüz online değil, bekleniyor"
-
-    private static final Map<String, PeerInfo> registeredPeers = new ConcurrentHashMap<>();
-    private static final List<PendingRequest> pendingRequests = Collections.synchronizedList(new ArrayList<>());
-    public static final int SIGNALING_PORT = 45001; // Server'ın signaling portu
+    private static final Map<String, PeerState> STATES = new ConcurrentHashMap<>();
+    public static final int SIGNALING_PORT = 45001;
     
     private static final long CLEANUP_INTERVAL_MS = 30_000;
-    private static final long PEER_TIMEOUT_MS = 120_000;
-    private static final long PENDING_REQUEST_TIMEOUT_MS = 60_000; // 1 minute timeout for pending requests
     private long lastCleanup = System.currentTimeMillis();
 
     @Override
@@ -79,13 +68,12 @@ public class P2PSignalingServer extends Thread {
             System.out.println("🎯 P2P Signaling Server running on port " + SIGNALING_PORT);
 
             while (true) {
-                selector.select(100);
+                selector.select(5);
 
                 Iterator<SelectionKey> it = selector.selectedKeys().iterator();
                 while (it.hasNext()) {
                     SelectionKey key = it.next(); 
                     it.remove();
-                    
                     if (!key.isReadable()) continue;
 
                     ByteBuffer buf = ByteBuffer.allocate(1024);
@@ -93,36 +81,64 @@ public class P2PSignalingServer extends Thread {
                     if (from == null) continue;
 
                     buf.flip();
-                    if (buf.remaining() < 3) continue; // Minimum header size
+                    if (!LLS.hasWholeFrame(buf)) continue;
 
-                    InetSocketAddress clientAddr = (InetSocketAddress) from;
-                    
-                    byte signal = buf.get(0);
-                    
-                    switch (signal) {
-                        case SIG_REGISTER_PEER -> handleRegisterPeer(channel, buf, clientAddr);
-                        case SIG_REQUEST_PEER -> handleRequestPeer(channel, buf, clientAddr);
-                        default -> System.out.println("⚠️ Unknown signal: " + signal);
+                    InetSocketAddress inet = (InetSocketAddress) from;
+                    InetAddress ip = inet.getAddress();
+                    int port = inet.getPort();
+
+                    byte sig = LLS.peekType(buf);
+
+                    switch (sig) {
+                        case LLS.SIG_HELLO, LLS.SIG_FIN -> {
+                            List<Object> p = LLS.parseMultiple_Packet(buf.duplicate());
+                            String sender = (String) p.get(2);
+                            String target = (String) p.get(3);
+                            byte signal = sig;
+
+                            // Sender için state oluştur/güncelle
+                            PeerState me = STATES.compute(sender, (k, old) -> {
+                                if (old == null) return new PeerState(sender, target, signal, ip, port);
+                                old.add(ip, port);
+                                return old;
+                            });
+
+                            if (sig == LLS.SIG_FIN) {
+                                me.finished = true;
+                                System.out.printf("🏁 FIN from %s (ports=%s)%n", sender, me.ports);
+                            } else {
+                                System.out.printf("👋 HELLO %s @ %s:%d (ports=%s)%n",
+                                        sender, ip.getHostAddress(), port, me.ports);
+                            }
+
+                            // Cross-matching: Target'ın state'ini kontrol et
+                            PeerState tgt = STATES.get(me.target);
+                            if (tgt != null) {
+                                System.out.printf("🔗 Cross-match found: %s ↔ %s%n", me.host, tgt.host);
+                                System.out.printf("📡 Sharing ports - %s: %s | %s: %s%n", 
+                                    me.host, me.ports, tgt.host, tgt.ports);
+                                pushAllIfReady(channel, me, tgt);
+                                pushAllIfReady(channel, tgt, me);
+                            } else {
+                                System.out.printf("⏰ Waiting for target: %s (requested by %s)%n", me.target, sender);
+                            }
+                        }
+
+                        default -> {
+                            System.out.printf("❓ Unknown signal: 0x%02X%n", sig);
+                        }
                     }
                 }
 
-                // Cleanup expired peers and pending requests
+                // Cleanup old states
                 long now = System.currentTimeMillis();
                 if (now - lastCleanup > CLEANUP_INTERVAL_MS) {
-                    // Cleanup old registered peers
-                    registeredPeers.entrySet().removeIf(entry -> 
-                        (now - entry.getValue().registrationTime) > PEER_TIMEOUT_MS);
-                    
-                    // Cleanup old pending requests
-                    int oldPendingCount = pendingRequests.size();
-                    pendingRequests.removeIf(request -> 
-                        (now - request.requestTime) > PENDING_REQUEST_TIMEOUT_MS);
-                    
-                    if (pendingRequests.size() < oldPendingCount) {
-                        System.out.printf("🧹 Cleaned up %d expired pending requests%n", 
-                            oldPendingCount - pendingRequests.size());
+                    int oldSize = STATES.size();
+                    STATES.entrySet().removeIf(e -> (now - e.getValue().lastSeenMs) > 120_000);
+                    int newSize = STATES.size();
+                    if (oldSize > newSize) {
+                        System.out.printf("🧹 Cleaned up %d old peer states%n", oldSize - newSize);
                     }
-                    
                     lastCleanup = now;
                 }
             }
@@ -134,206 +150,42 @@ public class P2PSignalingServer extends Thread {
     }
 
     /**
-     * Peer registration: REGISTER_PEER username port
+     * Cross-match bulunduktan sonra PORT_INFO ve ALL_DONE paketlerini gönder
      */
-    private void handleRegisterPeer(DatagramChannel channel, ByteBuffer buf, InetSocketAddress clientAddr) {
-        try {
-            buf.position(1); // Skip signal byte
-            short usernameLen = buf.getShort();
-            
-            byte[] usernameBytes = new byte[usernameLen];
-            buf.get(usernameBytes);
-            String username = new String(usernameBytes);
-            
-            int port = buf.getInt();
-            
-            PeerInfo peer = registeredPeers.computeIfAbsent(username, 
-                k -> new PeerInfo(username, clientAddr.getAddress()));
-            peer.addPort(port);
-            
-            System.out.printf("📝 Peer registered: %s @ %s:%d (total ports: %d)%n", 
-                username, clientAddr.getAddress().getHostAddress(), port, peer.publicPorts.size());
-            
-            // ⭐ KEY FIX: Check for pending requests for this newly registered peer
-            checkAndResolvePendingRequests(channel, username, peer);
-                
-        } catch (Exception e) {
-            System.err.println("❌ Error handling REGISTER_PEER: " + e.getMessage());
-        }
-    }
-    
-    /**
-     * Check if any clients are waiting for this peer and notify them
-     */
-    private void checkAndResolvePendingRequests(DatagramChannel channel, String username, PeerInfo peer) {
-        try {
-            // Find all pending requests for this peer
-            List<PendingRequest> resolvedRequests = new ArrayList<>();
-            
-            synchronized(pendingRequests) {
-                Iterator<PendingRequest> iterator = pendingRequests.iterator();
-                while (iterator.hasNext()) {
-                    PendingRequest request = iterator.next();
-                    if (request.targetUsername.equals(username)) {
-                        // Found a waiting client! Send peer info
-                        sendPeerInfo(channel, request.requesterAddress, peer);
-                        
-                        System.out.printf("✅ Resolved pending request: %s was waiting for %s%n", 
-                            request.requesterUsername, username);
-                        
-                        resolvedRequests.add(request);
-                        iterator.remove();
-                    }
-                }
-            }
-            
-            if (resolvedRequests.size() > 0) {
-                System.out.printf("🎯 Resolved %d pending requests for %s%n", resolvedRequests.size(), username);
-            }
-            
-        } catch (Exception e) {
-            System.err.println("❌ Error resolving pending requests: " + e.getMessage());
-        }
-    }
+    private void pushAllIfReady(DatagramChannel ch, PeerState from, PeerState to) throws Exception {
+        if (!from.finished) return;
+        if (from.allDoneSentToTarget) return;
+        if (to.ports.isEmpty()) return;
 
-    /**
-     * Peer request: REQUEST_PEER target_username
-     */
-    private void handleRequestPeer(DatagramChannel channel, ByteBuffer buf, InetSocketAddress clientAddr) {
-        try {
-            buf.position(1); // Skip signal byte
-            short targetLen = buf.getShort();
-            
-            byte[] targetBytes = new byte[targetLen];
-            buf.get(targetBytes);
-            String targetUsername = new String(targetBytes);
-            
-            PeerInfo targetPeer = registeredPeers.get(targetUsername);
-            
-            if (targetPeer != null && !targetPeer.publicPorts.isEmpty()) {
-                // Target peer is already online - send info immediately
-                sendPeerInfo(channel, clientAddr, targetPeer);
-                System.out.printf("📤 Sent peer info for %s to %s%n", 
-                    targetUsername, clientAddr.getAddress().getHostAddress());
-            } else {
-                // ⭐ KEY FIX: Target peer not online yet - add to pending requests
-                String requesterIP = clientAddr.getAddress().getHostAddress();
-                PendingRequest pendingRequest = new PendingRequest("unknown", clientAddr, targetUsername);
-                pendingRequests.add(pendingRequest);
-                
-                System.out.printf("⏰ Peer %s not online yet, added to pending queue (requested by %s)%n", 
-                    targetUsername, requesterIP);
-                System.out.printf("📋 Total pending requests: %d%n", pendingRequests.size());
-                
-                // Send "peer pending" response instead of "not found"
-                sendPeerPending(channel, clientAddr, targetUsername);
-            }
-            
-        } catch (Exception e) {
-            System.err.println("❌ Error handling REQUEST_PEER: " + e.getMessage());
+        // Henüz gönderilmemiş portları bul
+        List<Integer> unsent = new ArrayList<>();
+        for (int p : from.ports) {
+            if (!from.sentToTarget.contains(p)) unsent.add(p);
         }
-    }
 
-    /**
-     * Send peer info response
-     */
-    private void sendPeerInfo(DatagramChannel channel, InetSocketAddress clientAddr, PeerInfo peer) {
-        try {
-            ByteBuffer response = ByteBuffer.allocate(1024);
-            response.put(SIG_PEER_INFO);
-            
-            // Username
-            byte[] usernameBytes = peer.username.getBytes();
-            response.putShort((short) usernameBytes.length);
-            response.put(usernameBytes);
-            
-            // IP address
-            byte[] ipBytes = peer.publicIP.getAddress();
-            response.put((byte) ipBytes.length);
-            response.put(ipBytes);
-            
-            // Ports
-            response.putShort((short) peer.publicPorts.size());
-            for (int port : peer.publicPorts) {
-                response.putInt(port);
-            }
-            
-            response.flip();
-            channel.send(response, clientAddr);
-            
-        } catch (Exception e) {
-            System.err.println("❌ Error sending peer info: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Send peer not found response
-     */
-    private void sendPeerNotFound(DatagramChannel channel, InetSocketAddress clientAddr, String targetUsername) {
-        try {
-            ByteBuffer response = ByteBuffer.allocate(256);
-            response.put(SIG_PEER_NOT_FOUND);
-            
-            byte[] usernameBytes = targetUsername.getBytes();
-            response.putShort((short) usernameBytes.length);
-            response.put(usernameBytes);
-            
-            response.flip();
-            channel.send(response, clientAddr);
-            
-        } catch (Exception e) {
-            System.err.println("❌ Error sending peer not found: " + e.getMessage());
-        }
-    }
-    
-    /**
-     * Send peer pending response - peer will come online soon
-     */
-    private void sendPeerPending(DatagramChannel channel, InetSocketAddress clientAddr, String targetUsername) {
-        try {
-            ByteBuffer response = ByteBuffer.allocate(256);
-            response.put(SIG_PEER_PENDING);
-            
-            byte[] usernameBytes = targetUsername.getBytes();
-            response.putShort((short) usernameBytes.length);
-            response.put(usernameBytes);
-            
-            response.flip();
-            channel.send(response, clientAddr);
-            
-        } catch (Exception e) {
-            System.err.println("❌ Error sending peer pending: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Helper method to create REGISTER_PEER packet
-     */
-    public static ByteBuffer createRegisterPeerPacket(String username, int port) {
-        byte[] usernameBytes = username.getBytes();
-        ByteBuffer packet = ByteBuffer.allocate(1 + 2 + usernameBytes.length + 4);
+        List<Integer> toPorts = new ArrayList<>(to.ports);
         
-        packet.put(SIG_REGISTER_PEER);
-        packet.putShort((short) usernameBytes.length);
-        packet.put(usernameBytes);
-        packet.putInt(port);
-        
-        packet.flip();
-        return packet;
-    }
+        // PORT_INFO paketlerini gönder
+        for (int p : unsent) {
+            int idx = from.rrCursor % toPorts.size();
+            int toPort = toPorts.get(idx);
+            from.rrCursor++;
 
-    /**
-     * Helper method to create REQUEST_PEER packet
-     */
-    public static ByteBuffer createRequestPeerPacket(String targetUsername) {
-        byte[] targetBytes = targetUsername.getBytes();
-        ByteBuffer packet = ByteBuffer.allocate(1 + 2 + targetBytes.length);
-        
-        packet.put(SIG_REQUEST_PEER);
-        packet.putShort((short) targetBytes.length);
-        packet.put(targetBytes);
-        
-        packet.flip();
-        return packet;
+            ByteBuffer portPkt = LLS.New_PortInfo_Packet(from.host, from.target, LLS.SIG_PORT, from.ip, p);
+            ch.send(portPkt, new InetSocketAddress(to.ip, toPort));
+            from.sentToTarget.add(p);
+            
+            System.out.printf("📤 PORT_INFO: %s:%d → %s:%d%n", 
+                from.host, p, to.host, toPort);
+        }
+
+        // ALL_DONE paketlerini gönder
+        for (int toPort : toPorts) {
+            ByteBuffer donePkt = LLS.New_AllDone_Packet(from.host, to.host);
+            ch.send(donePkt, new InetSocketAddress(to.ip, toPort));
+        }
+        from.allDoneSentToTarget = true;
+
+        System.out.printf("✅ ALL_DONE sent (%s → %s). Ports=%s%n", from.host, to.host, from.ports);
     }
 }
