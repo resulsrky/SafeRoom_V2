@@ -14,8 +14,6 @@ import java.util.concurrent.CompletableFuture;
 
 import com.saferoom.client.ClientMenu;
 import com.saferoom.natghost.LLS;
-import com.saferoom.natghost.KeepAliveManager;
-import com.saferoom.p2p.P2PConnection;
 
 /**
  * P2P NAT Hole Punching using LLS cross-matching protocol with STUN
@@ -353,9 +351,7 @@ public class P2PHolePuncher {
             
             if (connectionEstablished) {
                 System.out.printf("🎉 P2P connection established via %s%n", successfulTarget);
-                P2PConnection conn = new P2PConnection(targetUsername, successfulTarget, successfulChannel);
-                conn.setKeepAliveManager(KAM);
-                return conn;
+                return new P2PConnection(successfulChannel, successfulTarget, KAM);
             } else {
                 System.err.println("❌ P2P hole punching timeout");
                 return null;
