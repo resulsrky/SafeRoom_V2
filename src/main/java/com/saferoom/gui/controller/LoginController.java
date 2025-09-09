@@ -150,8 +150,21 @@ private void logSecurityIncident(String attemptedUsername) {
                traditionalUser.setProvider("Traditional");
                UserSession.getInstance().setCurrentUser(traditionalUser, "traditional");
                
+               // Stop any existing heartbeat service before starting a new one
+               com.saferoom.gui.utils.HeartbeatService heartbeatService = com.saferoom.gui.utils.HeartbeatService.getInstance();
+               if (heartbeatService.isRunning()) {
+                   System.out.println("🛑 Stopping existing heartbeat service before starting new one");
+                   heartbeatService.stopHeartbeat();
+                   // Kısa bir bekle ki cleanup tamamlansın
+                   try {
+                       Thread.sleep(500);
+                   } catch (InterruptedException e) {
+                       Thread.currentThread().interrupt();
+                   }
+               }
+               
                // Start heartbeat service
-               com.saferoom.gui.utils.HeartbeatService.getInstance().startHeartbeat(traditionalUser.getName());
+               heartbeatService.startHeartbeat(traditionalUser.getName());
                
                try {
                  Stage loginStage = (Stage) rootPane.getScene().getWindow();
