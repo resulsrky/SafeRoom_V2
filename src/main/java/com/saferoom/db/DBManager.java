@@ -1255,20 +1255,39 @@ public class DBManager {
      * Kullanıcının heartbeat'ini güncelle
      */
     public static boolean updateHeartbeat(String username, String sessionId) throws SQLException {
-        String query = """
+        // First ensure user exists in users table (quick fix for foreign key constraint)
+        String checkUserQuery = "SELECT COUNT(*) FROM users WHERE username = ?";
+        String insertUserQuery = "INSERT IGNORE INTO users (username, email, password) VALUES (?, ?, 'temp')";
+        
+        String sessionQuery = """
             INSERT INTO user_sessions (username, session_id, last_heartbeat) 
             VALUES (?, ?, CURRENT_TIMESTAMP)
             ON DUPLICATE KEY UPDATE 
                 last_heartbeat = CURRENT_TIMESTAMP
         """;
         
-        try (Connection conn = getConnection();
-             PreparedStatement stmt = conn.prepareStatement(query)) {
+        try (Connection conn = getConnection()) {
+            // Check if user exists
+            try (PreparedStatement checkStmt = conn.prepareStatement(checkUserQuery)) {
+                checkStmt.setString(1, username);
+                ResultSet rs = checkStmt.executeQuery();
+                if (rs.next() && rs.getInt(1) == 0) {
+                    // User doesn't exist, create placeholder
+                    try (PreparedStatement insertStmt = conn.prepareStatement(insertUserQuery)) {
+                        insertStmt.setString(1, username);
+                        insertStmt.setString(2, username + "@temp.com");
+                        insertStmt.executeUpdate();
+                        System.out.println("🔧 Created placeholder user: " + username);
+                    }
+                }
+            }
             
-            stmt.setString(1, username);
-            stmt.setString(2, sessionId);
-            
-            return stmt.executeUpdate() > 0;
+            // Now update heartbeat
+            try (PreparedStatement stmt = conn.prepareStatement(sessionQuery)) {
+                stmt.setString(1, username);
+                stmt.setString(2, sessionId);
+                return stmt.executeUpdate() > 0;
+            }
         }
     }
     

@@ -58,11 +58,24 @@ public class NatAnalyzer {
     }
 
     public static void parseStunResponse(ByteBuffer buffer, List<Integer> list) {
+        System.out.println("[STUN] Parsing response, buffer size: " + buffer.remaining());
+        
+        if (buffer.remaining() < 20) {
+            System.err.println("[STUN] Buffer too small for STUN header");
+            return;
+        }
+        
         buffer.position(20);
         while (buffer.remaining() >= 4) {
             short attrType = buffer.getShort();
-           short attrLen  = buffer.getShort();
-            if (attrType == 0x0001) {
+            short attrLen = buffer.getShort();
+            System.out.printf("[STUN] Attribute: type=0x%04X, len=%d%n", attrType, attrLen);
+            
+            if (attrType == 0x0001) { // MAPPED-ADDRESS
+                if (buffer.remaining() < attrLen) {
+                    System.err.println("[STUN] Not enough bytes for MAPPED-ADDRESS");
+                    break;
+                }
                 buffer.get(); // ignore
                 buffer.get(); // family
                 int port = buffer.getShort() & 0xFFFF;
@@ -72,8 +85,16 @@ public class NatAnalyzer {
                             (addrBytes[2] & 0xFF) + "." + (addrBytes[3] & 0xFF);
                 myPublicIP = ip;
                 list.add(port);
+                System.out.printf("[STUN] ✅ Parsed: IP=%s, Port=%d%n", ip, port);
             } else {
-                buffer.position(buffer.position() + attrLen);
+                // Skip unknown attributes
+                if (buffer.remaining() >= attrLen) {
+                    buffer.position(buffer.position() + attrLen);
+                } else {
+                    System.err.printf("[STUN] Not enough bytes to skip attribute (need %d, have %d)%n", 
+                        attrLen, buffer.remaining());
+                    break;
+                }
             }
         }
     }
