@@ -11,6 +11,7 @@ import java.nio.channels.Selector;
 import java.security.SecureRandom;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Enumeration;
 
 public class NatAnalyzer {
 
@@ -116,6 +117,37 @@ public class NatAnalyzer {
         for (int i = 1; i < list.size(); i++)
             if (!Objects.equals(f, list.get(i))) return false;
         return true;
+    }
+    
+    /**
+     * Get real local IP address (not localhost/loopback)
+     */
+    private static InetAddress getRealLocalIP() throws Exception {
+        // Try to find non-loopback network interface
+        Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+        while (interfaces.hasMoreElements()) {
+            NetworkInterface ni = interfaces.nextElement();
+            
+            // Skip loopback and inactive interfaces
+            if (ni.isLoopback() || !ni.isUp()) continue;
+            
+            Enumeration<InetAddress> addresses = ni.getInetAddresses();
+            while (addresses.hasMoreElements()) {
+                InetAddress addr = addresses.nextElement();
+                
+                // Skip IPv6 and loopback addresses
+                if (addr instanceof Inet6Address || addr.isLoopbackAddress()) continue;
+                
+                // Found a real IPv4 address
+                System.out.printf("[NAT] Found real local IP: %s (interface: %s)%n", 
+                    addr.getHostAddress(), ni.getDisplayName());
+                return addr;
+            }
+        }
+        
+        // Fallback to localhost if nothing found
+        System.err.println("[NAT] ⚠️ Could not find real local IP, using localhost");
+        return InetAddress.getLocalHost();
     }
 
     /**
@@ -256,9 +288,8 @@ public class NatAnalyzer {
         System.out.println("[P2P] My public endpoint: " + myPublicIP + ":" + myPublicPort);
         System.out.println("[P2P] Using SAME channel from STUN analysis (local port: " + localPort + ")");
         
-        // Get local IP address
-        InetSocketAddress localAddr = (InetSocketAddress) stunChannel.getLocalAddress();
-        InetAddress localIP = InetAddress.getLocalHost(); // Get actual local IP
+        // Get real local IP address (not localhost)
+        InetAddress localIP = getRealLocalIP();
         System.out.println("[P2P] My local endpoint: " + localIP.getHostAddress() + ":" + localPort);
         
         // Step 2: Send extended hole punch request with both public and local info
