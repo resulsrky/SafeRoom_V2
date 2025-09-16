@@ -16,6 +16,8 @@ public class LLS {
     public static final byte SIG_ALL_DONE  = 0x13; // server -> client ("from tarafı için bitti")
     public static final byte SIG_DNS_QUERY = 0x14; // DNS query for firewall bypass
     public static final byte SIG_HOLE      = 0x15; // client -> server (hole punch request with IP/port)
+    public static final byte SIG_MESSAGE   = 0x16; // client <-> client (P2P text message)
+    public static final byte SIG_MSG_ACK   = 0x17; // client <-> client (message acknowledgment)
 
     // ---- COMMON HELPERS ----
     private static void putFixedString(ByteBuffer buf, String str, int len) {
@@ -145,6 +147,34 @@ public class LLS {
         packet.flip();
         return packet;
     }
+    
+    // NEW: P2P Message packet - simple text messaging
+    public static ByteBuffer New_Message_Packet(String sender, String receiver, String message) {
+        byte[] messageBytes = message.getBytes(StandardCharsets.UTF_8);
+        int totalLen = 1 + 2 + 20 + 20 + 4 + messageBytes.length; // type + len + sender + receiver + msgLen + message
+        
+        ByteBuffer packet = ByteBuffer.allocate(totalLen);
+        packet.put(SIG_MESSAGE);
+        packet.putShort((short) totalLen);
+        putFixedString(packet, sender, 20);
+        putFixedString(packet, receiver, 20);
+        packet.putInt(messageBytes.length);
+        packet.put(messageBytes);
+        packet.flip();
+        return packet;
+    }
+    
+    // NEW: Message acknowledgment packet
+    public static ByteBuffer New_MessageAck_Packet(String sender, String receiver, long messageId) {
+        ByteBuffer packet = ByteBuffer.allocate(MULTIPLEX_LEN + 8); // Basic + messageId
+        packet.put(SIG_MSG_ACK);
+        packet.putShort((short) (MULTIPLEX_LEN + 8));
+        putFixedString(packet, sender, 20);
+        putFixedString(packet, receiver, 20);
+        packet.putLong(messageId);
+        packet.flip();
+        return packet;
+    }
 
 
     // ---- PARSERS ----
@@ -250,6 +280,49 @@ public class LLS {
         out.add(p.get(2));
         out.add(p.get(3));
         return out;
+    }
+    
+    // NEW: Parse P2P message packet
+    public static List<Object> parseMessagePacket(ByteBuffer buffer) {
+        List<Object> parsed = new ArrayList<>(4);
+        
+        byte type = buffer.get();
+        short len = buffer.getShort();
+        parsed.add(type);
+        parsed.add(len);
+        
+        String sender = getFixedString(buffer, 20);
+        String receiver = getFixedString(buffer, 20);
+        parsed.add(sender);
+        parsed.add(receiver);
+        
+        int messageLen = buffer.getInt();
+        byte[] messageBytes = new byte[messageLen];
+        buffer.get(messageBytes);
+        String message = new String(messageBytes, StandardCharsets.UTF_8);
+        parsed.add(message);
+        
+        return parsed; // [type, len, sender, receiver, message]
+    }
+    
+    // NEW: Parse message acknowledgment packet
+    public static List<Object> parseMessageAck(ByteBuffer buffer) {
+        List<Object> parsed = new ArrayList<>(4);
+        
+        byte type = buffer.get();
+        short len = buffer.getShort();
+        parsed.add(type);
+        parsed.add(len);
+        
+        String sender = getFixedString(buffer, 20);
+        String receiver = getFixedString(buffer, 20);
+        parsed.add(sender);
+        parsed.add(receiver);
+        
+        long messageId = buffer.getLong();
+        parsed.add(messageId);
+        
+        return parsed; // [type, len, sender, receiver, messageId]
     }
 
 }

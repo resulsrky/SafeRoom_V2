@@ -167,7 +167,7 @@ public class MessagesController {
      */
     private void tryP2PConnection(String username) {
         // Skip P2P for groups or if already connected
-        if (username.contains("Grubu") || connectionStatus.containsKey(username)) {
+        if (username.contains("Grubu") || "P2P Active".equals(connectionStatus.get(username))) {
             return;
         }
         

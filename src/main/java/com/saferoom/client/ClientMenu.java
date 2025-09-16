@@ -644,6 +644,36 @@ public class ClientMenu{
 			return null;
 		}
 	}
+	
+	/**
+	 * Send P2P message if connection is active with specific peer
+	 * @param sender Current user's username
+	 * @param receiver Target user's username  
+	 * @param message Text message to send
+	 * @return true if sent via P2P, false if should use server relay
+	 */
+	public static boolean sendP2PMessage(String sender, String receiver, String message) {
+		if (NatAnalyzer.isP2PActive(receiver)) {
+			return NatAnalyzer.sendP2PMessage(sender, receiver, message);
+		} else {
+			System.out.printf("[P2P] No active P2P connection with %s - use server relay%n", receiver);
+			return false;
+		}
+	}
+	
+	/**
+	 * Check if P2P messaging is available with specific peer
+	 */
+	public static boolean isP2PMessagingAvailable(String username) {
+		return NatAnalyzer.isP2PActive(username);
+	}
+	
+	/**
+	 * Check if any P2P messaging is available
+	 */
+	public static boolean isP2PMessagingAvailable() {
+		return NatAnalyzer.isP2PActive();
+	}
 
 }
 

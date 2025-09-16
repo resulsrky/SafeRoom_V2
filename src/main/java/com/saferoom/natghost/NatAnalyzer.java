@@ -10,6 +10,7 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.security.SecureRandom;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class NatAnalyzer {
 
@@ -17,9 +18,13 @@ public class NatAnalyzer {
     public static String myPublicIP;
     public static byte   signal;
     
-    // Keep the STUN channel open for hole punching
+    // Keep the STUN channel open for hole punching and messaging
     private static DatagramChannel stunChannel = null;
     private static int localPort = 0;
+    
+    // Multiple peer connections support
+    private static final Map<String, InetSocketAddress> activePeers = new ConcurrentHashMap<>();
+    private static final Map<String, Long> lastActivity = new ConcurrentHashMap<>();
 
     private static final SecureRandom RNG = new SecureRandom();
     public static final String[][] stunServers = {
@@ -284,8 +289,14 @@ public class NatAnalyzer {
         keepAlive.register(stunChannel, peerAddr);
         
         peerSelector.close();
-        System.out.println("[P2P] ✅ Hole punch successful! P2P connection established with " + peerAddr);
+        
+        // Store peer address for messaging (multiple peer support)
+        activePeers.put(targetUsername, peerAddr);
+        lastActivity.put(targetUsername, System.currentTimeMillis());
+        
+        System.out.println("[P2P] ✅ Hole punch successful! P2P connection established with " + targetUsername);
         System.out.println("[P2P] Connection details: Local:" + localPort + " -> Peer:" + peerAddr);
+        System.out.println("[P2P] 🎉 P2P messaging now available with " + targetUsername + "!");
         return true;
     }
     
@@ -313,6 +324,100 @@ public class NatAnalyzer {
             multiplexer(serverAddr, args[0], args[1]);
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+    
+    // ============================================
+    // P2P MESSAGING FUNCTIONS
+    // ============================================
+    
+    /**
+     * Send P2P message to specific peer
+     */
+    public static boolean sendP2PMessage(String sender, String receiver, String message) {
+        InetSocketAddress peerAddr = activePeers.get(receiver);
+        if (peerAddr == null || stunChannel == null) {
+            System.err.printf("[P2P] No active P2P connection with %s%n", receiver);
+            return false;
+        }
+        
+        try {
+            ByteBuffer messagePacket = LLS.New_Message_Packet(sender, receiver, message);
+            stunChannel.send(messagePacket, peerAddr);
+            
+            // Update last activity
+            lastActivity.put(receiver, System.currentTimeMillis());
+            
+            System.out.printf("[P2P] 📤 Message sent: %s -> %s: \"%s\"%n", sender, receiver, message);
+            return true;
+        } catch (Exception e) {
+            System.err.printf("[P2P] ❌ Failed to send message to %s: %s%n", receiver, e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Check if P2P connection is active with specific peer
+     */
+    public static boolean isP2PActive(String username) {
+        return activePeers.containsKey(username) && stunChannel != null;
+    }
+    
+    /**
+     * Check if any P2P connection is active
+     */
+    public static boolean isP2PActive() {
+        return !activePeers.isEmpty() && stunChannel != null;
+    }
+    
+    /**
+     * Get peer address for specific user
+     */
+    public static InetSocketAddress getPeerAddress(String username) {
+        return activePeers.get(username);
+    }
+    
+    /**
+     * Get all active peer connections
+     */
+    public static Set<String> getActivePeers() {
+        return new HashSet<>(activePeers.keySet());
+    }
+    
+    /**
+     * Close P2P connection with specific peer
+     */
+    public static void closeP2PConnection(String username) {
+        activePeers.remove(username);
+        lastActivity.remove(username);
+        System.out.println("[P2P] Connection closed with " + username);
+        
+        // If no more peers, close the channel
+        if (activePeers.isEmpty() && stunChannel != null) {
+            try {
+                stunChannel.close();
+                stunChannel = null;
+                System.out.println("[P2P] All connections closed - channel closed");
+            } catch (Exception e) {
+                System.err.println("[P2P] Error closing channel: " + e.getMessage());
+            }
+        }
+    }
+    
+    /**
+     * Close all P2P connections
+     */
+    public static void closeAllP2PConnections() {
+        activePeers.clear();
+        lastActivity.clear();
+        try {
+            if (stunChannel != null) {
+                stunChannel.close();
+                stunChannel = null;
+            }
+            System.out.println("[P2P] All connections closed");
+        } catch (Exception e) {
+            System.err.println("[P2P] Error closing all connections: " + e.getMessage());
         }
     }
 }

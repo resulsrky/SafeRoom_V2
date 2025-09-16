@@ -2,6 +2,8 @@ package com.saferoom.gui.service;
 
 import com.saferoom.gui.model.Message;
 import com.saferoom.gui.model.User;
+import com.saferoom.client.ClientMenu;
+import com.saferoom.gui.utils.UserSession;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.collections.FXCollections;
@@ -39,6 +41,7 @@ public class ChatService {
 
     /**
      * Belirtilen kanala yeni bir mesaj gönderir.
+     * P2P bağlantı varsa P2P kullanır, yoksa server relay kullanır.
      * @param channelId Sohbet kanalının ID'si
      * @param text Gönderilecek mesaj metni
      * @param sender Mesajı gönderen kullanıcı
@@ -55,6 +58,22 @@ public class ChatService {
         // Mesajı ilgili kanalın listesine ekle
         ObservableList<Message> messages = getMessagesForChannel(channelId);
         messages.add(newMessage);
+
+        // Try P2P messaging first (check if specific peer connection exists)
+        String currentUsername = UserSession.getInstance().getDisplayName();
+        boolean sentViaP2P = false;
+        
+        // Check if we have active P2P connection with this specific user
+        if (ClientMenu.isP2PMessagingAvailable(channelId)) {
+            sentViaP2P = ClientMenu.sendP2PMessage(currentUsername, channelId, text);
+        }
+        
+        if (sentViaP2P) {
+            System.out.println("[Chat] ✅ Message sent via P2P to " + channelId);
+        } else {
+            System.out.printf("[Chat] 📡 No P2P connection with %s - would use server relay%n", channelId);
+            // TODO: Implement server relay messaging
+        }
 
         // Yeni mesaj geldiğini tüm dinleyenlere haber ver!
         newMessageProperty.set(newMessage);
