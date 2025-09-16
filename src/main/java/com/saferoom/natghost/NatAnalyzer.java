@@ -346,6 +346,9 @@ public class NatAnalyzer {
         activePeers.put(targetUsername, peerAddr);
         lastActivity.put(targetUsername, System.currentTimeMillis());
         
+        // Start message listener for incoming P2P messages
+        startMessageListener();
+        
         System.out.println("[P2P] ✅ Hole punch successful! P2P connection established with " + targetUsername);
         System.out.println("[P2P] Connection details: Local:" + localPort + " -> Peer:" + peerAddr);
         System.out.println("[P2P] 🎉 P2P messaging now available with " + targetUsername + "!");
@@ -382,6 +385,88 @@ public class NatAnalyzer {
     // ============================================
     // P2P MESSAGING FUNCTIONS
     // ============================================
+    
+    private static Thread messageListenerThread = null;
+    
+    /**
+     * Start background thread to listen for incoming P2P messages
+     */
+    private static void startMessageListener() {
+        if (messageListenerThread != null && messageListenerThread.isAlive()) {
+            return; // Already running
+        }
+        
+        messageListenerThread = new Thread(() -> {
+            System.out.println("[P2P] 📡 Message listener started");
+            
+            try (Selector msgSelector = Selector.open()) {
+                stunChannel.register(msgSelector, SelectionKey.OP_READ);
+                
+                while (!Thread.currentThread().isInterrupted() && stunChannel != null && stunChannel.isOpen()) {
+                    if (msgSelector.select(1000) == 0) continue; // 1 second timeout
+                    
+                    Iterator<SelectionKey> it = msgSelector.selectedKeys().iterator();
+                    while (it.hasNext()) {
+                        SelectionKey key = it.next();
+                        it.remove();
+                        
+                        if (!key.isReadable()) continue;
+                        
+                        DatagramChannel dc = (DatagramChannel) key.channel();
+                        ByteBuffer buf = ByteBuffer.allocate(1024);
+                        SocketAddress from = dc.receive(buf);
+                        if (from == null) continue;
+                        
+                        buf.flip();
+                        
+                        if (!LLS.hasWholeFrame(buf)) continue;
+                        byte type = LLS.peekType(buf);
+                        
+                        if (type == LLS.SIG_MESSAGE) {
+                            handleIncomingMessage(buf.duplicate(), from);
+                        }
+                        // Ignore SIG_DNS_QUERY (keep-alive) and other packets
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("[P2P] Message listener error: " + e.getMessage());
+            }
+            
+            System.out.println("[P2P] 📡 Message listener stopped");
+        }, "P2P-MessageListener");
+        
+        messageListenerThread.setDaemon(true);
+        messageListenerThread.start();
+    }
+    
+    /**
+     * Handle incoming P2P message
+     */
+    private static void handleIncomingMessage(ByteBuffer buf, SocketAddress from) {
+        try {
+            List<Object> parsed = LLS.parseMessagePacket(buf);
+            String sender = (String) parsed.get(2);
+            String receiver = (String) parsed.get(3);
+            String message = (String) parsed.get(4);
+            
+            System.out.printf("[P2P] 📥 Message received: %s -> %s: \"%s\"%n", sender, receiver, message);
+            
+            // Update last activity
+            lastActivity.put(sender, System.currentTimeMillis());
+            
+            // Forward to ChatService to display in GUI
+            try {
+                javafx.application.Platform.runLater(() -> {
+                    com.saferoom.gui.service.ChatService.getInstance().receiveP2PMessage(sender, receiver, message);
+                });
+            } catch (Exception e) {
+                System.err.println("[P2P] Error forwarding to ChatService: " + e.getMessage());
+            }
+            
+        } catch (Exception e) {
+            System.err.printf("[P2P] Error parsing incoming message from %s: %s%n", from, e.getMessage());
+        }
+    }
     
     /**
      * Send P2P message to specific peer

@@ -92,6 +92,28 @@ public class ChatService {
     public ObjectProperty<Message> newMessageProperty() {
         return newMessageProperty;
     }
+    
+    /**
+     * P2P'den gelen mesajı al ve GUI'de göster
+     */
+    public void receiveP2PMessage(String sender, String receiver, String messageText) {
+        System.out.printf("[Chat] 📥 P2P message received: %s -> %s: \"%s\"%n", sender, receiver, messageText);
+        
+        Message incomingMessage = new Message(
+            messageText,
+            sender,
+            sender.isEmpty() ? "?" : sender.substring(0, 1).toUpperCase()
+        );
+        
+        // Mesajı doğru channel'a ekle
+        ObservableList<Message> messages = getMessagesForChannel(sender);
+        messages.add(incomingMessage);
+        
+        // GUI'yi güncelle
+        newMessageProperty.set(incomingMessage);
+        
+        System.out.printf("[Chat] ✅ P2P message added to channel: %s%n", sender);
+    }
 
     // Sahte verileri oluşturan özel metot
     private void setupDummyMessages() {
