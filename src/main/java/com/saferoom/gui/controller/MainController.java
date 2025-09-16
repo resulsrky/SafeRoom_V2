@@ -551,6 +551,14 @@ public class MainController {
     public void handleFriends() { setActiveButton(friendsButton); loadView("FriendsView.fxml"); }
     public void handleFileVault() { setActiveButton(fileVaultButton); loadView("FileVaultView.fxml"); }
     
+    /**
+     * Programmatically switch to Messages tab (for P2P notifications)
+     */
+    public void switchToMessages() {
+        System.out.println("[GUI] 📱 Programmatically switching to Messages tab");
+        handleMessages();
+    }
+    
     public void handleProfile(String username) {
         try {
             FXMLLoader loader = new FXMLLoader(Objects.requireNonNull(MainApp.class.getResource("/view/ProfileView.fxml")));

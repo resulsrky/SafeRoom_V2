@@ -87,6 +87,42 @@ public class MessagesController {
     }
     
     /**
+     * P2P notification geldiğinde otomatik mesaj gönder
+     */
+    public static void openChatWithUserAndNotify(String username, String notificationMessage) {
+        if (instance != null) {
+            Platform.runLater(() -> {
+                instance.selectOrAddUser(username);
+                
+                // Send automatic notification message
+                if (instance.chatViewController != null) {
+                    try {
+                        // Wait a bit for chat to initialize
+                        Thread.sleep(100);
+                        
+                        // Create system message about P2P connection
+                        com.saferoom.gui.service.ChatService chatService = 
+                            com.saferoom.gui.service.ChatService.getInstance();
+                        
+                        // Create a system user for notification
+                        com.saferoom.gui.model.User systemUser = new com.saferoom.gui.model.User();
+                        systemUser.setId("system");
+                        systemUser.setName("System");
+                        
+                        // Send notification message
+                        chatService.sendMessage(username, notificationMessage, systemUser);
+                        
+                        System.out.printf("[GUI] 📬 Sent P2P notification message to chat with %s%n", username);
+                        
+                    } catch (Exception e) {
+                        System.err.println("[GUI] Error sending notification message: " + e.getMessage());
+                    }
+                }
+            });
+        }
+    }
+    
+    /**
      * Kullanıcıyı contact listesinde seç veya ekle
      */
     private void selectOrAddUser(String username) {

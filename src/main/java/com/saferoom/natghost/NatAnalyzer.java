@@ -717,11 +717,27 @@ public class NatAnalyzer {
             if (success) {
                 System.out.printf("[P2P] ✅ P2P connection established with %s (incoming request)%n", requester);
                 
-                // Notify GUI about new P2P connection
+                // Notify GUI about new P2P connection and switch to Messages
                 try {
                     javafx.application.Platform.runLater(() -> {
-                        // Open chat with the requester automatically
-                        com.saferoom.gui.controller.MessagesController.openChatWithUser(requester);
+                        try {
+                            // First, switch to Messages tab in MainController
+                            com.saferoom.gui.controller.MainController mainController = 
+                                com.saferoom.gui.controller.MainController.getInstance();
+                            if (mainController != null) {
+                                System.out.printf("[P2P] 📱 Switching to Messages tab for incoming P2P from %s%n", requester);
+                                mainController.switchToMessages(); // This method needs to be added
+                            }
+                            
+                            // Then open chat with the requester and send notification message
+                            System.out.printf("[P2P] 💬 Opening chat with requester: %s%n", requester);
+                            String notificationMsg = "🔗 " + requester + " initiated P2P connection with you. You can now chat securely!";
+                            com.saferoom.gui.controller.MessagesController.openChatWithUserAndNotify(requester, notificationMsg);
+                                
+                        } catch (Exception e) {
+                            System.err.println("[P2P] Error in GUI notification: " + e.getMessage());
+                            e.printStackTrace();
+                        }
                     });
                 } catch (Exception e) {
                     System.err.println("[P2P] Error notifying GUI: " + e.getMessage());
