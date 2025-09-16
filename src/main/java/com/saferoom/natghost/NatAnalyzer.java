@@ -422,10 +422,16 @@ public class NatAnalyzer {
                         if (!LLS.hasWholeFrame(buf)) continue;
                         byte type = LLS.peekType(buf);
                         
+                        System.out.printf("[P2P] 📡 Received packet type: 0x%02X from %s%n", type, from);
+                        
                         if (type == LLS.SIG_MESSAGE) {
+                            System.out.println("[P2P] 🎯 SIG_MESSAGE detected - processing...");
                             handleIncomingMessage(buf.duplicate(), from);
+                        } else if (type == LLS.SIG_DNS_QUERY) {
+                            System.out.printf("[P2P] 🔄 Keep-alive DNS from %s (ignoring)%n", from);
+                        } else {
+                            System.out.printf("[P2P] ❓ Unknown packet type 0x%02X from %s%n", type, from);
                         }
-                        // Ignore SIG_DNS_QUERY (keep-alive) and other packets
                     }
                 }
             } catch (Exception e) {
