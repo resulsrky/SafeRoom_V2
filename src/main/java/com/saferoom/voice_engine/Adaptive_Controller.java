@@ -13,11 +13,11 @@ public class Adaptive_Controller extends Thread {
   private final double HI_LATE = 0.02;
   private final double LO_LATE = 0.003;
 
-  // sınırlar / adımlar
-  private final int BR_MIN = 24000;
-  private final int BR_MAX = 64000;
-  private final int BR_STEP_UP   = 4000;
-  private final int BR_STEP_DOWN = 6000;
+  // sınırlar / adımlar - more conservative for stability
+  private final int BR_MIN = 16000;
+  private final int BR_MAX = 48000;
+  private final int BR_STEP_UP   = 2000;
+  private final int BR_STEP_DOWN = 4000;
 
   private final int FS_LOW  = 20;   // ms
   private final int FS_HIGH = 40;   // ms

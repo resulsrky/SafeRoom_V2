@@ -7,13 +7,13 @@ public class FullDuplexAudio {
 
   // sadece bunları doldur (CLI'dan da alabiliyorum)
   private static String PEER_IP  = "192.168.1.29";
-  private static int    PEER_PORT         = 7001;   // karşı tarafın dinlediği SRT portu
-  private static int    MY_LISTENING_PORT = 7000;  // bu tarafın dinlediği SRT portu
+  private static int    PEER_PORT         = 7000;   // karşı tarafın dinlediği SRT portu
+  private static int    MY_LISTENING_PORT = 7001;  // bu tarafın dinlediği SRT portu
 
   // makul varsayılanlar
-  private static int DEFAULT_BITRATE   = 64000; // Opus
+  private static int DEFAULT_BITRATE   = 32000; // Opus - lower for stability
   private static int DEFAULT_FRAME_MS  = 20;    // 10/20/40
-  private static int DEFAULT_LATENCYMS = 60;    // SRT + jitterbuffer
+  private static int DEFAULT_LATENCYMS = 100;   // SRT + jitterbuffer - increased for stability
 
   public static void main(String[] args) {
     // args: [peer_ip] [peer_port] [my_listen_port]
@@ -75,8 +75,15 @@ public class FullDuplexAudio {
     try {
       pay.set("pt", 96);
       pay.set("ssrc", mySsrc);  // rtpopuspay supports ssrc property
-      // tek konfigurasyonla gönder: karşı tarafın dinlediği port
-      srtOut.set("uri", "srt://" + PEER_IP + ":" + PEER_PORT + "?mode=caller&latency=" + DEFAULT_LATENCYMS);
+      pay.set("timestamp-offset", 0);
+      pay.set("seqnum-offset", 0);
+      
+      // SRT caller configuration with better parameters
+      String srtUri = "srt://" + PEER_IP + ":" + PEER_PORT + 
+                     "?mode=caller&latency=" + DEFAULT_LATENCYMS + 
+                     "&connect_timeout=5000&rcvbuf=1000000&sndbuf=1000000";
+      srtOut.set("uri", srtUri);
+      srtOut.set("wait-for-connection", false);
     } catch (Exception e) {
       System.err.println("Failed to configure TX elements: " + e.getMessage());
       return;
@@ -90,7 +97,11 @@ public class FullDuplexAudio {
     }
     
     try {
-      srtIn.set("uri", "srt://0.0.0.0:" + MY_LISTENING_PORT + "?mode=listener");
+      // SRT listener configuration with better parameters
+      String srtListenUri = "srt://0.0.0.0:" + MY_LISTENING_PORT + 
+                           "?mode=listener&latency=" + DEFAULT_LATENCYMS + 
+                           "&rcvbuf=1000000&sndbuf=1000000";
+      srtIn.set("uri", srtListenUri);
     } catch (Exception e) {
       System.err.println("Failed to configure SRT server: " + e.getMessage());
       return;
@@ -102,12 +113,11 @@ public class FullDuplexAudio {
       return;
     }
 
-    // SSRC sabitleme YOK: herhangi bir OPUS RTP'yi kabul et (pt=96 yeterli)
-    // clock-rate/encoding-name/PT ver; ssrc alanını kaps içine koyma
+    // More flexible RTP caps to handle different SSRC values
     Caps caps = null;
     try {
       caps = Caps.fromString(
-        "application/x-rtp,media=audio,clock-rate=48000,encoding-name=OPUS,payload=96"
+        "application/x-rtp,media=(string)audio,clock-rate=(int)48000,encoding-name=(string)OPUS,payload=(int)96"
       );
     } catch (Exception e) {
       System.err.println("Failed to create caps: " + e.getMessage());
@@ -143,7 +153,14 @@ public class FullDuplexAudio {
     try {
       jitter.set("latency", DEFAULT_LATENCYMS);
       jitter.set("do-lost", true);
+      jitter.set("drop-on-latency", true);
+      jitter.set("mode", 1); // RTP_JITTER_BUFFER_MODE_BUFFER
+      
+      dec.set("use-inband-fec", true);
+      dec.set("plc", true); // Packet Loss Concealment
+      
       out.set("sync", false);
+      out.set("async", false);
     } catch (Exception e) {
       System.err.println("Failed to configure RX elements: " + e.getMessage());
       return;
@@ -173,18 +190,34 @@ public class FullDuplexAudio {
       return;
     }
 
-    // bus log
+    // Enhanced bus logging with better error handling
     Bus bus = p.getBus();
-    bus.connect((Bus.ERROR) (source, code, message) ->
-      System.err.println("GST ERROR: " + message)
+    bus.connect((Bus.ERROR) (source, code, message) -> {
+      System.err.println("GST ERROR from " + source.getName() + ": " + message);
+      // Don't stop on stream format errors - try to recover
+      if (!message.contains("wrong format") && !message.contains("Internal data stream error")) {
+        System.err.println("Critical error, stopping pipeline");
+      }
+    });
+    
+    bus.connect((Bus.WARNING) (source, code, message) ->
+      System.out.println("GST WARNING from " + source.getName() + ": " + message)
+    );
+    
+    bus.connect((Bus.INFO) (source, code, message) ->
+      System.out.println("GST INFO from " + source.getName() + ": " + message)
     );
 
     // adaptif kontrol
     Adaptive_Controller controller = new Adaptive_Controller(jitter, enc, p);
     controller.start();
 
-    // çalıştır
+    // çalıştır with better state management
     try {
+      System.out.println("Starting FullDuplexAudio pipeline...");
+      System.out.println("Listening on port: " + MY_LISTENING_PORT);
+      System.out.println("Connecting to: " + PEER_IP + ":" + PEER_PORT);
+      
       StateChangeReturn ret = p.play();
       if (ret == StateChangeReturn.FAILURE) {
         System.err.println("Failed to start pipeline");
@@ -193,13 +226,26 @@ public class FullDuplexAudio {
       }
       
       System.out.println("FullDuplexAudio started successfully");
+      System.out.println("Press Ctrl+C to stop...");
+      
+      // Add shutdown hook for clean exit
+      Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+        System.out.println("\nShutting down gracefully...");
+        controller.shutdown();
+        p.setState(State.NULL);
+      }));
+      
       Gst.main();
     } catch (Exception e) {
       System.err.println("Error running pipeline: " + e.getMessage());
     } finally {
       // durdur
       controller.shutdown();
-      p.stop();
+      try {
+        p.setState(State.NULL);
+      } catch (Exception e) {
+        System.err.println("Error stopping pipeline: " + e.getMessage());
+      }
     }
   }
   
