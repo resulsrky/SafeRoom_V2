@@ -4,3 +4,15 @@
 [2025-10-02 14:56:38] [INFO] [EmailSender] - Verification email sent successfully to: abdurrahmankaradag19@gmail.com
 [2025-10-02 15:00:55] [INFO] [DBManager] - Yeni kullanıcı oluşturuldu: Quki
 [2025-10-02 15:00:59] [INFO] [EmailSender] - Verification email sent successfully to: ozkantalha895@gmail.com
+[2025-10-02 15:18:47] [INFO] [DBManager] - Database config loaded successfully.
+[2025-10-02 15:29:03] [INFO] [DBManager] - Database config loaded successfully.
+[2025-10-02 15:31:24] [INFO] [DBManager] - Database config loaded successfully.
+[2025-10-02 15:31:25] [INFO] [EmailSender] - Email config loaded successfully.
+[2025-10-02 15:31:29] [INFO] [EmailSender] - Verification email sent successfully to: ozkantalha895@gmail.com
+[2025-10-02 15:32:13] [INFO] [DBManager] - Password successfully changed for user: ozkantalha895@gmail.com
+[2025-10-02 15:37:04] [INFO] [DBManager] - Database config loaded successfully.
+[2025-10-02 16:55:50] [INFO] [DBManager] - Database config loaded successfully.
+[2025-10-02 16:55:50] [INFO] [DBManager] - Yeni kullanıcı oluşturuldu: Bilal
+[2025-10-02 16:55:50] [INFO] [EmailSender] - Email config loaded successfully.
+[2025-10-02 16:55:53] [INFO] [EmailSender] - Verification email sent successfully to: bilalylmz0454@gmail.com
+[2025-10-02 17:08:28] [INFO] [DBManager] - Database config loaded successfully.
