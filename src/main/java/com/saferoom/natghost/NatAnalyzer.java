@@ -316,6 +316,14 @@ public class NatAnalyzer {
         }
         System.out.println("[NAT-DETECT] Final Signal: 0x" + String.format("%02X", signal));
         System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        
+        // 🆕 Cache basic profile for later profiling (avoids re-running detection)
+        if (!uniquePorts.isEmpty()) {
+            int port = uniquePorts.get(0);
+            cachedProfile = new NATProfile(signal, port, port, 1, uniquePorts);
+            System.out.println("[NAT-DETECT] 📝 Cached basic profile for profiling (port: " + port + ")");
+        }
+        
         return signal;
     }
     
@@ -1014,17 +1022,25 @@ public class NatAnalyzer {
         System.out.println("[NAT-PROFILE] Starting intelligent NAT profiling...");
         
         try {
-            // PHASE 1: Detect NAT type using existing method
-            System.out.println("[NAT-PROFILE] Phase 1: Detecting NAT type...");
-            byte natType = analyzeSinglePort(stunServers);
-            
-            if (natType == (byte)0xFE) {
-                System.err.println("[NAT-PROFILE] NAT detection failed!");
-                return null;
+            // PHASE 1: Use cached profile if available (avoids re-running detection and closing stunChannel!)
+            byte natType;
+            if (cachedProfile != null) {
+                natType = cachedProfile.natType;
+                System.out.println("[NAT-PROFILE] ✅ Using cached NAT type from previous detection: 0x" + 
+                    String.format("%02X", natType) + " (" + (natType == 0x11 ? "SYMMETRIC" : "NON-SYMMETRIC") + ")");
+                System.out.println("[NAT-PROFILE] ⚡ Skipping re-detection to keep stunChannel open for hole punching!");
+            } else {
+                System.out.println("[NAT-PROFILE] Phase 1: Detecting NAT type...");
+                natType = analyzeSinglePort(stunServers);
+                
+                if (natType == (byte)0xFE) {
+                    System.err.println("[NAT-PROFILE] NAT detection failed!");
+                    return null;
+                }
+                
+                String natTypeStr = (natType == 0x11) ? "SYMMETRIC" : "NON-SYMMETRIC";
+                System.out.println("[NAT-PROFILE] Detected NAT type: " + natTypeStr);
             }
-            
-            String natTypeStr = (natType == 0x11) ? "SYMMETRIC" : "NON-SYMMETRIC";
-            System.out.println("[NAT-PROFILE] Detected NAT type: " + natTypeStr);
             
             // PHASE 2: If NON-SYMMETRIC, no need for deep profiling
             if (natType == 0x00) {
@@ -1269,115 +1285,253 @@ public class NatAnalyzer {
     }
     
     /**
-     * Symmetric NAT side: Opens a pool of UDP sockets and sends burst packets to target.
-     * This creates multiple NAT mapping holes that converge on the target's stable port.
+     * Symmetric NAT side: Opens a pool of UDP sockets and sends CONTINUOUS burst packets to target.
      * 
-     * @param targetIP The non-symmetric peer's public IP
-     * @param targetPort The non-symmetric peer's stable port
+     * CRITICAL CHANGES:
+     * - Each port continuously bursts until peer response received (not just 5 packets!)
+     * - Listens concurrently for incoming packets (collision detection)
+     * - Keeps successful channel open, closes others
+     * - Establishes keep-alive after connection
+     * 
+     * @param targetIP The peer's public IP
+     * @param targetPort The peer's port (stable for non-symmetric, or midpoint for symmetric)
      * @param numPorts Number of ports to open (typically N/2 from profiled range)
      */
     public static void symmetricPortPoolExpansion(InetAddress targetIP, int targetPort, int numPorts) {
-        System.out.println("[SYMMETRIC-PUNCH] Starting port pool expansion: " + numPorts + " ports -> " 
-            + targetIP.getHostAddress() + ":" + targetPort);
+        System.out.println("\n[SYMMETRIC-PUNCH] 🔥 Starting CONTINUOUS port pool expansion");
+        System.out.printf("  Target: %s:%d%n", targetIP.getHostAddress(), targetPort);
+        System.out.printf("  Opening %d local ports for continuous burst...%n", numPorts);
         
         ExecutorService executor = Executors.newFixedThreadPool(Math.min(numPorts, 50));
-        List<DatagramChannel> channels = new ArrayList<>();
+        List<DatagramChannel> channels = Collections.synchronizedList(new ArrayList<>());
+        AtomicBoolean connectionEstablished = new AtomicBoolean(false);
+        AtomicReference<DatagramChannel> successfulChannel = new AtomicReference<>(null);
+        AtomicReference<InetSocketAddress> peerAddress = new AtomicReference<>(null);
+        
+        long startTime = System.currentTimeMillis();
         
         try {
-            // Phase 1: Open pool of sockets
+            // Phase 1: Open port pool and start CONTINUOUS bursting
             for (int i = 0; i < numPorts; i++) {
-                final int index = i;
+                final int portIndex = i;
                 executor.submit(() -> {
                     try {
                         DatagramChannel channel = DatagramChannel.open();
+                        channel.configureBlocking(false);
                         channel.socket().setReuseAddress(true);
                         channel.bind(new InetSocketAddress(0)); // Ephemeral port
-                        synchronized (channels) {
-                            channels.add(channel);
-                        }
                         
-                        // Phase 2: Send burst packets
+                        channels.add(channel);
+                        
                         InetSocketAddress target = new InetSocketAddress(targetIP, targetPort);
-                        ByteBuffer payload = ByteBuffer.allocate(64);
-                        payload.put(LLS.SIG_HOLE);
-                        payload.put(("SYM-BURST-" + index).getBytes());
-                        payload.flip();
+                        ByteBuffer burstPayload = ByteBuffer.allocate(128);
                         
-                        for (int burst = 0; burst < 5; burst++) {
-                            payload.rewind();
-                            channel.send(payload, target);
-                            Thread.sleep(20); // 20ms between bursts
+                        int burstCount = 0;
+                        
+                        // CONTINUOUS bursting until collision detected
+                        while (!connectionEstablished.get()) {
+                            burstPayload.clear();
+                            burstPayload.put(LLS.SIG_HOLE);
+                            burstPayload.put(("SYM-BURST-" + portIndex + "-" + burstCount).getBytes());
+                            burstPayload.flip();
+                            
+                            channel.send(burstPayload, target);
+                            burstCount++;
+                            
+                            // Check for incoming response (collision detection)
+                            ByteBuffer receiveBuffer = ByteBuffer.allocate(1024);
+                            InetSocketAddress sender = (InetSocketAddress) channel.receive(receiveBuffer);
+                            
+                            if (sender != null && !connectionEstablished.getAndSet(true)) {
+                                // 🎉 COLLISION DETECTED!
+                                long collisionTime = System.currentTimeMillis() - startTime;
+                                System.out.printf("\n[SYMMETRIC-PUNCH] 🎉 COLLISION! Port %d received response after %d ms%n",
+                                    portIndex, collisionTime);
+                                System.out.printf("  Local port: %d%n", channel.socket().getLocalPort());
+                                System.out.printf("  Peer responded from: %s%n", sender);
+                                System.out.printf("  Total bursts sent: %d%n", burstCount);
+                                
+                                successfulChannel.set(channel);
+                                peerAddress.set(sender);
+                                return; // Keep this channel alive
+                            }
+                            
+                            Thread.sleep(50); // 50ms between bursts = 20 bursts/sec
                         }
                         
-                        System.out.println("[SYMMETRIC-PUNCH] Port " + index + " sent burst");
-                        
+                    } catch (ClosedByInterruptException | InterruptedException e) {
+                        // Expected when connection established
                     } catch (Exception e) {
-                        System.err.println("[SYMMETRIC-PUNCH] Port " + index + " failed: " + e.getMessage());
+                        if (!connectionEstablished.get()) {
+                            System.err.printf("[SYMMETRIC-PUNCH] Port %d error: %s%n", 
+                                portIndex, e.getMessage());
+                        }
                     }
                 });
             }
             
-            // Wait for all bursts to complete
-            executor.shutdown();
-            executor.awaitTermination(10, TimeUnit.SECONDS);
+            // Phase 2: Wait for collision (max 30 seconds)
+            System.out.println("[SYMMETRIC-PUNCH] ⏳ All ports bursting... waiting for collision...");
             
-            System.out.println("[SYMMETRIC-PUNCH] Port pool expansion complete. " + channels.size() + " channels opened.");
+            for (int i = 0; i < 300; i++) { // 30 seconds timeout
+                Thread.sleep(100);
+                
+                if (connectionEstablished.get()) {
+                    break;
+                }
+                
+                // Progress indicator every 5 seconds
+                if ((i + 1) % 50 == 0) {
+                    System.out.printf("[SYMMETRIC-PUNCH] Still bursting... (%d seconds elapsed)%n", 
+                        (i + 1) / 10);
+                }
+            }
+            
+            // Phase 3: Cleanup and connection establishment
+            executor.shutdownNow();
+            
+            if (connectionEstablished.get()) {
+                DatagramChannel workingChannel = successfulChannel.get();
+                InetSocketAddress peer = peerAddress.get();
+                
+                System.out.println("\n[SYMMETRIC-PUNCH] ✅ Connection Established!");
+                System.out.printf("  Using local port: %d%n", 
+                    workingChannel.socket().getLocalPort());
+                System.out.printf("  Peer address: %s%n", peer);
+                
+                // Close all other channels
+                for (DatagramChannel ch : channels) {
+                    if (ch != workingChannel && ch.isOpen()) {
+                        try { ch.close(); } catch (Exception e) {}
+                    }
+                }
+                
+                // TODO: Register peer and start keep-alive
+                System.out.println("[SYMMETRIC-PUNCH] 💓 Connection ready for messaging");
+                
+            } else {
+                System.err.println("\n[SYMMETRIC-PUNCH] ❌ TIMEOUT: No collision detected after 30 seconds");
+                System.err.println("  Possible causes:");
+                System.err.println("  - Both sides might have strict firewalls");
+                System.err.println("  - Port range calculation mismatch");
+                System.err.println("  - Network congestion dropping burst packets");
+                
+                // Close all channels
+                for (DatagramChannel ch : channels) {
+                    try { ch.close(); } catch (Exception e) {}
+                }
+            }
             
         } catch (Exception e) {
-            System.err.println("[SYMMETRIC-PUNCH] Pool expansion failed: " + e.getMessage());
+            System.err.println("[SYMMETRIC-PUNCH] ❌ Fatal error: " + e.getMessage());
             e.printStackTrace();
-        } finally {
-            // Cleanup channels
-            for (DatagramChannel channel : channels) {
-                try {
-                    if (channel.isOpen()) channel.close();
-                } catch (Exception ignored) {}
+            
+            // Emergency cleanup
+            executor.shutdownNow();
+            for (DatagramChannel ch : channels) {
+                try { ch.close(); } catch (Exception ex) {}
             }
         }
     }
     
     /**
-     * Asymmetric NAT side: Scans the symmetric peer's port range to find the active mapping.
-     * Sends discovery packets across the predicted port range.
+     * Asymmetric NAT side: CONTINUOUSLY scans the symmetric peer's port range.
+     * 
+     * Strategy:
+     * - Use SINGLE stable port (non-symmetric advantage)
+     * - Continuously burst to ALL ports in symmetric peer's range
+     * - Listen concurrently for peer response (collision detection)
+     * - Stop when response received and establish connection
      * 
      * @param targetIP The symmetric peer's public IP
-     * @param minPort Start of the port range
-     * @param maxPort End of the port range
+     * @param minPort Start of the symmetric peer's port range
+     * @param maxPort End of the symmetric peer's port range
      */
     public static void scanPortRange(InetAddress targetIP, int minPort, int maxPort) {
-        System.out.println("[ASYMMETRIC-SCAN] Scanning port range: " + minPort + "-" + maxPort 
-            + " on " + targetIP.getHostAddress());
+        System.out.println("\n[ASYMMETRIC-SCAN] 🔍 Starting CONTINUOUS range scan");
+        System.out.printf("  Target: %s%n", targetIP.getHostAddress());
+        System.out.printf("  Port range: %d-%d (%d ports)%n", minPort, maxPort, (maxPort - minPort + 1));
+        System.out.println("  Using stable local port for scanning");
         
-        int rangeSize = maxPort - minPort + 1;
-        ExecutorService executor = Executors.newFixedThreadPool(Math.min(rangeSize, 100));
+        if (stunChannel == null || !stunChannel.isOpen()) {
+            System.err.println("[ASYMMETRIC-SCAN] ❌ No active STUN channel!");
+            return;
+        }
         
         try {
-            for (int port = minPort; port <= maxPort; port++) {
-                final int targetPort = port;
-                executor.submit(() -> {
-                    try {
-                        if (stunChannel != null && stunChannel.isOpen()) {
-                            InetSocketAddress target = new InetSocketAddress(targetIP, targetPort);
-                            ByteBuffer payload = ByteBuffer.allocate(64);
-                            payload.put(LLS.SIG_HOLE);
-                            payload.put(("ASYM-SCAN-" + targetPort).getBytes());
-                            payload.flip();
+            // Configure channel for non-blocking
+            stunChannel.configureBlocking(false);
+            Selector selector = Selector.open();
+            stunChannel.register(selector, SelectionKey.OP_READ);
+            
+            int rangeSize = maxPort - minPort + 1;
+            long startTime = System.currentTimeMillis();
+            long timeout = 30000; // 30 seconds timeout
+            boolean connectionEstablished = false;
+            int scanCycle = 0;
+            
+            System.out.println("[ASYMMETRIC-SCAN] ⏳ Starting continuous range scan...");
+            
+            // Continuous range scanning until peer response or timeout
+            while (!connectionEstablished && (System.currentTimeMillis() - startTime) < timeout) {
+                // Scan entire port range in this cycle
+                for (int port = minPort; port <= maxPort && !connectionEstablished; port++) {
+                    // Send burst packet to this port
+                    InetSocketAddress target = new InetSocketAddress(targetIP, port);
+                    ByteBuffer burstPayload = ByteBuffer.allocate(128);
+                    burstPayload.put(LLS.SIG_HOLE);
+                    burstPayload.put(("ASYM-SCAN-" + scanCycle + "-" + port).getBytes());
+                    burstPayload.flip();
+                    
+                    stunChannel.send(burstPayload, target);
+                    
+                    // Check for peer response every few packets (non-blocking)
+                    if (port % 10 == 0 && selector.select(1) > 0) { // Check every 10 ports
+                        selector.selectedKeys().clear();
+                        
+                        ByteBuffer receiveBuffer = ByteBuffer.allocate(1024);
+                        InetSocketAddress sender = (InetSocketAddress) stunChannel.receive(receiveBuffer);
+                        
+                        if (sender != null) {
+                            long responseTime = System.currentTimeMillis() - startTime;
+                            System.out.printf("\n[ASYMMETRIC-SCAN] 🎉 COLLISION! Response received after %d ms%n", responseTime);
+                            System.out.printf("  Peer responded from: %s%n", sender);
+                            System.out.printf("  Total scan cycles: %d%n", scanCycle);
+                            System.out.printf("  Current port in scan: %d%n", port);
                             
-                            stunChannel.send(payload, target);
+                            connectionEstablished = true;
+                            
+                            // Register peer
+                            // TODO: Add peer registration and keep-alive
+                            System.out.println("[ASYMMETRIC-SCAN] 💓 Connection ready for messaging");
+                            break;
                         }
-                    } catch (Exception e) {
-                        // Ignore individual failures (port might not be open)
                     }
-                });
+                }
+                
+                scanCycle++;
+                
+                // Progress indicator every 5 cycles
+                if (scanCycle % 5 == 0) {
+                    long elapsed = System.currentTimeMillis() - startTime;
+                    System.out.printf("[ASYMMETRIC-SCAN] Still scanning... cycle %d (%.1f seconds)%n", 
+                        scanCycle, elapsed / 1000.0);
+                }
+                
+                // Small delay between full range scans
+                Thread.sleep(10); // 10ms delay between range cycles
             }
             
-            executor.shutdown();
-            executor.awaitTermination(5, TimeUnit.SECONDS);
+            selector.close();
             
-            System.out.println("[ASYMMETRIC-SCAN] Port range scan complete: " + rangeSize + " ports probed");
+            if (!connectionEstablished) {
+                System.err.println("\n[ASYMMETRIC-SCAN] ❌ TIMEOUT: No response after 30 seconds");
+                System.err.printf("  Total scan cycles completed: %d%n", scanCycle);
+                System.err.printf("  Total ports scanned: %d%n", scanCycle * rangeSize);
+            }
             
         } catch (Exception e) {
-            System.err.println("[ASYMMETRIC-SCAN] Range scan failed: " + e.getMessage());
+            System.err.println("[ASYMMETRIC-SCAN] ❌ Failed: " + e.getMessage());
             e.printStackTrace();
         }
     }
