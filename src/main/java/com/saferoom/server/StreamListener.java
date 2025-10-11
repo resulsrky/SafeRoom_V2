@@ -6,7 +6,8 @@ import io.grpc.Server;
 import io.grpc.ServerBuilder;
 
 public class StreamListener extends Thread{
-	public static int grpcPort = 50051;
+	// SafeRoomServer'dan port bilgisini al
+	public static int grpcPort = SafeRoomServer.grpcPort;
 
 	public void run(){
 		try {
@@ -15,7 +16,7 @@ public class StreamListener extends Thread{
 				.build()
 				.start();
 		
-		System.out.println("GRPC Server Started on port 50051");
+		System.out.println("✅ gRPC Server Started on port " + grpcPort);
 		server.awaitTermination();
 	}catch(Exception e) {
 		System.err.println("Server Builder [ERROR]: " + e);

@@ -56,15 +56,10 @@ dependencies {
     // Logging
     implementation files('libs/slf4j-api-1.7.36.jar')
     implementation files('libs/slf4j-simple-1.7.36.jar')
-    
-    //MediaEngine
-    implementation files('libs/gst1-java-core-1.4.0.jar')
-    implementation 'net.java.dev.jna:jna:5.13.0'
-    implementation 'net.java.dev.jna:jna-platform:5.13.0'
 }
 
 application {
-    mainClass = 'com.saferoom.server.SafeRoomServer'
+    mainClass = 'com.saferoom.gui.MainApp'
 }
 
 protobuf {
@@ -114,31 +109,5 @@ javafx {
 // Duplicate handling strategy
 processResources {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-}
-
-// === ÇALIŞAN SES SİSTEMLERİ ===
-
-// Test tonu (çalışıyor ✓)
-task tone(type: JavaExec) {
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.saferoom.voice_engine.SimpleTone'
-    jvmArgs = ['-Djava.library.path=/usr/lib/x86_64-linux-gnu']
-}
-
-// Lokal mikrofon testi (çalışıyor ✓)
-task localAudio(type: JavaExec) {
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.saferoom.voice_engine.SimpleLocalAudio'
-    jvmArgs = ['-Djava.library.path=/usr/lib/x86_64-linux-gnu']
-}
-
-// Ultra Simple P2P (sender/receiver mode)
-task ultraP2P(type: JavaExec) {
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.saferoom.voice_engine.UltraSimpleP2P'
-    jvmArgs = ['-Djava.library.path=/usr/lib/x86_64-linux-gnu']
-    if (project.hasProperty('args')) {
-        args project.getProperty('args').split(' ')
-    }
 }
 
