@@ -1,9 +1,9 @@
 package com.saferoom.server;
 
 public class SafeRoomServer {
-	public static String ServerIP = "10.11.20.55";
-	public static int grpcPort = 50051;
-	public static int udpPort1 = 45000;
+        public static String ServerIP = "35.198.64.68";
+        public static int grpcPort = 443;
+        public static int udpPort1 = 45000;
 
 	
 	public static void main(String[] args) throws Exception{

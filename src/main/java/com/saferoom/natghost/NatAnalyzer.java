@@ -89,7 +89,7 @@ public class NatAnalyzer {
                             (addrBytes[2] & 0xFF) + "." + (addrBytes[3] & 0xFF);
                 myPublicIP = ip;
                 list.add(port);
-                System.out.printf("[STUN] ✅ Parsed (type=0x%04X): IP=%s, Port=%d%n", attrType, ip, port);
+                System.out.printf("[STUN] Parsed (type=0x%04X): IP=%s, Port=%d%n", attrType, ip, port);
             } else {
                 // Skip unknown attributes
                 if (buffer.remaining() >= attrLen) {
