@@ -61,6 +61,25 @@ public class P2PSignalingServer extends Thread {
     private static final Map<String, RegisteredUser> REGISTERED_USERS = new ConcurrentHashMap<>();
     private static final long USER_REGISTRATION_TIMEOUT_MS = 300_000; // 5 minutes
     
+    // NEW: NAT profiles for coordinated hole punching
+    static class NATProfile {
+        byte natType;
+        int minPort;
+        int maxPort;
+        int profiledPorts;
+        long timestamp;
+        
+        NATProfile(byte natType, int minPort, int maxPort, int profiledPorts) {
+            this.natType = natType;
+            this.minPort = minPort;
+            this.maxPort = maxPort;
+            this.profiledPorts = profiledPorts;
+            this.timestamp = System.currentTimeMillis();
+        }
+    }
+    
+    private static final Map<String, NATProfile> NAT_PROFILES = new ConcurrentHashMap<>();
+    
     private static final long CLEANUP_INTERVAL_MS = 30_000;
     private long lastCleanup = System.currentTimeMillis();
     
@@ -133,7 +152,7 @@ public class P2PSignalingServer extends Thread {
     
     /**
      * Handle P2P connection request (SIG_P2P_REQUEST)
-     * Client requests P2P connection to target - UNIDIRECTIONAL initiation
+     * Client requests P2P connection to target - INTELLIGENT coordination based on NAT profiles
      */
     private void handleP2PRequest(ByteBuffer buf, DatagramChannel channel, InetSocketAddress from) {
         try {
@@ -170,57 +189,130 @@ public class P2PSignalingServer extends Thread {
                 return;
             }
             
-            System.out.printf("✅ Both users registered and valid - initiating P2P connection%n");
+            System.out.printf("✅ Both users registered and valid%n");
             
-            // Send target's info to requester
+            // CHECK FOR NAT PROFILES - Use intelligent coordination if available
+            NATProfile requesterProfile = NAT_PROFILES.get(requester);
+            NATProfile targetProfile = NAT_PROFILES.get(target);
+            
+            if (requesterProfile != null && targetProfile != null) {
+                System.out.println("🧠 NAT PROFILES AVAILABLE - Using intelligent coordination");
+                coordinateIntelligentHolePunch(requesterProfile, targetProfile, 
+                    requesterUser, targetUser, channel);
+                return;
+            }
+            
+            // FALLBACK: Legacy hole punch (no NAT profiles)
+            System.out.println("⚠️ NAT profiles not available - Using legacy hole punch");
+            coordinateLegacyHolePunch(requesterUser, targetUser, channel, from);
+            
+        } catch (Exception e) {
+            System.err.printf("❌ Error handling P2P request: %s%n", e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Intelligent hole punch coordination based on NAT profiles
+     */
+    private void coordinateIntelligentHolePunch(NATProfile requesterProfile, NATProfile targetProfile,
+                                                RegisteredUser requesterUser, RegisteredUser targetUser,
+                                                DatagramChannel channel) {
+        try {
+            boolean requesterSymmetric = (requesterProfile.natType == 0x11);
+            boolean targetSymmetric = (targetProfile.natType == 0x11);
+            
+            System.out.printf("🎯 NAT Strategy: %s (%s) ↔ %s (%s)%n",
+                requesterUser.username, requesterSymmetric ? "SYMMETRIC" : "NON-SYMMETRIC",
+                targetUser.username, targetSymmetric ? "SYMMETRIC" : "NON-SYMMETRIC");
+            
+            if (requesterSymmetric && !targetSymmetric) {
+                // Case 1: Requester symmetric, Target non-symmetric
+                sendSymmetricBurstInstruction(requesterUser, targetUser, requesterProfile, channel);
+                sendAsymmetricScanInstruction(targetUser, requesterUser, requesterProfile, channel);
+                
+            } else if (!requesterSymmetric && targetSymmetric) {
+                // Case 2: Requester non-symmetric, Target symmetric
+                sendStandardHolePunchInstruction(requesterUser, targetUser, channel);
+                sendSymmetricBurstInstruction(targetUser, requesterUser, targetProfile, channel);
+                
+            } else if (!requesterSymmetric && !targetSymmetric) {
+                // Case 3: Both non-symmetric - standard hole punch
+                sendStandardHolePunchInstruction(requesterUser, targetUser, channel);
+                sendStandardHolePunchInstruction(targetUser, requesterUser, channel);
+                
+            } else {
+                // Case 4: Both symmetric - experimental dual burst
+                System.out.println("⚠️ Both peers symmetric - using experimental dual burst");
+                sendSymmetricBurstInstruction(requesterUser, targetUser, requesterProfile, channel);
+                sendSymmetricBurstInstruction(targetUser, requesterUser, targetProfile, channel);
+            }
+            
+            System.out.println("✅ Intelligent hole punch coordination complete");
+            
+        } catch (Exception e) {
+            System.err.println("❌ Failed to coordinate intelligent hole punch: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Legacy hole punch coordination (fallback when NAT profiles not available)
+     */
+    private void coordinateLegacyHolePunch(RegisteredUser requesterUser, RegisteredUser targetUser,
+                                          DatagramChannel channel, InetSocketAddress from) {
+        try {
+            // Same NAT detection
             boolean sameNAT = requesterUser.publicIP.equals(targetUser.publicIP);
             System.out.printf("🔍 Same NAT detection: %s%n", sameNAT ? "YES - using local IPs" : "NO - using public IPs");
             
             if (sameNAT) {
                 // Use local IPs for same-NAT communication
                 ByteBuffer targetInfoPacket = LLS.New_PortInfo_Packet(
-                    target, requester, LLS.SIG_PORT, 
+                    targetUser.username, requesterUser.username, LLS.SIG_PORT, 
                     targetUser.localIP, targetUser.localPort
                 );
                 channel.send(targetInfoPacket, from);
                 System.out.printf("📤 Sent %s's LOCAL info (%s:%d) to %s%n", 
-                    target, targetUser.localIP.getHostAddress(), targetUser.localPort, requester);
+                    targetUser.username, targetUser.localIP.getHostAddress(), targetUser.localPort, requesterUser.username);
             } else {
                 // Use public IPs for different NATs
                 ByteBuffer targetInfoPacket = LLS.New_PortInfo_Packet(
-                    target, requester, LLS.SIG_PORT, 
+                    targetUser.username, requesterUser.username, LLS.SIG_PORT, 
                     targetUser.publicIP, targetUser.publicPort
                 );
                 channel.send(targetInfoPacket, from);
                 System.out.printf("📤 Sent %s's PUBLIC info (%s:%d) to %s%n", 
-                    target, targetUser.publicIP.getHostAddress(), targetUser.publicPort, requester);
+                    targetUser.username, targetUser.publicIP.getHostAddress(), targetUser.publicPort, requesterUser.username);
             }
             
             // Send notification to target about incoming P2P request
             ByteBuffer notificationPacket;
             if (sameNAT) {
                 notificationPacket = LLS.New_P2PNotify_Packet(
-                    requester, target,
+                    requesterUser.username, targetUser.username,
                     requesterUser.localIP, requesterUser.localPort,
                     requesterUser.localIP, requesterUser.localPort
                 );
             } else {
                 notificationPacket = LLS.New_P2PNotify_Packet(
-                    requester, target,
+                    requesterUser.username, targetUser.username,
                     requesterUser.publicIP, requesterUser.publicPort,
                     requesterUser.localIP, requesterUser.localPort
                 );
             }
             
-            System.out.printf("🔔 Sending P2P notification to %s at %s (packet size: %d)%n", 
-                target, targetUser.clientAddress, notificationPacket.remaining());
+            System.out.printf("🔔 Sending legacy P2P notification to %s at %s%n", 
+                targetUser.username, targetUser.clientAddress);
             channel.send(notificationPacket, targetUser.clientAddress);
-            System.out.printf("📤 P2P notification sent to %s about %s's request%n", target, requester);
+            System.out.printf("📤 Legacy P2P notification sent to %s about %s's request%n", 
+                targetUser.username, requesterUser.username);
             
-            System.out.printf("🎉 Unidirectional P2P initiation complete for %s -> %s%n", requester, target);
+            System.out.printf("🎉 Legacy P2P initiation complete for %s -> %s%n", 
+                requesterUser.username, targetUser.username);
             
         } catch (Exception e) {
-            System.err.printf("❌ Error handling P2P request from %s: %s%n", from, e.getMessage());
+            System.err.printf("❌ Error in legacy hole punch coordination: %s%n", e.getMessage());
             e.printStackTrace();
         }
     }
@@ -385,6 +477,10 @@ public class P2PSignalingServer extends Thread {
                         case LLS.SIG_P2P_REQUEST -> {
                             // P2P connection request - unidirectional initiation
                             handleP2PRequest(buf.duplicate(), channel, inet);
+                        }
+                        case LLS.SIG_NAT_PROFILE -> {
+                            // NAT profile from client - store for coordinated hole punching
+                            handleNATProfile(buf.duplicate(), channel, inet);
                         }
                         case LLS.SIG_HOLE -> {
                             // Modern hole punch request - single packet with IP/port info
@@ -565,5 +661,205 @@ public class P2PSignalingServer extends Thread {
         from.allDoneSentToTarget = true;
 
         System.out.printf("✅ ALL_DONE sent (%s → %s). Ports=%s%n", from.host, to.host, from.ports);
+    }
+    
+    // ============= NAT PROFILING HANDLERS =============
+    
+    /**
+     * Handles NAT profile packet from client.
+     * Stores the profile and checks if both peers have registered for coordinated hole punching.
+     */
+    private void handleNATProfile(ByteBuffer buffer, DatagramChannel channel, InetSocketAddress from) {
+        try {
+            List<Object> parsed = LLS.parseNATProfilePacket(buffer);
+            String username = (String) parsed.get(2);
+            byte natType = (Byte) parsed.get(3);
+            int minPort = (Integer) parsed.get(4);
+            int maxPort = (Integer) parsed.get(5);
+            int profiledPorts = (Integer) parsed.get(6);
+            
+            System.out.printf("📊 NAT Profile received: user=%s, type=%s, range=%d-%d, probes=%d%n",
+                username, 
+                (natType == 0x11 ? "SYMMETRIC" : "NON-SYMMETRIC"),
+                minPort, maxPort, profiledPorts);
+            
+            // Store profile
+            NAT_PROFILES.put(username, new NATProfile(natType, minPort, maxPort, profiledPorts));
+            
+            // Check if this completes a pending P2P request
+            checkAndCoordinateHolePunching(username);
+            
+        } catch (Exception e) {
+            System.err.println("❌ Failed to parse NAT profile: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Checks if both peers in a P2P connection have submitted NAT profiles.
+     * If so, sends coordinated hole punching instructions based on NAT types.
+     */
+    private void checkAndCoordinateHolePunching(String username) {
+        // Find all pending P2P requests involving this user
+        for (Map.Entry<String, PeerInfo> entry : PEER_REQUESTS.entrySet()) {
+            PeerInfo peerInfo = entry.getValue();
+            
+            // Check if both requester and target have profiles
+            if (peerInfo.username.equals(username) || peerInfo.targetUsername.equals(username)) {
+                String requester = peerInfo.username;
+                String target = peerInfo.targetUsername;
+                
+                NATProfile requesterProfile = NAT_PROFILES.get(requester);
+                NATProfile targetProfile = NAT_PROFILES.get(target);
+                
+                if (requesterProfile != null && targetProfile != null) {
+                    System.out.printf("🔗 Both profiles available for %s ↔ %s - coordinating hole punch%n", 
+                        requester, target);
+                    
+                    // Get registered user info for IP/port
+                    RegisteredUser requesterUser = REGISTERED_USERS.get(requester);
+                    RegisteredUser targetUser = REGISTERED_USERS.get(target);
+                    
+                    if (requesterUser == null || targetUser == null) {
+                        System.err.println("❌ Missing registration for users - cannot coordinate");
+                        continue;
+                    }
+                    
+                    // Determine strategy based on NAT types
+                    coordinateByNATType(requesterProfile, targetProfile, 
+                        requesterUser, targetUser, entry.getValue());
+                }
+            }
+        }
+    }
+    
+    /**
+     * Coordinates hole punching strategy based on peer NAT types.
+     * Strategies:
+     * 1. Symmetric ↔ Non-Symmetric: Burst from symmetric + scan from non-symmetric
+     * 2. Non-Symmetric ↔ Non-Symmetric: Standard hole punch (both sides single port)
+     * 3. Symmetric ↔ Symmetric: Both sides burst (experimental)
+     */
+    private void coordinateByNATType(NATProfile profile1, NATProfile profile2,
+                                     RegisteredUser user1, RegisteredUser user2,
+                                     PeerInfo peerInfo) {
+        try {
+            DatagramChannel channel = DatagramChannel.open();
+            channel.socket().setReuseAddress(true);
+            channel.bind(new InetSocketAddress(SIGNALING_PORT));
+            
+            boolean user1Symmetric = (profile1.natType == 0x11);
+            boolean user2Symmetric = (profile2.natType == 0x11);
+            
+            System.out.printf("🎯 NAT Strategy: %s (%s) ↔ %s (%s)%n",
+                user1.username, user1Symmetric ? "SYM" : "ASYM",
+                user2.username, user2Symmetric ? "SYM" : "ASYM");
+            
+            if (user1Symmetric && !user2Symmetric) {
+                // Case 1: User1 symmetric, User2 non-symmetric
+                // User1: Burst from port pool
+                // User2: Scan User1's port range
+                sendSymmetricBurstInstruction(user1, user2, profile1, channel);
+                sendAsymmetricScanInstruction(user2, user1, profile1, channel);
+                
+            } else if (!user1Symmetric && user2Symmetric) {
+                // Case 2: User1 non-symmetric, User2 symmetric (reverse of case 1)
+                sendSymmetricBurstInstruction(user2, user1, profile2, channel);
+                sendAsymmetricScanInstruction(user1, user2, profile2, channel);
+                
+            } else if (!user1Symmetric && !user2Symmetric) {
+                // Case 3: Both non-symmetric - standard hole punch
+                sendStandardHolePunchInstruction(user1, user2, channel);
+                sendStandardHolePunchInstruction(user2, user1, channel);
+                
+            } else {
+                // Case 4: Both symmetric - experimental dual burst
+                System.out.println("⚠️ Both peers symmetric - using experimental dual burst strategy");
+                sendSymmetricBurstInstruction(user1, user2, profile1, channel);
+                sendSymmetricBurstInstruction(user2, user1, profile2, channel);
+            }
+            
+            channel.close();
+            System.out.println("✅ Hole punch coordination complete");
+            
+        } catch (Exception e) {
+            System.err.println("❌ Failed to coordinate hole punching: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Sends burst instruction to symmetric NAT peer.
+     */
+    private void sendSymmetricBurstInstruction(RegisteredUser symUser, RegisteredUser targetUser, 
+                                               NATProfile symProfile, DatagramChannel channel) throws Exception {
+        int numPorts = (symProfile.maxPort - symProfile.minPort + 1) / 2; // Open N/2 ports
+        numPorts = Math.min(numPorts, 100); // Cap at 100 ports
+        
+        byte[] packet = LLS.createPunchInstructPacket(
+            symUser.username,
+            targetUser.username,
+            targetUser.publicIP,
+            targetUser.publicPort,
+            (byte) 0x01, // SYMMETRIC_BURST strategy
+            numPorts
+        );
+        
+        InetSocketAddress symAddr = new InetSocketAddress(symUser.publicIP, symUser.publicPort);
+        channel.send(ByteBuffer.wrap(packet), symAddr);
+        
+        System.out.printf("📤 SYMMETRIC BURST instruction → %s (open %d ports → %s:%d)%n",
+            symUser.username, numPorts, 
+            targetUser.publicIP.getHostAddress(), targetUser.publicPort);
+    }
+    
+    /**
+     * Sends scan instruction to non-symmetric NAT peer.
+     */
+    private void sendAsymmetricScanInstruction(RegisteredUser asymUser, RegisteredUser targetUser,
+                                               NATProfile targetProfile, DatagramChannel channel) throws Exception {
+        int rangeSize = targetProfile.maxPort - targetProfile.minPort + 1;
+        
+        byte[] packet = LLS.createPunchInstructPacket(
+            asymUser.username,
+            targetUser.username,
+            targetUser.publicIP,
+            targetProfile.minPort, // Send min port (client will scan min-max)
+            (byte) 0x02, // ASYMMETRIC_SCAN strategy
+            rangeSize
+        );
+        
+        // Embed max port in the packet (need to extend packet format)
+        // For now, client will calculate: maxPort = minPort + numPorts - 1
+        
+        InetSocketAddress asymAddr = new InetSocketAddress(asymUser.publicIP, asymUser.publicPort);
+        channel.send(ByteBuffer.wrap(packet), asymAddr);
+        
+        System.out.printf("📤 ASYMMETRIC SCAN instruction → %s (scan %d-%d on %s)%n",
+            asymUser.username, 
+            targetProfile.minPort, targetProfile.maxPort,
+            targetUser.publicIP.getHostAddress());
+    }
+    
+    /**
+     * Sends standard hole punch instruction (for non-symmetric ↔ non-symmetric).
+     */
+    private void sendStandardHolePunchInstruction(RegisteredUser user, RegisteredUser targetUser,
+                                                  DatagramChannel channel) throws Exception {
+        byte[] packet = LLS.createPunchInstructPacket(
+            user.username,
+            targetUser.username,
+            targetUser.publicIP,
+            targetUser.publicPort,
+            (byte) 0x00, // STANDARD strategy
+            1 // Single port
+        );
+        
+        InetSocketAddress userAddr = new InetSocketAddress(user.publicIP, user.publicPort);
+        channel.send(ByteBuffer.wrap(packet), userAddr);
+        
+        System.out.printf("📤 STANDARD hole punch instruction → %s (target: %s:%d)%n",
+            user.username, 
+            targetUser.publicIP.getHostAddress(), targetUser.publicPort);
     }
 }

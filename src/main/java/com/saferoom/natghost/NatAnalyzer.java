@@ -9,7 +9,8 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.security.SecureRandom;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.*;
+import java.util.stream.Collectors;
 import java.util.Enumeration;
 
 public class NatAnalyzer {
@@ -25,6 +26,25 @@ public class NatAnalyzer {
     // Multiple peer connections support
     private static final Map<String, InetSocketAddress> activePeers = new ConcurrentHashMap<>();
     private static final Map<String, Long> lastActivity = new ConcurrentHashMap<>();
+    
+    // NAT profile data
+    public static class NATProfile {
+        public byte natType;
+        public int minPort;
+        public int maxPort;
+        public int profiledPorts;
+        public List<Integer> observedPorts;
+        
+        public NATProfile(byte natType, int minPort, int maxPort, int profiledPorts, List<Integer> observedPorts) {
+            this.natType = natType;
+            this.minPort = minPort;
+            this.maxPort = maxPort;
+            this.profiledPorts = profiledPorts;
+            this.observedPorts = observedPorts;
+        }
+    }
+    
+    private static NATProfile cachedProfile = null;
 
     private static final SecureRandom RNG = new SecureRandom();
     public static final String[][] stunServers = {
@@ -641,12 +661,20 @@ public class NatAnalyzer {
                     if (!LLS.hasWholeFrame(buf)) continue;
                     byte type = LLS.peekType(buf);
                     
-                    if (type == LLS.SIG_PORT) {
+                    if (type == LLS.SIG_PUNCH_INSTRUCT) {
+                        // Server sent intelligent hole punch instruction
+                        System.out.println("[P2P] 🧠 Received intelligent punch instruction from server");
+                        handlePunchInstruction(buf.duplicate());
+                        peerInfoReceived = true; // Consider instruction as coordination complete
+                        peerSelector.close();
+                        return true; // Strategy already executed, no need for legacy hole punch
+                    } else if (type == LLS.SIG_PORT) {
+                        // Legacy: Server sent peer info directly
                         List<Object> info = LLS.parsePortInfo(buf.duplicate());
                         peerIP = (InetAddress) info.get(0);
                         peerPort = (Integer) info.get(1);
                         peerInfoReceived = true;
-                        System.out.printf("[P2P] Peer info received: %s:%d%n", peerIP, peerPort);
+                        System.out.printf("[P2P] Legacy peer info received: %s:%d%n", peerIP, peerPort);
                         break;
                     }
                 }
@@ -658,7 +686,7 @@ public class NatAnalyzer {
                 return false;
             }
             
-            // Step 3: Start hole punching process (same as before)
+            // Step 3: Start hole punching process (ONLY for legacy path)
             InetSocketAddress peerAddr = new InetSocketAddress(peerIP, peerPort);
             boolean success = performDirectHolePunching(peerAddr, targetUsername);
             
@@ -953,6 +981,495 @@ public class NatAnalyzer {
             System.out.println("[P2P] All connections closed");
         } catch (Exception e) {
             System.err.println("[P2P] Error closing all connections: " + e.getMessage());
+        }
+    }
+    
+    // ============= NAT PORT PROFILING SYSTEM =============
+    
+    /**
+     * Profiles the NAT behavior intelligently:
+     * 1. First detects NAT type using existing analyzeSinglePort() method
+     * 2. If NON-SYMMETRIC: Returns profile with single port (no need for 1000 queries)
+     * 3. If SYMMETRIC: Performs deep profiling with 1000+ queries to map port range
+     * 
+     * This avoids unnecessary STUN traffic for non-symmetric NAT users.
+     * 
+     * @param maxProbeCount Maximum number of STUN queries (only used for symmetric NAT)
+     * @return NATProfile containing NAT type and port range information
+     */
+    public static NATProfile profileNATBehavior(int maxProbeCount) {
+        System.out.println("[NAT-PROFILE] Starting intelligent NAT profiling...");
+        
+        try {
+            // PHASE 1: Detect NAT type using existing method
+            System.out.println("[NAT-PROFILE] Phase 1: Detecting NAT type...");
+            byte natType = analyzeSinglePort(stunServers);
+            
+            if (natType == (byte)0xFE) {
+                System.err.println("[NAT-PROFILE] NAT detection failed!");
+                return null;
+            }
+            
+            String natTypeStr = (natType == 0x11) ? "SYMMETRIC" : "NON-SYMMETRIC";
+            System.out.println("[NAT-PROFILE] Detected NAT type: " + natTypeStr);
+            
+            // PHASE 2: If NON-SYMMETRIC, no need for deep profiling
+            if (natType == 0x00) {
+                System.out.println("[NAT-PROFILE] Non-Symmetric NAT detected - using single stable port");
+                
+                // Use the public port from the detection phase
+                if (Public_PortList.isEmpty()) {
+                    System.err.println("[NAT-PROFILE] No public port available!");
+                    return null;
+                }
+                
+                int stablePort = Public_PortList.get(0);
+                System.out.println("[NAT-PROFILE] Stable port: " + stablePort);
+                
+                // Create profile with single port (min = max = stable port)
+                NATProfile profile = new NATProfile(
+                    natType, 
+                    stablePort, 
+                    stablePort, 
+                    1, // Only 1 probe needed
+                    Collections.singletonList(stablePort)
+                );
+                
+                cachedProfile = profile;
+                System.out.println("[NAT-PROFILE] ✅ Profile complete (Non-Symmetric - no deep profiling needed)");
+                return profile;
+            }
+            
+            // PHASE 3: SYMMETRIC NAT - perform deep profiling to map port range
+            System.out.println("[NAT-PROFILE] Symmetric NAT detected - performing deep port profiling with " + maxProbeCount + " probes...");
+            
+            List<Integer> observedPorts = new ArrayList<>();
+            ExecutorService executor = Executors.newFixedThreadPool(20); // Parallel STUN queries
+            List<Future<Integer>> futures = new ArrayList<>();
+            
+            // Launch parallel STUN queries
+            for (int i = 0; i < maxProbeCount; i++) {
+                final int probeIndex = i;
+                futures.add(executor.submit(() -> {
+                    try {
+                        return querySingleSTUNPort(probeIndex);
+                    } catch (Exception e) {
+                        System.err.println("[NAT-PROFILE] Probe " + probeIndex + " failed: " + e.getMessage());
+                        return null;
+                    }
+                }));
+            }
+            
+            // Collect results
+            int successCount = 0;
+            for (Future<Integer> future : futures) {
+                try {
+                    Integer port = future.get(10, TimeUnit.SECONDS);
+                    if (port != null && port > 0) {
+                        synchronized (observedPorts) {
+                            observedPorts.add(port);
+                        }
+                        successCount++;
+                        
+                        // Progress indicator every 100 samples
+                        if (successCount % 100 == 0) {
+                            System.out.println("[NAT-PROFILE] Collected " + successCount + "/" + maxProbeCount + " samples...");
+                        }
+                    }
+                } catch (TimeoutException e) {
+                    System.err.println("[NAT-PROFILE] Probe timed out");
+                } catch (Exception e) {
+                    System.err.println("[NAT-PROFILE] Error collecting probe result: " + e.getMessage());
+                }
+            }
+            
+            executor.shutdown();
+            
+            if (observedPorts.isEmpty()) {
+                System.err.println("[NAT-PROFILE] Failed to collect any port samples!");
+                return null;
+            }
+            
+            // Analyze port behavior for symmetric NAT
+            NATProfile profile = analyzePortBehavior(observedPorts);
+            profile.natType = 0x11; // Force to symmetric (we already detected it)
+            cachedProfile = profile;
+            
+            System.out.println("[NAT-PROFILE] ✅ Symmetric NAT profile complete:");
+            System.out.println("  Port Range: " + profile.minPort + " - " + profile.maxPort);
+            System.out.println("  Sampled Ports: " + profile.profiledPorts);
+            System.out.println("  Unique Ports: " + new HashSet<>(observedPorts).size());
+            
+            return profile;
+            
+        } catch (Exception e) {
+            System.err.println("[NAT-PROFILE] Profiling failed: " + e.getMessage());
+            e.printStackTrace();
+            return null;
+        }
+    }
+    
+    /**
+     * Sends a single STUN query on a new ephemeral port and returns the observed external port.
+     */
+    private static Integer querySingleSTUNPort(int probeIndex) throws Exception {
+        DatagramChannel channel = null;
+        try {
+            // Create ephemeral socket (OS assigns local port)
+            channel = DatagramChannel.open();
+            channel.socket().setReuseAddress(true);
+            channel.bind(new InetSocketAddress(0)); // Bind to random port
+            channel.configureBlocking(false);
+            
+            // Select random STUN server
+            String[] stunServer = stunServers[probeIndex % stunServers.length];
+            InetSocketAddress stunAddr = new InetSocketAddress(
+                InetAddress.getByName(stunServer[0]), 
+                Integer.parseInt(stunServer[1])
+            );
+            
+            // Send STUN binding request
+            ByteBuffer request = stunPacket();
+            channel.send(request, stunAddr);
+            
+            // Wait for response
+            Selector selector = Selector.open();
+            channel.register(selector, SelectionKey.OP_READ);
+            
+            long deadline = System.currentTimeMillis() + 3000; // 3 second timeout
+            while (System.currentTimeMillis() < deadline) {
+                if (selector.select(500) > 0) {
+                    ByteBuffer response = ByteBuffer.allocate(512);
+                    channel.receive(response);
+                    response.flip();
+                    
+                    // Parse MAPPED-ADDRESS or XOR-MAPPED-ADDRESS
+                    Integer port = extractPortFromSTUN(response);
+                    if (port != null) {
+                        selector.close();
+                        return port;
+                    }
+                }
+            }
+            
+            selector.close();
+            return null;
+            
+        } finally {
+            if (channel != null && channel.isOpen()) {
+                channel.close();
+            }
+        }
+    }
+    
+    /**
+     * Extracts the external port from a STUN response packet.
+     */
+    private static Integer extractPortFromSTUN(ByteBuffer buffer) {
+        if (buffer.remaining() < 20) return null;
+        
+        buffer.position(20); // Skip STUN header
+        
+        while (buffer.remaining() >= 4) {
+            short attrType = buffer.getShort();
+            short attrLen = buffer.getShort();
+            
+            if (attrLen < 0 || attrLen > buffer.remaining()) break;
+            
+            // MAPPED-ADDRESS (0x0001) or XOR-MAPPED-ADDRESS (0x0020)
+            if (attrType == 0x0001 || attrType == 0x0020) {
+                if (attrLen >= 8) {
+                    buffer.get(); // Skip reserved byte
+                    byte family = buffer.get();
+                    int port = buffer.getShort() & 0xFFFF;
+                    
+                    // XOR port if needed
+                    if (attrType == 0x0020) {
+                        port ^= 0x2112; // XOR with magic cookie high 16 bits
+                    }
+                    
+                    return port;
+                }
+            } else {
+                // Skip unknown attribute
+                buffer.position(buffer.position() + attrLen);
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Analyzes the list of observed ports to determine NAT type and port range.
+     */
+    private static NATProfile analyzePortBehavior(List<Integer> ports) {
+        Set<Integer> uniquePorts = new HashSet<>(ports);
+        int minPort = Collections.min(ports);
+        int maxPort = Collections.max(ports);
+        
+        // Heuristic: If >5% of probes resulted in unique ports, classify as symmetric
+        double uniqueRatio = (double) uniquePorts.size() / ports.size();
+        byte natType;
+        
+        if (uniqueRatio > 0.05) {
+            natType = 0x11; // SYMMETRIC NAT
+            System.out.println("[NAT-PROFILE] Detected SYMMETRIC NAT (unique ratio: " 
+                + String.format("%.2f%%", uniqueRatio * 100) + ")");
+        } else {
+            natType = 0x00; // NON-SYMMETRIC NAT
+            System.out.println("[NAT-PROFILE] Detected NON-SYMMETRIC NAT (unique ratio: " 
+                + String.format("%.2f%%", uniqueRatio * 100) + ")");
+        }
+        
+        return new NATProfile(natType, minPort, maxPort, ports.size(), 
+            new ArrayList<>(uniquePorts).stream().sorted().collect(Collectors.toList()));
+    }
+    
+    /**
+     * Sends the NAT profile to the server for coordinated hole punching.
+     */
+    public static void sendNATProfileToServer(String username, InetSocketAddress serverAddr) {
+        if (cachedProfile == null) {
+            System.err.println("[NAT-PROFILE] No cached profile available! Run profileNATBehavior() first.");
+            return;
+        }
+        
+        try {
+            byte[] packet = LLS.createNATProfilePacket(
+                username,
+                cachedProfile.natType,
+                cachedProfile.minPort,
+                cachedProfile.maxPort,
+                cachedProfile.profiledPorts
+            );
+            
+            if (stunChannel != null && stunChannel.isOpen()) {
+                stunChannel.send(ByteBuffer.wrap(packet), serverAddr);
+                System.out.println("[NAT-PROFILE] Sent profile to server: " + serverAddr);
+            } else {
+                System.err.println("[NAT-PROFILE] STUN channel not available!");
+            }
+        } catch (Exception e) {
+            System.err.println("[NAT-PROFILE] Failed to send profile to server: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Symmetric NAT side: Opens a pool of UDP sockets and sends burst packets to target.
+     * This creates multiple NAT mapping holes that converge on the target's stable port.
+     * 
+     * @param targetIP The non-symmetric peer's public IP
+     * @param targetPort The non-symmetric peer's stable port
+     * @param numPorts Number of ports to open (typically N/2 from profiled range)
+     */
+    public static void symmetricPortPoolExpansion(InetAddress targetIP, int targetPort, int numPorts) {
+        System.out.println("[SYMMETRIC-PUNCH] Starting port pool expansion: " + numPorts + " ports -> " 
+            + targetIP.getHostAddress() + ":" + targetPort);
+        
+        ExecutorService executor = Executors.newFixedThreadPool(Math.min(numPorts, 50));
+        List<DatagramChannel> channels = new ArrayList<>();
+        
+        try {
+            // Phase 1: Open pool of sockets
+            for (int i = 0; i < numPorts; i++) {
+                final int index = i;
+                executor.submit(() -> {
+                    try {
+                        DatagramChannel channel = DatagramChannel.open();
+                        channel.socket().setReuseAddress(true);
+                        channel.bind(new InetSocketAddress(0)); // Ephemeral port
+                        synchronized (channels) {
+                            channels.add(channel);
+                        }
+                        
+                        // Phase 2: Send burst packets
+                        InetSocketAddress target = new InetSocketAddress(targetIP, targetPort);
+                        ByteBuffer payload = ByteBuffer.allocate(64);
+                        payload.put(LLS.SIG_HOLE);
+                        payload.put(("SYM-BURST-" + index).getBytes());
+                        payload.flip();
+                        
+                        for (int burst = 0; burst < 5; burst++) {
+                            payload.rewind();
+                            channel.send(payload, target);
+                            Thread.sleep(20); // 20ms between bursts
+                        }
+                        
+                        System.out.println("[SYMMETRIC-PUNCH] Port " + index + " sent burst");
+                        
+                    } catch (Exception e) {
+                        System.err.println("[SYMMETRIC-PUNCH] Port " + index + " failed: " + e.getMessage());
+                    }
+                });
+            }
+            
+            // Wait for all bursts to complete
+            executor.shutdown();
+            executor.awaitTermination(10, TimeUnit.SECONDS);
+            
+            System.out.println("[SYMMETRIC-PUNCH] Port pool expansion complete. " + channels.size() + " channels opened.");
+            
+        } catch (Exception e) {
+            System.err.println("[SYMMETRIC-PUNCH] Pool expansion failed: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            // Cleanup channels
+            for (DatagramChannel channel : channels) {
+                try {
+                    if (channel.isOpen()) channel.close();
+                } catch (Exception ignored) {}
+            }
+        }
+    }
+    
+    /**
+     * Asymmetric NAT side: Scans the symmetric peer's port range to find the active mapping.
+     * Sends discovery packets across the predicted port range.
+     * 
+     * @param targetIP The symmetric peer's public IP
+     * @param minPort Start of the port range
+     * @param maxPort End of the port range
+     */
+    public static void scanPortRange(InetAddress targetIP, int minPort, int maxPort) {
+        System.out.println("[ASYMMETRIC-SCAN] Scanning port range: " + minPort + "-" + maxPort 
+            + " on " + targetIP.getHostAddress());
+        
+        int rangeSize = maxPort - minPort + 1;
+        ExecutorService executor = Executors.newFixedThreadPool(Math.min(rangeSize, 100));
+        
+        try {
+            for (int port = minPort; port <= maxPort; port++) {
+                final int targetPort = port;
+                executor.submit(() -> {
+                    try {
+                        if (stunChannel != null && stunChannel.isOpen()) {
+                            InetSocketAddress target = new InetSocketAddress(targetIP, targetPort);
+                            ByteBuffer payload = ByteBuffer.allocate(64);
+                            payload.put(LLS.SIG_HOLE);
+                            payload.put(("ASYM-SCAN-" + targetPort).getBytes());
+                            payload.flip();
+                            
+                            stunChannel.send(payload, target);
+                        }
+                    } catch (Exception e) {
+                        // Ignore individual failures (port might not be open)
+                    }
+                });
+            }
+            
+            executor.shutdown();
+            executor.awaitTermination(5, TimeUnit.SECONDS);
+            
+            System.out.println("[ASYMMETRIC-SCAN] Port range scan complete: " + rangeSize + " ports probed");
+            
+        } catch (Exception e) {
+            System.err.println("[ASYMMETRIC-SCAN] Range scan failed: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Returns the cached NAT profile (if available).
+     */
+    public static NATProfile getCachedProfile() {
+        return cachedProfile;
+    }
+    
+    // ============= CLIENT-SIDE PUNCH INSTRUCTION HANDLER =============
+    
+    /**
+     * Handles SIG_PUNCH_INSTRUCT packet from server.
+     * Server coordinates hole punching based on NAT types of both peers.
+     * 
+     * Strategy codes:
+     * - 0x00: STANDARD (both non-symmetric)
+     * - 0x01: SYMMETRIC_BURST (symmetric side)
+     * - 0x02: ASYMMETRIC_SCAN (non-symmetric side scanning symmetric peer)
+     */
+    public static void handlePunchInstruction(ByteBuffer buffer) {
+        try {
+            List<Object> parsed = LLS.parsePunchInstructPacket(buffer);
+            String username = (String) parsed.get(2);
+            String target = (String) parsed.get(3);
+            InetAddress targetIP = (InetAddress) parsed.get(4);
+            int targetPort = (Integer) parsed.get(5);
+            byte strategy = (Byte) parsed.get(6);
+            int numPorts = (Integer) parsed.get(7);
+            
+            System.out.printf("[P2P-INSTRUCT] 📨 Received punch instruction from server%n");
+            System.out.printf("  User: %s → Target: %s%n", username, target);
+            System.out.printf("  Target IP: %s:%d%n", targetIP.getHostAddress(), targetPort);
+            System.out.printf("  Strategy: 0x%02X, Ports: %d%n", strategy, numPorts);
+            
+            switch (strategy) {
+                case 0x01 -> {
+                    // SYMMETRIC_BURST: Open port pool and send bursts
+                    System.out.println("[P2P-INSTRUCT] 🔥 Executing SYMMETRIC BURST strategy");
+                    System.out.printf("  Opening %d ports, sending bursts to %s:%d%n", 
+                        numPorts, targetIP.getHostAddress(), targetPort);
+                    symmetricPortPoolExpansion(targetIP, targetPort, numPorts);
+                }
+                case 0x02 -> {
+                    // ASYMMETRIC_SCAN: Scan port range
+                    System.out.println("[P2P-INSTRUCT] 🔍 Executing ASYMMETRIC SCAN strategy");
+                    int maxPort = targetPort + numPorts - 1;
+                    System.out.printf("  Scanning port range %d-%d on %s%n", 
+                        targetPort, maxPort, targetIP.getHostAddress());
+                    scanPortRange(targetIP, targetPort, maxPort);
+                }
+                case 0x00 -> {
+                    // STANDARD: Basic hole punch
+                    System.out.println("[P2P-INSTRUCT] ⚡ Executing STANDARD hole punch");
+                    System.out.printf("  Punching to %s:%d%n", 
+                        targetIP.getHostAddress(), targetPort);
+                    executeStandardHolePunch(targetIP, targetPort, target);
+                }
+                default -> {
+                    System.err.printf("[P2P-INSTRUCT] ❌ Unknown strategy: 0x%02X%n", strategy);
+                }
+            }
+            
+        } catch (Exception e) {
+            System.err.println("[P2P-INSTRUCT] ❌ Failed to handle punch instruction: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Executes standard hole punch (for non-symmetric ↔ non-symmetric).
+     * Sends multiple packets to establish NAT mapping.
+     */
+    private static void executeStandardHolePunch(InetAddress targetIP, int targetPort, String targetUsername) {
+        try {
+            if (stunChannel == null || !stunChannel.isOpen()) {
+                System.err.println("[P2P-INSTRUCT] ❌ No active STUN channel!");
+                return;
+            }
+            
+            InetSocketAddress targetAddr = new InetSocketAddress(targetIP, targetPort);
+            System.out.printf("[STANDARD-PUNCH] 📤 Sending hole punch packets to %s%n", targetAddr);
+            
+            // Send 10 packets over 1 second to establish mapping
+            for (int i = 0; i < 10; i++) {
+                ByteBuffer payload = ByteBuffer.allocate(64);
+                payload.put(LLS.SIG_HOLE);
+                payload.put(("PUNCH-" + i).getBytes());
+                payload.flip();
+                
+                stunChannel.send(payload, targetAddr);
+                Thread.sleep(100); // 100ms interval
+            }
+            
+            System.out.println("[STANDARD-PUNCH] ✅ Standard hole punch complete");
+            
+            // Register peer for incoming messages
+            activePeers.put(targetUsername, targetAddr);
+            lastActivity.put(targetUsername, System.currentTimeMillis());
+            
+        } catch (Exception e) {
+            System.err.println("[STANDARD-PUNCH] ❌ Failed: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 }

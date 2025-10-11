@@ -21,6 +21,8 @@ public class LLS {
     public static final byte SIG_REGISTER  = 0x18; // client -> server (register user with NAT info)
     public static final byte SIG_P2P_REQUEST = 0x19; // client -> server (request P2P connection to target)
     public static final byte SIG_P2P_NOTIFY = 0x1A; // server -> client (notify about incoming P2P request)
+    public static final byte SIG_NAT_PROFILE = 0x1B; // client -> server (NAT type + port range profile)
+    public static final byte SIG_PUNCH_INSTRUCT = 0x1C; // server -> client (coordinated hole punch instructions)
 
     // ---- COMMON HELPERS ----
     private static void putFixedString(ByteBuffer buf, String str, int len) {
@@ -443,6 +445,79 @@ public class LLS {
     public static List<Object> parseP2PNotifyPacket(ByteBuffer buffer) throws UnknownHostException {
         // Same structure as extended hole packet
         return parseExtendedHolePacket(buffer); // [type, len, requester, target, publicIP, publicPort, localIP, localPort]
+    }
+
+    // NEW: Create NAT profile packet
+    // Structure: type(1) + len(2) + user(20) + natType(1) + minPort(4) + maxPort(4) + profiledPorts(4) = 36 bytes
+    public static byte[] createNATProfilePacket(String username, byte natType, int minPort, int maxPort, int profiledPorts) {
+        ByteBuffer buffer = ByteBuffer.allocate(36);
+        buffer.put(SIG_NAT_PROFILE);
+        buffer.putShort((short) 36);
+        putFixedString(buffer, username, 20);
+        buffer.put(natType);
+        buffer.putInt(minPort);
+        buffer.putInt(maxPort);
+        buffer.putInt(profiledPorts);
+        return buffer.array();
+    }
+
+    // NEW: Parse NAT profile packet
+    public static List<Object> parseNATProfilePacket(ByteBuffer buffer) {
+        List<Object> parsed = new ArrayList<>();
+        byte type = buffer.get();
+        parsed.add(type);
+        short len = buffer.getShort();
+        parsed.add((int) len);
+        String user = getFixedString(buffer, 20);
+        parsed.add(user);
+        byte natType = buffer.get();
+        parsed.add(natType);
+        int minPort = buffer.getInt();
+        parsed.add(minPort);
+        int maxPort = buffer.getInt();
+        parsed.add(maxPort);
+        int profiledPorts = buffer.getInt();
+        parsed.add(profiledPorts);
+        return parsed; // [type, len, user, natType, minPort, maxPort, profiledPorts]
+    }
+
+    // NEW: Create punch instruction packet for symmetric NAT side
+    // Structure: type(1) + len(2) + user(20) + target(20) + targetIP(4) + targetPort(4) + strategy(1) + numPorts(4) = 56 bytes
+    public static byte[] createPunchInstructPacket(String username, String target, InetAddress targetIP, int targetPort, byte strategy, int numPorts) {
+        ByteBuffer buffer = ByteBuffer.allocate(56);
+        buffer.put(SIG_PUNCH_INSTRUCT);
+        buffer.putShort((short) 56);
+        putFixedString(buffer, username, 20);
+        putFixedString(buffer, target, 20);
+        buffer.put(targetIP.getAddress());
+        buffer.putInt(targetPort);
+        buffer.put(strategy); // 0x01 = symmetric burst, 0x02 = asymmetric scan
+        buffer.putInt(numPorts);
+        return buffer.array();
+    }
+
+    // NEW: Parse punch instruction packet
+    public static List<Object> parsePunchInstructPacket(ByteBuffer buffer) throws UnknownHostException {
+        List<Object> parsed = new ArrayList<>();
+        byte type = buffer.get();
+        parsed.add(type);
+        short len = buffer.getShort();
+        parsed.add((int) len);
+        String user = getFixedString(buffer, 20);
+        parsed.add(user);
+        String target = getFixedString(buffer, 20);
+        parsed.add(target);
+        byte[] ipBytes = new byte[4];
+        buffer.get(ipBytes);
+        InetAddress targetIP = InetAddress.getByAddress(ipBytes);
+        parsed.add(targetIP);
+        int targetPort = buffer.getInt();
+        parsed.add(targetPort);
+        byte strategy = buffer.get();
+        parsed.add(strategy);
+        int numPorts = buffer.getInt();
+        parsed.add(numPorts);
+        return parsed; // [type, len, user, target, targetIP, targetPort, strategy, numPorts]
     }
 
 }
