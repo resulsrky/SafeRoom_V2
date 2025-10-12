@@ -26,6 +26,9 @@ public class NatAnalyzer {
     private static DatagramChannel stunChannel = null;
     private static int localPort = 0;
     
+    // Global KeepAliveManager instance (ONE per application)
+    private static KeepAliveManager globalKeepAlive = null;
+    
     // Multiple peer connections support
     private static final Map<String, InetSocketAddress> activePeers = new ConcurrentHashMap<>();
     private static final Map<String, Long> lastActivity = new ConcurrentHashMap<>();
@@ -488,11 +491,16 @@ public class NatAnalyzer {
             return false;
         }
         
-        // Setup keep-alive manager with integrated message listening
-        KeepAliveManager keepAlive = new KeepAliveManager(3_000);
-        keepAlive.installShutdownHook();
-        keepAlive.register(stunChannel, peerAddr);
-        keepAlive.startMessageListening(stunChannel); // Integrated message listening
+        // Initialize global KeepAliveManager ONCE if not already started
+        if (globalKeepAlive == null) {
+            System.out.println("[P2P] 🔧 Initializing global KeepAliveManager");
+            globalKeepAlive = new KeepAliveManager(3_000);
+            globalKeepAlive.installShutdownHook();
+            globalKeepAlive.startMessageListening(stunChannel); // Start integrated message listening
+        }
+        
+        // Register this peer with global KeepAliveManager
+        globalKeepAlive.register(stunChannel, peerAddr);
         
         peerSelector.close();
         
@@ -980,11 +988,16 @@ public class NatAnalyzer {
                 return false;
             }
             
-            // Setup keep-alive and messaging
-            KeepAliveManager keepAlive = new KeepAliveManager(3_000);
-            keepAlive.installShutdownHook();
-            keepAlive.register(stunChannel, peerAddr);
-            keepAlive.startMessageListening(stunChannel);
+            // Initialize global KeepAliveManager if not already started
+            if (globalKeepAlive == null) {
+                System.out.println("[P2P] 🔧 Initializing global KeepAliveManager");
+                globalKeepAlive = new KeepAliveManager(3_000);
+                globalKeepAlive.installShutdownHook();
+                globalKeepAlive.startMessageListening(stunChannel);
+            }
+            
+            // Register this peer with global KeepAliveManager
+            globalKeepAlive.register(stunChannel, peerAddr);
             
             // Store peer address for messaging
             activePeers.put(targetUsername, peerAddr);
@@ -1525,10 +1538,13 @@ public class NatAnalyzer {
                     }
                 }
                 
-                // TODO: Register peer and start keep-alive
-                System.out.println("[SYMMETRIC-PUNCH] 💓 Registering peer and starting keep-alive");
+                // Register peer with activePeers map
+                System.out.println("[SYMMETRIC-PUNCH] 💓 Registering peer");
                 activePeers.put(targetUsername, peer);
                 lastActivity.put(targetUsername, System.currentTimeMillis());
+                
+                // WARNING: workingChannel != stunChannel!
+                // Start dedicated keep-alive thread for this channel
                 startKeepAlive(workingChannel, peer, targetUsername);
                 System.out.println("[SYMMETRIC-PUNCH] ✅ Connection ready for messaging");
                 
@@ -1624,11 +1640,18 @@ public class NatAnalyzer {
                             
                             connectionEstablished = true;
                             
-                            // Register peer and start keep-alive
-                            System.out.println("[ASYMMETRIC-SCAN] 💓 Registering peer and starting keep-alive");
+                            // Register peer with global KeepAliveManager
+                            System.out.println("[ASYMMETRIC-SCAN] 💓 Registering peer with KeepAliveManager");
+                            if (globalKeepAlive == null) {
+                                System.out.println("[ASYMMETRIC-SCAN] 🔧 Initializing global KeepAliveManager");
+                                globalKeepAlive = new KeepAliveManager(3_000);
+                                globalKeepAlive.installShutdownHook();
+                                globalKeepAlive.startMessageListening(stunChannel);
+                            }
+                            globalKeepAlive.register(stunChannel, sender);
+                            
                             activePeers.put(targetUsername, sender);
                             lastActivity.put(targetUsername, System.currentTimeMillis());
-                            startKeepAlive(stunChannel, sender, targetUsername);
                             System.out.println("[ASYMMETRIC-SCAN] ✅ Connection ready for messaging");
                             break;
                         }
@@ -1861,12 +1884,14 @@ public class NatAnalyzer {
                     }
                 }
                 
-                // Register peer
+                // Register peer with activePeers map
                 activePeers.put(targetUsername, peer);
                 lastActivity.put(targetUsername, System.currentTimeMillis());
                 
-                // Start keep-alive
-                System.out.println("[BIRTHDAY-PARADOX] 💓 Starting keep-alive on established channel");
+                // WARNING: workingChannel != stunChannel!
+                // We need to ensure messages use the same channel as keep-alive
+                // For now, start a dedicated keep-alive thread for this channel
+                System.out.println("[BIRTHDAY-PARADOX] 💓 Starting dedicated keep-alive for working channel");
                 startKeepAlive(workingChannel, peer, targetUsername);
                 
             } else {
@@ -1982,12 +2007,19 @@ public class NatAnalyzer {
                         
                         peerResponseReceived = true;
                         
-                        // Register peer
+                        // Register peer with global KeepAliveManager
+                        if (globalKeepAlive == null) {
+                            System.out.println("[STANDARD-PUNCH] 🔧 Initializing global KeepAliveManager");
+                            globalKeepAlive = new KeepAliveManager(3_000);
+                            globalKeepAlive.installShutdownHook();
+                            globalKeepAlive.startMessageListening(stunChannel);
+                        }
+                        globalKeepAlive.register(stunChannel, sender);
+                        
                         activePeers.put(targetUsername, sender);
                         lastActivity.put(targetUsername, System.currentTimeMillis());
                         
-                        System.out.println("[STANDARD-PUNCH] 💓 Starting keep-alive mechanism");
-                        startKeepAlive(stunChannel, sender, targetUsername);
+                        System.out.println("[STANDARD-PUNCH] 💓 Peer registered with KeepAliveManager");
                         break;
                     }
                 }
