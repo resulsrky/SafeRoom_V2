@@ -121,6 +121,47 @@ public final class KeepAliveManager implements AutoCloseable {
                         
                         if (type == LLS.SIG_MESSAGE) {
                             System.out.println("[KA] 🎯 SIG_MESSAGE detected - forwarding to NatAnalyzer");
+                            
+                            // 🔄 UPDATE PEER ADDRESS - Peer may have switched to different port!
+                            try {
+                                // Parse message to get sender username
+                                ByteBuffer msgBuf = buf.duplicate();
+                                msgBuf.get(); // Skip type
+                                msgBuf.getShort(); // Skip length
+                                byte[] senderBytes = new byte[20];
+                                msgBuf.get(senderBytes);
+                                String sender = new String(senderBytes).trim();
+                                
+                                // Update activePeers with new address
+                                java.lang.reflect.Field activePeersField = Class.forName("com.saferoom.natghost.NatAnalyzer")
+                                    .getDeclaredField("activePeers");
+                                activePeersField.setAccessible(true);
+                                @SuppressWarnings("unchecked")
+                                Map<String, InetSocketAddress> activePeers = 
+                                    (Map<String, InetSocketAddress>) activePeersField.get(null);
+                                
+                                InetSocketAddress oldAddr = activePeers.get(sender);
+                                InetSocketAddress newAddr = (InetSocketAddress) from;
+                                
+                                if (oldAddr == null || !oldAddr.equals(newAddr)) {
+                                    activePeers.put(sender, newAddr);
+                                    System.out.printf("[KA-UPDATE] 🔄 Updated %s address: %s → %s%n", 
+                                        sender, oldAddr, newAddr);
+                                }
+                                
+                                // Update last activity
+                                java.lang.reflect.Field lastActivityField = Class.forName("com.saferoom.natghost.NatAnalyzer")
+                                    .getDeclaredField("lastActivity");
+                                lastActivityField.setAccessible(true);
+                                @SuppressWarnings("unchecked")
+                                Map<String, Long> lastActivity = 
+                                    (Map<String, Long>) lastActivityField.get(null);
+                                lastActivity.put(sender, System.currentTimeMillis());
+                                
+                            } catch (Exception e) {
+                                System.err.println("[KA] Warning: Could not update peer address: " + e.getMessage());
+                            }
+                            
                             // Forward to NatAnalyzer for processing
                             try {
                                 java.lang.reflect.Method method = Class.forName("com.saferoom.natghost.NatAnalyzer")
@@ -157,8 +198,44 @@ public final class KeepAliveManager implements AutoCloseable {
                                 e.printStackTrace();
                             }
                         } else if (type == LLS.SIG_DNS_QUERY) {
-                            // Keep-alive DNS packet - ignore
-                            System.out.printf("[KA] 🔄 Keep-alive DNS from %s (ignoring)%n", from);
+                            // Keep-alive DNS packet - UPDATE PEER ADDRESS if needed
+                            System.out.printf("[KA] 🔄 Keep-alive DNS from %s%n", from);
+                            
+                            // 🔄 Try to identify sender and update address
+                            try {
+                                java.lang.reflect.Field activePeersField = Class.forName("com.saferoom.natghost.NatAnalyzer")
+                                    .getDeclaredField("activePeers");
+                                activePeersField.setAccessible(true);
+                                @SuppressWarnings("unchecked")
+                                Map<String, InetSocketAddress> activePeers = 
+                                    (Map<String, InetSocketAddress>) activePeersField.get(null);
+                                
+                                // Find which peer this address belongs to by IP
+                                InetSocketAddress fromAddr = (InetSocketAddress) from;
+                                for (Map.Entry<String, InetSocketAddress> entry : activePeers.entrySet()) {
+                                    if (entry.getValue().getAddress().equals(fromAddr.getAddress())) {
+                                        // Same IP, but port may have changed
+                                        if (!entry.getValue().equals(fromAddr)) {
+                                            InetSocketAddress oldAddr = entry.getValue();
+                                            activePeers.put(entry.getKey(), fromAddr);
+                                            System.out.printf("[KA-UPDATE] 🔄 Updated %s address: %s → %s (from DNS keepalive)%n", 
+                                                entry.getKey(), oldAddr, fromAddr);
+                                        }
+                                        
+                                        // Update last activity
+                                        java.lang.reflect.Field lastActivityField = Class.forName("com.saferoom.natghost.NatAnalyzer")
+                                            .getDeclaredField("lastActivity");
+                                        lastActivityField.setAccessible(true);
+                                        @SuppressWarnings("unchecked")
+                                        Map<String, Long> lastActivity = 
+                                            (Map<String, Long>) lastActivityField.get(null);
+                                        lastActivity.put(entry.getKey(), System.currentTimeMillis());
+                                        break;
+                                    }
+                                }
+                            } catch (Exception e) {
+                                System.err.println("[KA] Warning: Could not update peer from DNS: " + e.getMessage());
+                            }
                         } else if (type == LLS.SIG_PUNCH_BURST) {
                             System.out.printf("[KA] 🎯 SIG_PUNCH_BURST detected from %s%n", from);
                             
