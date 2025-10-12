@@ -1,6 +1,7 @@
 package com.saferoom.natghost;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
@@ -22,6 +23,16 @@ public final class KeepAliveManager implements AutoCloseable {
     // Message listening support
     private Thread messageListenerThread = null;
     private volatile boolean listening = false;
+    
+    // 🔒 SERVER IP BLACKLIST - Never accept burst packets from signaling server!
+    private static InetAddress SERVER_IP = null;
+    static {
+        try {
+            SERVER_IP = InetAddress.getByName("35.198.64.68"); // Google Cloud signaling server
+        } catch (Exception e) {
+            System.err.println("⚠️ Failed to resolve server IP for blacklist: " + e.getMessage());
+        }
+    }
 
     public KeepAliveManager(long intervalMs) {
         this.intervalMs = intervalMs;
@@ -149,7 +160,18 @@ public final class KeepAliveManager implements AutoCloseable {
                             // Keep-alive DNS packet - ignore
                             System.out.printf("[KA] 🔄 Keep-alive DNS from %s (ignoring)%n", from);
                         } else if (type == LLS.SIG_PUNCH_BURST) {
-                            System.out.printf("[KA] 🎯 SIG_PUNCH_BURST detected from %s - AUTO-RESPONDING%n", from);
+                            System.out.printf("[KA] 🎯 SIG_PUNCH_BURST detected from %s%n", from);
+                            
+                            // 🔒 BLACKLIST CHECK: NEVER accept burst packets from signaling server!
+                            InetSocketAddress senderAddr = (InetSocketAddress) from;
+                            if (SERVER_IP != null && senderAddr.getAddress().equals(SERVER_IP)) {
+                                System.out.printf("[KA-BURST] ⛔ BLOCKED: Burst from SIGNALING SERVER %s - THIS SHOULD NEVER HAPPEN!%n", from);
+                                System.out.println("[KA-BURST] ⛔ Server should COORDINATE, not send burst packets!");
+                                continue; // Ignore server burst packets
+                            }
+                            
+                            System.out.println("[KA-BURST] ✅ Source validated - AUTO-RESPONDING");
+                            
                             // Auto-respond to burst packets to establish bidirectional NAT mapping
                             try {
                                 // Parse burst packet to get usernames

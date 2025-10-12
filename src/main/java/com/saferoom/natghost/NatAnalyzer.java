@@ -1484,18 +1484,29 @@ public class NatAnalyzer {
                             ByteBuffer receiveBuffer = ByteBuffer.allocate(1024);
                             InetSocketAddress sender = (InetSocketAddress) channel.receive(receiveBuffer);
                             
-                            if (sender != null && !connectionEstablished.getAndSet(true)) {
-                                // 🎉 COLLISION DETECTED!
-                                long collisionTime = System.currentTimeMillis() - startTime;
-                                System.out.printf("\n[SYMMETRIC-PUNCH] 🎉 COLLISION! Port %d received response after %d ms%n",
-                                    portIndex, collisionTime);
-                                System.out.printf("  Local port: %d%n", channel.socket().getLocalPort());
-                                System.out.printf("  Peer responded from: %s%n", sender);
-                                System.out.printf("  Total bursts sent: %d%n", burstCount);
+                            if (sender != null) {
+                                // ⚠️ VALIDATE: Response must be from target IP
+                                boolean isFromTarget = sender.getAddress().equals(targetIP);
                                 
-                                successfulChannel.set(channel);
-                                peerAddress.set(sender);
-                                return; // Keep this channel alive
+                                if (!isFromTarget) {
+                                    System.out.printf("[SYMMETRIC-PUNCH] ⚠️ Port %d: Response from WRONG source: %s (expected: %s)%n", 
+                                        portIndex, sender, targetIP.getHostAddress());
+                                    continue; // Ignore non-target responses
+                                }
+                                
+                                if (!connectionEstablished.getAndSet(true)) {
+                                    // 🎉 COLLISION DETECTED!
+                                    long collisionTime = System.currentTimeMillis() - startTime;
+                                    System.out.printf("\n[SYMMETRIC-PUNCH] 🎉 COLLISION! Port %d received response after %d ms%n",
+                                        portIndex, collisionTime);
+                                    System.out.printf("  Local port: %d%n", channel.socket().getLocalPort());
+                                    System.out.printf("  Peer responded from: %s (VALIDATED ✅)%n", sender);
+                                    System.out.printf("  Total bursts sent: %d%n", burstCount);
+                                    
+                                    successfulChannel.set(channel);
+                                    peerAddress.set(sender);
+                                    return; // Keep this channel alive
+                                }
                             }
                             
                             Thread.sleep(50); // 50ms between bursts = 20 bursts/sec
@@ -1643,9 +1654,19 @@ public class NatAnalyzer {
                         InetSocketAddress sender = (InetSocketAddress) stunChannel.receive(receiveBuffer);
                         
                         if (sender != null) {
+                            // ⚠️ VALIDATE: Response must be from target IP
+                            boolean isFromTarget = sender.getAddress().equals(targetIP);
+                            
+                            if (!isFromTarget) {
+                                System.out.printf("[ASYMMETRIC-SCAN] ⚠️ Response from WRONG source: %s (expected target IP: %s)%n", 
+                                    sender, targetIP.getHostAddress());
+                                System.out.println("[ASYMMETRIC-SCAN] ⚠️ Likely server echo - ignoring, continuing scan...");
+                                continue; // Ignore non-target responses
+                            }
+                            
                             long responseTime = System.currentTimeMillis() - startTime;
                             System.out.printf("\n[ASYMMETRIC-SCAN] 🎉 COLLISION! Response received after %d ms%n", responseTime);
-                            System.out.printf("  Peer responded from: %s%n", sender);
+                            System.out.printf("  Peer responded from: %s (VALIDATED ✅)%n", sender);
                             System.out.printf("  Total scan cycles: %d%n", scanCycle);
                             System.out.printf("  Current port in scan: %d%n", port);
                             
@@ -1832,17 +1853,28 @@ public class NatAnalyzer {
                             ByteBuffer receiveBuffer = ByteBuffer.allocate(1024);
                             InetSocketAddress sender = (InetSocketAddress) channel.receive(receiveBuffer);
                             
-                            if (sender != null && !connectionEstablished.getAndSet(true)) {
-                                // 🎉 COLLISION DETECTED!
-                                long collisionTime = System.currentTimeMillis() - startTime;
-                                System.out.printf("\n[BIRTHDAY-PARADOX] 🎉 COLLISION! Port %d received response after %d ms%n",
-                                    portIndex, collisionTime);
-                                System.out.printf("  Peer responded from: %s%n", sender);
-                                System.out.printf("  Total bursts sent: %d%n", burstCount);
+                            if (sender != null) {
+                                // ✅ VALIDATE: Response must be from target peer IP
+                                boolean isFromTarget = sender.getAddress().equals(targetIP);
                                 
-                                successfulChannel.set(channel);
-                                peerAddress.set(sender);
-                                return; // Keep this channel alive
+                                if (!isFromTarget) {
+                                    System.out.printf("[BIRTHDAY-PARADOX] ⚠️ Response from WRONG source: %s (expected: %s)%n",
+                                        sender, target);
+                                    continue; // Ignore server echo or wrong peer, keep bursting
+                                }
+                                
+                                if (!connectionEstablished.getAndSet(true)) {
+                                    // 🎉 COLLISION DETECTED!
+                                    long collisionTime = System.currentTimeMillis() - startTime;
+                                    System.out.printf("\n[BIRTHDAY-PARADOX] 🎉 COLLISION! Port %d received response after %d ms%n",
+                                        portIndex, collisionTime);
+                                    System.out.printf("  Peer responded from: %s (VALIDATED ✅)%n", sender);
+                                    System.out.printf("  Total bursts sent: %d%n", burstCount);
+                                    
+                                    successfulChannel.set(channel);
+                                    peerAddress.set(sender);
+                                    return; // Keep this channel alive
+                                }
                             }
                             
                             Thread.sleep(50); // 50ms between bursts = 20 bursts/sec
@@ -1981,6 +2013,9 @@ public class NatAnalyzer {
             InetSocketAddress targetAddr = new InetSocketAddress(targetIP, targetPort);
             System.out.printf("[STANDARD-PUNCH] 📤 Starting continuous burst to %s%n", targetAddr);
             System.out.println("[STANDARD-PUNCH] Will burst until peer response or 30s timeout");
+            System.out.printf("[STANDARD-PUNCH] 🔍 DEBUG: targetIP=%s, targetPort=%d%n", targetIP.getHostAddress(), targetPort);
+            System.out.printf("[STANDARD-PUNCH] 🔍 DEBUG: stunChannel local=%s, connected=%b%n", 
+                stunChannel.getLocalAddress(), stunChannel.isConnected());
             
             // Configure channel for non-blocking
             stunChannel.configureBlocking(false);
@@ -2013,8 +2048,19 @@ public class NatAnalyzer {
                     
                     if (sender != null) {
                         long responseTime = System.currentTimeMillis() - startTime;
+                        
+                        // ⚠️ VALIDATE: Response must be from target, not server!
+                        boolean isFromTarget = sender.getAddress().equals(targetIP);
+                        
+                        if (!isFromTarget) {
+                            System.out.printf("[STANDARD-PUNCH] ⚠️ Response from WRONG source: %s (expected: %s)%n", 
+                                sender, targetAddr);
+                            System.out.println("[STANDARD-PUNCH] ⚠️ This is likely server echo - ignoring, continuing burst...");
+                            continue; // Ignore server responses, keep bursting
+                        }
+                        
                         System.out.printf("\n[STANDARD-PUNCH] ✅ Peer response received after %d ms!%n", responseTime);
-                        System.out.printf("  Peer address: %s%n", sender);
+                        System.out.printf("  Peer address: %s (VALIDATED ✅)%n", sender);
                         System.out.printf("  Total bursts sent: %d%n", burstCount);
                         
                         peerResponseReceived = true;

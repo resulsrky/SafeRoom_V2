@@ -540,6 +540,13 @@ public class P2PSignalingServer extends Thread {
                             // Modern hole punch request - single packet with IP/port info
                             handleHolePunchRequest(buf.duplicate(), channel, inet);
                         }
+                        case LLS.SIG_PUNCH_BURST -> {
+                            // 🔒 P2P burst packets - SERVER SHOULD NEVER HANDLE THESE!
+                            // These packets are for DIRECT peer-to-peer communication
+                            // Server's role is COORDINATION ONLY, not packet forwarding
+                            System.out.printf("⚠️ Received SIG_PUNCH_BURST from %s - IGNORING (P2P packets should NOT reach server!)%n", from);
+                            System.out.println("⚠️ This indicates possible NAT traversal misconfiguration!");
+                        }
                         case LLS.SIG_HELLO, LLS.SIG_FIN -> {
                             String tempSender;
                             String tempTarget;
