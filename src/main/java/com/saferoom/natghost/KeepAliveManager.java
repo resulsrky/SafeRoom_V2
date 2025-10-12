@@ -148,6 +148,57 @@ public final class KeepAliveManager implements AutoCloseable {
                         } else if (type == LLS.SIG_DNS_QUERY) {
                             // Keep-alive DNS packet - ignore
                             System.out.printf("[KA] 🔄 Keep-alive DNS from %s (ignoring)%n", from);
+                        } else if (type == LLS.SIG_PUNCH_BURST) {
+                            System.out.printf("[KA] 🎯 SIG_PUNCH_BURST detected from %s - AUTO-RESPONDING%n", from);
+                            // Auto-respond to burst packets to establish bidirectional NAT mapping
+                            try {
+                                // Parse burst packet to get usernames
+                                java.util.List<Object> parsed = LLS.parseBurstPacket(buf.duplicate());
+                                String senderUsername = (String) parsed.get(2);
+                                String receiverUsername = (String) parsed.get(3);
+                                String payload = (String) parsed.get(4);
+                                
+                                System.out.printf("[KA-BURST] Burst from %s -> %s: %s%n", 
+                                    senderUsername, receiverUsername, payload);
+                                
+                                // Send immediate response to establish NAT hole
+                                ByteBuffer response = LLS.New_Burst_Packet(
+                                    receiverUsername,  // Me
+                                    senderUsername,    // Them
+                                    "BURST-ACK"
+                                );
+                                dc.send(response, (InetSocketAddress) from);
+                                
+                                System.out.printf("[KA-BURST] ✅ Auto-responded to %s - NAT hole established%n", 
+                                    senderUsername);
+                                
+                                // Register peer in NatAnalyzer for messaging
+                                try {
+                                    java.lang.reflect.Field activePeersField = Class.forName("com.saferoom.natghost.NatAnalyzer")
+                                        .getDeclaredField("activePeers");
+                                    activePeersField.setAccessible(true);
+                                    @SuppressWarnings("unchecked")
+                                    Map<String, InetSocketAddress> activePeers = 
+                                        (Map<String, InetSocketAddress>) activePeersField.get(null);
+                                    activePeers.put(senderUsername, (InetSocketAddress) from);
+                                    
+                                    java.lang.reflect.Field lastActivityField = Class.forName("com.saferoom.natghost.NatAnalyzer")
+                                        .getDeclaredField("lastActivity");
+                                    lastActivityField.setAccessible(true);
+                                    @SuppressWarnings("unchecked")
+                                    Map<String, Long> lastActivity = 
+                                        (Map<String, Long>) lastActivityField.get(null);
+                                    lastActivity.put(senderUsername, System.currentTimeMillis());
+                                    
+                                    System.out.printf("[KA-BURST] 📝 Registered %s for P2P messaging%n", senderUsername);
+                                } catch (Exception e) {
+                                    System.err.println("[KA-BURST] Warning: Could not register peer: " + e.getMessage());
+                                }
+                                
+                            } catch (Exception e) {
+                                System.err.println("[KA-BURST] ❌ Error handling burst: " + e.getMessage());
+                                e.printStackTrace();
+                            }
                         } else {
                             System.out.printf("[KA] ❓ Unknown packet type 0x%02X from %s%n", type, from);
                         }

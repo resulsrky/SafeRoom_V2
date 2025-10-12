@@ -23,6 +23,7 @@ public class LLS {
     public static final byte SIG_P2P_NOTIFY = 0x1A; // server -> client (notify about incoming P2P request)
     public static final byte SIG_NAT_PROFILE = 0x1B; // client -> server (NAT type + port range profile)
     public static final byte SIG_PUNCH_INSTRUCT = 0x1C; // server -> client (coordinated hole punch instructions)
+    public static final byte SIG_PUNCH_BURST = 0x1D; // client <-> client (P2P hole punch burst packet)
 
     // ---- COMMON HELPERS ----
     private static void putFixedString(ByteBuffer buf, String str, int len) {
@@ -168,6 +169,21 @@ public class LLS {
         packet.putInt(publicPort);          // 4 bytes - public port
         packet.put(localIp.getAddress());  // 4 bytes - local IP
         packet.putInt(localPort);           // 4 bytes - local port
+        packet.flip();
+        return packet;
+    }
+    
+    // NEW: P2P Burst packet - hole punching burst with payload
+    public static ByteBuffer New_Burst_Packet(String username, String target, String payload) {
+        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
+        int totalLen = 1 + 2 + 20 + 20 + payloadBytes.length; // type + len + username + target + payload
+        
+        ByteBuffer packet = ByteBuffer.allocate(totalLen);
+        packet.put(SIG_PUNCH_BURST);
+        packet.putShort((short) totalLen);
+        putFixedString(packet, username, 20);
+        putFixedString(packet, target, 20);
+        packet.put(payloadBytes);
         packet.flip();
         return packet;
     }
@@ -518,6 +534,31 @@ public class LLS {
         int numPorts = buffer.getInt();
         parsed.add(numPorts);
         return parsed; // [type, len, user, target, targetIP, targetPort, strategy, numPorts]
+    }
+    
+    /**
+     * Parse SIG_PUNCH_BURST packet
+     * Format: type(1) + len(2) + sender(20) + receiver(20) + payload(variable)
+     * @return [type, len, sender, receiver, payload]
+     */
+    public static List<Object> parseBurstPacket(ByteBuffer buffer) {
+        List<Object> parsed = new ArrayList<>();
+        byte type = buffer.get();
+        parsed.add(type);
+        short len = buffer.getShort();
+        parsed.add((int) len);
+        String sender = getFixedString(buffer, 20);
+        parsed.add(sender);
+        String receiver = getFixedString(buffer, 20);
+        parsed.add(receiver);
+        
+        // Remaining bytes are payload
+        byte[] payloadBytes = new byte[buffer.remaining()];
+        buffer.get(payloadBytes);
+        String payload = new String(payloadBytes, StandardCharsets.UTF_8);
+        parsed.add(payload);
+        
+        return parsed; // [type, len, sender, receiver, payload]
     }
 
 }

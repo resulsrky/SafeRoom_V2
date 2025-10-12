@@ -322,9 +322,19 @@ public class NatAnalyzer {
         
         // 🆕 Cache basic profile for later profiling (avoids re-running detection)
         if (!uniquePorts.isEmpty()) {
-            int port = uniquePorts.get(0);
-            cachedProfile = new NATProfile(signal, port, port, 1, uniquePorts);
-            System.out.println("[NAT-DETECT] 📝 Cached basic profile for profiling (port: " + port + ")");
+            if (signal == 0x00) {
+                // Non-Symmetric: Single stable port (minPort = maxPort)
+                int port = uniquePorts.get(0);
+                cachedProfile = new NATProfile(signal, port, port, 1, uniquePorts);
+                System.out.println("[NAT-DETECT] 📝 Cached NON-SYMMETRIC profile (single port: " + port + ")");
+            } else if (signal == 0x11) {
+                // Symmetric: Multiple ports detected, cache min/max range for now
+                int minPort = Collections.min(uniquePorts);
+                int maxPort = Collections.max(uniquePorts);
+                cachedProfile = new NATProfile(signal, minPort, maxPort, uniquePorts.size(), uniquePorts);
+                System.out.println("[NAT-DETECT] 📝 Cached SYMMETRIC basic profile (range: " + minPort + "-" + maxPort + ")");
+                System.out.println("[NAT-DETECT] ⚠️ Deep profiling recommended for accurate range!");
+            }
         }
         
         return signal;
@@ -861,14 +871,14 @@ public class NatAnalyzer {
                         case 0x00 -> {
                             // STANDARD: Basic hole punch
                             System.out.println("[P2P-INCOMING] ⚡ Executing STANDARD hole punch");
-                            executeStandardHolePunch(targetIP, targetPort, target);
+                            executeStandardHolePunch(targetIP, targetPort, username, target);
                         }
                         case 0x01 -> {
                             // SYMMETRIC_BURST: Open port pool and burst
                             System.out.println("[P2P-INCOMING] 🔥 Executing SYMMETRIC BURST strategy");
                             System.out.printf("  Opening %d ports, bursting to %s:%d%n", 
                                 numPorts, targetIP.getHostAddress(), targetPort);
-                            symmetricPortPoolExpansion(targetIP, targetPort, numPorts, target);
+                            symmetricPortPoolExpansion(targetIP, targetPort, numPorts, username, target);
                         }
                         case 0x02 -> {
                             // ASYMMETRIC_SCAN: Scan port range
@@ -876,14 +886,14 @@ public class NatAnalyzer {
                             int maxPort = targetPort + numPorts - 1;
                             System.out.printf("  Scanning port range %d-%d on %s%n", 
                                 targetPort, maxPort, targetIP.getHostAddress());
-                            scanPortRange(targetIP, targetPort, maxPort, target);
+                            scanPortRange(targetIP, targetPort, maxPort, username, target);
                         }
                         case 0x03 -> {
                             // SYMMETRIC_MIDPOINT_BURST: Birthday Paradox
                             System.out.println("[P2P-INCOMING] 🎯 Executing SYMMETRIC MIDPOINT BURST (Birthday Paradox)");
                             System.out.printf("  Opening %d ports, bursting to peer's midpoint %s:%d%n", 
                                 numPorts, targetIP.getHostAddress(), targetPort);
-                            symmetricMidpointBurst(targetIP, targetPort, numPorts, target);
+                            symmetricMidpointBurst(targetIP, targetPort, numPorts, username, target);
                         }
                         default -> {
                             System.err.printf("[P2P-INCOMING] ❌ Unknown strategy: 0x%02X%n", strategy);
@@ -1429,7 +1439,7 @@ public class NatAnalyzer {
      * @param targetPort The peer's port (stable for non-symmetric, or midpoint for symmetric)
      * @param numPorts Number of ports to open (typically N/2 from profiled range)
      */
-    public static void symmetricPortPoolExpansion(InetAddress targetIP, int targetPort, int numPorts, String targetUsername) {
+    public static void symmetricPortPoolExpansion(InetAddress targetIP, int targetPort, int numPorts, String localUsername, String targetUsername) {
         System.out.println("\n[SYMMETRIC-PUNCH] 🔥 Starting CONTINUOUS port pool expansion");
         System.out.printf("  Target: %s:%d (username: %s)%n", targetIP.getHostAddress(), targetPort, targetUsername);
         System.out.printf("  Opening %d local ports for continuous burst...%n", numPorts);
@@ -1456,16 +1466,16 @@ public class NatAnalyzer {
                         channels.add(channel);
                         
                         InetSocketAddress target = new InetSocketAddress(targetIP, targetPort);
-                        ByteBuffer burstPayload = ByteBuffer.allocate(128);
                         
                         int burstCount = 0;
                         
                         // CONTINUOUS bursting until collision detected
                         while (!connectionEstablished.get()) {
-                            burstPayload.clear();
-                            burstPayload.put(LLS.SIG_HOLE);
-                            burstPayload.put(("SYM-BURST-" + portIndex + "-" + burstCount).getBytes());
-                            burstPayload.flip();
+                            ByteBuffer burstPayload = LLS.New_Burst_Packet(
+                                localUsername,
+                                targetUsername,
+                                "SYM-BURST-" + portIndex + "-" + burstCount
+                            );
                             
                             channel.send(burstPayload, target);
                             burstCount++;
@@ -1586,7 +1596,7 @@ public class NatAnalyzer {
      * @param minPort Start of the symmetric peer's port range
      * @param maxPort End of the symmetric peer's port range
      */
-    public static void scanPortRange(InetAddress targetIP, int minPort, int maxPort, String targetUsername) {
+    public static void scanPortRange(InetAddress targetIP, int minPort, int maxPort, String localUsername, String targetUsername) {
         System.out.println("\n[ASYMMETRIC-SCAN] 🔍 Starting CONTINUOUS range scan");
         System.out.printf("  Target: %s (username: %s)%n", targetIP.getHostAddress(), targetUsername);
         System.out.printf("  Port range: %d-%d (%d ports)%n", minPort, maxPort, (maxPort - minPort + 1));
@@ -1615,12 +1625,13 @@ public class NatAnalyzer {
             while (!connectionEstablished && (System.currentTimeMillis() - startTime) < timeout) {
                 // Scan entire port range in this cycle
                 for (int port = minPort; port <= maxPort && !connectionEstablished; port++) {
-                    // Send burst packet to this port
+                    // Send burst packet to this port with proper LLS format
                     InetSocketAddress target = new InetSocketAddress(targetIP, port);
-                    ByteBuffer burstPayload = ByteBuffer.allocate(128);
-                    burstPayload.put(LLS.SIG_HOLE);
-                    burstPayload.put(("ASYM-SCAN-" + scanCycle + "-" + port).getBytes());
-                    burstPayload.flip();
+                    ByteBuffer burstPayload = LLS.New_Burst_Packet(
+                        localUsername,
+                        targetUsername,
+                        "ASYM-SCAN-" + scanCycle + "-" + port
+                    );
                     
                     stunChannel.send(burstPayload, target);
                     
@@ -1724,7 +1735,7 @@ public class NatAnalyzer {
                     System.out.println("[P2P-INSTRUCT] 🔥 Executing SYMMETRIC BURST strategy");
                     System.out.printf("  Opening %d ports, sending bursts to %s:%d%n", 
                         numPorts, targetIP.getHostAddress(), targetPort);
-                    symmetricPortPoolExpansion(targetIP, targetPort, numPorts, target);
+                    symmetricPortPoolExpansion(targetIP, targetPort, numPorts, username, target);
                 }
                 case 0x02 -> {
                     // ASYMMETRIC_SCAN: Scan port range
@@ -1732,7 +1743,7 @@ public class NatAnalyzer {
                     int maxPort = targetPort + numPorts - 1;
                     System.out.printf("  Scanning port range %d-%d on %s%n", 
                         targetPort, maxPort, targetIP.getHostAddress());
-                    scanPortRange(targetIP, targetPort, maxPort, target);
+                    scanPortRange(targetIP, targetPort, maxPort, username, target);
                 }
                 case 0x03 -> {
                     // SYMMETRIC_MIDPOINT_BURST: Birthday Paradox for Symmetric ↔ Symmetric
@@ -1740,14 +1751,14 @@ public class NatAnalyzer {
                     System.out.printf("  Opening %d ports, bursting to peer's midpoint %s:%d%n", 
                         numPorts, targetIP.getHostAddress(), targetPort);
                     System.out.println("  Strategy: Continuous burst until connection established");
-                    symmetricMidpointBurst(targetIP, targetPort, numPorts, target);
+                    symmetricMidpointBurst(targetIP, targetPort, numPorts, username, target);
                 }
                 case 0x00 -> {
                     // STANDARD: Basic hole punch
                     System.out.println("[P2P-INSTRUCT] ⚡ Executing STANDARD hole punch");
                     System.out.printf("  Punching to %s:%d%n", 
                         targetIP.getHostAddress(), targetPort);
-                    executeStandardHolePunch(targetIP, targetPort, target);
+                    executeStandardHolePunch(targetIP, targetPort, username, target);
                 }
                 default -> {
                     System.err.printf("[P2P-INSTRUCT] ❌ Unknown strategy: 0x%02X%n", strategy);
@@ -1776,7 +1787,7 @@ public class NatAnalyzer {
      * @param targetUsername Target peer's username for registration
      */
     private static void symmetricMidpointBurst(InetAddress targetIP, int targetPort, 
-                                                int numPorts, String targetUsername) {
+                                                int numPorts, String localUsername, String targetUsername) {
         System.out.println("\n[BIRTHDAY-PARADOX] 🎯 Starting Symmetric Midpoint Burst");
         System.out.printf("  Target: %s:%d (~midpoint)%n", targetIP.getHostAddress(), targetPort);
         System.out.printf("  Opening %d local ports for burst...%n", numPorts);
@@ -1803,16 +1814,16 @@ public class NatAnalyzer {
                         channels.add(channel);
                         
                         InetSocketAddress target = new InetSocketAddress(targetIP, targetPort);
-                        ByteBuffer burstPayload = ByteBuffer.allocate(128);
                         
                         int burstCount = 0;
                         
                         // Continuous bursting until collision detected
                         while (!connectionEstablished.get()) {
-                            burstPayload.clear();
-                            burstPayload.put(LLS.SIG_HOLE);
-                            burstPayload.put(("MIDPOINT-BURST-" + portIndex + "-" + burstCount).getBytes());
-                            burstPayload.flip();
+                            ByteBuffer burstPayload = LLS.New_Burst_Packet(
+                                localUsername,
+                                targetUsername,
+                                "MIDPOINT-BURST-" + portIndex + "-" + burstCount
+                            );
                             
                             channel.send(burstPayload, target);
                             burstCount++;
@@ -1960,7 +1971,7 @@ public class NatAnalyzer {
      * Sends multiple packets to establish NAT mapping and listens for peer response.
      * Uses continuous burst until peer response or timeout (30 seconds).
      */
-    private static void executeStandardHolePunch(InetAddress targetIP, int targetPort, String targetUsername) {
+    private static void executeStandardHolePunch(InetAddress targetIP, int targetPort, String localUsername, String targetUsername) {
         try {
             if (stunChannel == null || !stunChannel.isOpen()) {
                 System.err.println("[P2P-INSTRUCT] ❌ No active STUN channel!");
@@ -1983,11 +1994,12 @@ public class NatAnalyzer {
             
             // Continuous burst with response listening
             while (!peerResponseReceived && (System.currentTimeMillis() - startTime) < timeout) {
-                // Send burst packet
-                ByteBuffer burstPayload = ByteBuffer.allocate(128);
-                burstPayload.put(LLS.SIG_HOLE);
-                burstPayload.put(("STANDARD-BURST-" + burstCount).getBytes());
-                burstPayload.flip();
+                // Send burst packet with proper LLS format
+                ByteBuffer burstPayload = LLS.New_Burst_Packet(
+                    localUsername, 
+                    targetUsername, 
+                    "STANDARD-BURST-" + burstCount
+                );
                 
                 stunChannel.send(burstPayload, targetAddr);
                 burstCount++;

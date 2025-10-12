@@ -269,18 +269,18 @@ public class P2PSignalingServer extends Thread {
             
             if (requesterSymmetric && !targetSymmetric) {
                 // Case 1: Requester symmetric, Target non-symmetric
-                sendSymmetricBurstInstruction(requesterUser, targetUser, requesterProfile, channel);
+                sendSymmetricBurstInstruction(requesterUser, targetUser, requesterProfile, targetProfile, channel);
                 sendAsymmetricScanInstruction(targetUser, requesterUser, requesterProfile, channel);
                 
             } else if (!requesterSymmetric && targetSymmetric) {
                 // Case 2: Requester non-symmetric, Target symmetric
-                sendStandardHolePunchInstruction(requesterUser, targetUser, channel);
-                sendSymmetricBurstInstruction(targetUser, requesterUser, targetProfile, channel);
+                sendStandardHolePunchInstruction(requesterUser, targetUser, targetProfile, channel);
+                sendSymmetricBurstInstruction(targetUser, requesterUser, targetProfile, requesterProfile, channel);
                 
             } else if (!requesterSymmetric && !targetSymmetric) {
                 // Case 3: Both non-symmetric - standard hole punch
-                sendStandardHolePunchInstruction(requesterUser, targetUser, channel);
-                sendStandardHolePunchInstruction(targetUser, requesterUser, channel);
+                sendStandardHolePunchInstruction(requesterUser, targetUser, targetProfile, channel);
+                sendStandardHolePunchInstruction(targetUser, requesterUser, requesterProfile, channel);
                 
             } else {
                 // Case 4: Both symmetric - Birthday Paradox Strategy
@@ -813,24 +813,24 @@ public class P2PSignalingServer extends Thread {
                 // Case 1: User1 symmetric, User2 non-symmetric
                 // User1: Burst from port pool
                 // User2: Scan User1's port range
-                sendSymmetricBurstInstruction(user1, user2, profile1, channel);
+                sendSymmetricBurstInstruction(user1, user2, profile1, profile2, channel);
                 sendAsymmetricScanInstruction(user2, user1, profile1, channel);
                 
             } else if (!user1Symmetric && user2Symmetric) {
                 // Case 2: User1 non-symmetric, User2 symmetric (reverse of case 1)
-                sendSymmetricBurstInstruction(user2, user1, profile2, channel);
+                sendSymmetricBurstInstruction(user2, user1, profile2, profile1, channel);
                 sendAsymmetricScanInstruction(user1, user2, profile2, channel);
                 
             } else if (!user1Symmetric && !user2Symmetric) {
                 // Case 3: Both non-symmetric - standard hole punch
-                sendStandardHolePunchInstruction(user1, user2, channel);
-                sendStandardHolePunchInstruction(user2, user1, channel);
+                sendStandardHolePunchInstruction(user1, user2, profile2, channel);
+                sendStandardHolePunchInstruction(user2, user1, profile1, channel);
                 
             } else {
                 // Case 4: Both symmetric - experimental dual burst
                 System.out.println("⚠️ Both peers symmetric - using experimental dual burst strategy");
-                sendSymmetricBurstInstruction(user1, user2, profile1, channel);
-                sendSymmetricBurstInstruction(user2, user1, profile2, channel);
+                sendSymmetricBurstInstruction(user1, user2, profile1, profile2, channel);
+                sendSymmetricBurstInstruction(user2, user1, profile2, profile1, channel);
             }
             
             channel.close();
@@ -846,15 +846,19 @@ public class P2PSignalingServer extends Thread {
      * Sends burst instruction to symmetric NAT peer.
      */
     private void sendSymmetricBurstInstruction(RegisteredUser symUser, RegisteredUser targetUser, 
-                                               NATProfile symProfile, DatagramChannel channel) throws Exception {
+                                               NATProfile symProfile, NATProfile targetProfile,
+                                               DatagramChannel channel) throws Exception {
         int numPorts = (symProfile.maxPort - symProfile.minPort + 1) / 2; // Open N/2 ports
         numPorts = Math.min(numPorts, 100); // Cap at 100 ports
+        
+        // Target port: use NAT-detected port for non-symmetric targets
+        int targetPort = targetProfile.minPort; // For non-symmetric, minPort = maxPort = detected port
         
         byte[] packet = LLS.createPunchInstructPacket(
             symUser.username,
             targetUser.username,
             targetUser.publicIP,
-            targetUser.publicPort,
+            targetPort,  // Use NAT-detected port, NOT registration port!
             (byte) 0x01, // SYMMETRIC_BURST strategy
             numPorts
         );
@@ -862,9 +866,9 @@ public class P2PSignalingServer extends Thread {
         InetSocketAddress symAddr = new InetSocketAddress(symUser.publicIP, symUser.publicPort);
         channel.send(ByteBuffer.wrap(packet), symAddr);
         
-        System.out.printf("📤 SYMMETRIC BURST instruction → %s (open %d ports → %s:%d)%n",
+        System.out.printf("📤 SYMMETRIC BURST instruction → %s (open %d ports → %s:%d [NAT-detected])%n",
             symUser.username, numPorts, 
-            targetUser.publicIP.getHostAddress(), targetUser.publicPort);
+            targetUser.publicIP.getHostAddress(), targetPort);
     }
     
     /**
@@ -933,12 +937,16 @@ public class P2PSignalingServer extends Thread {
      * Sends standard hole punch instruction (for non-symmetric ↔ non-symmetric).
      */
     private void sendStandardHolePunchInstruction(RegisteredUser user, RegisteredUser targetUser,
+                                                  NATProfile targetProfile,
                                                   DatagramChannel channel) throws Exception {
+        // For non-symmetric NAT, use the port from NAT detection (minPort = maxPort = detected port)
+        int targetNATPort = targetProfile.minPort;
+        
         byte[] packet = LLS.createPunchInstructPacket(
             user.username,
             targetUser.username,
             targetUser.publicIP,
-            targetUser.publicPort,
+            targetNATPort,  // Use NAT-detected port, NOT registration port!
             (byte) 0x00, // STANDARD strategy
             1 // Single port
         );
@@ -946,8 +954,8 @@ public class P2PSignalingServer extends Thread {
         InetSocketAddress userAddr = new InetSocketAddress(user.publicIP, user.publicPort);
         channel.send(ByteBuffer.wrap(packet), userAddr);
         
-        System.out.printf("📤 STANDARD hole punch instruction → %s (target: %s:%d)%n",
+        System.out.printf("📤 STANDARD hole punch instruction → %s (target: %s:%d [NAT-detected])%n",
             user.username, 
-            targetUser.publicIP.getHostAddress(), targetUser.publicPort);
+            targetUser.publicIP.getHostAddress(), targetNATPort);
     }
 }
