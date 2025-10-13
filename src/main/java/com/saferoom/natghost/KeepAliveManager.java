@@ -108,13 +108,21 @@ public final class KeepAliveManager implements AutoCloseable {
                         if (!key.isReadable()) continue;
                         
                         DatagramChannel dc = (DatagramChannel) key.channel();
-                        ByteBuffer buf = ByteBuffer.allocate(1024);
+                        ByteBuffer buf = ByteBuffer.allocate(2048); // Increased buffer
                         SocketAddress from = dc.receive(buf);
-                        if (from == null) continue;
+                        if (from == null) {
+                            System.out.println("[KA] ⚠️ receive() returned null");
+                            continue;
+                        }
                         
                         buf.flip();
                         
-                        if (!LLS.hasWholeFrame(buf)) continue;
+                        System.out.printf("[KA] 📦 RAW packet received: %d bytes from %s%n", buf.remaining(), from);
+                        
+                        if (!LLS.hasWholeFrame(buf)) {
+                            System.out.printf("[KA] ⚠️ Incomplete frame: %d bytes%n", buf.remaining());
+                            continue;
+                        }
                         byte type = LLS.peekType(buf);
                         
                         System.out.printf("[KA] 📡 Received packet type: 0x%02X from %s%n", type, from);

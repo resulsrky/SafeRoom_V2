@@ -897,6 +897,25 @@ public class NatAnalyzer {
                 return;
             }
             
+            // 🆕 IMMEDIATELY notify GUI about incoming P2P request (don't wait for punch to complete!)
+            javafx.application.Platform.runLater(() -> {
+                try {
+                    // First, switch to Messages tab
+                    com.saferoom.gui.controller.MainController mainController = 
+                        com.saferoom.gui.controller.MainController.getInstance();
+                    if (mainController != null) {
+                        System.out.printf("[P2P-INCOMING] 📱 Switching to Messages tab for incoming P2P from %s%n", target);
+                        mainController.switchToMessages();
+                    }
+                    
+                    // Then open chat with the requester
+                    System.out.printf("[P2P-INCOMING] 💬 Opening chat with requester: %s%n", target);
+                    com.saferoom.gui.controller.MessagesController.openChatWithUser(target);
+                } catch (Exception e) {
+                    System.err.printf("[P2P-INCOMING] ❌ GUI notification error: %s%n", e.getMessage());
+                }
+            });
+            
             // Execute the coordinated strategy asynchronously
             Thread punchThread = new Thread(() -> {
                 try {
@@ -935,25 +954,6 @@ public class NatAnalyzer {
                     }
                     
                     System.out.printf("[P2P-INCOMING] ✅ Connection established with %s (incoming request)%n", target);
-                    
-                    // Notify GUI about new P2P connection and switch to Messages
-                    javafx.application.Platform.runLater(() -> {
-                        try {
-                            // First, switch to Messages tab
-                            com.saferoom.gui.controller.MainController mainController = 
-                                com.saferoom.gui.controller.MainController.getInstance();
-                            if (mainController != null) {
-                                System.out.printf("[P2P-INCOMING] 📱 Switching to Messages tab for incoming P2P from %s%n", target);
-                                mainController.switchToMessages();
-                            }
-                            
-                            // Then open chat with the requester
-                            System.out.printf("[P2P-INCOMING] 💬 Opening chat with requester: %s%n", target);
-                            com.saferoom.gui.controller.MessagesController.openChatWithUser(target);
-                        } catch (Exception e) {
-                            System.err.printf("[P2P-INCOMING] ❌ GUI notification error: %s%n", e.getMessage());
-                        }
-                    });
                     
                 } catch (Exception e) {
                     System.err.printf("[P2P-INCOMING] ❌ Strategy execution failed: %s%n", e.getMessage());
