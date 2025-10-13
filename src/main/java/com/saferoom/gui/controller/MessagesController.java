@@ -216,41 +216,72 @@ public class MessagesController {
     // ============================================
     
     /**
-     * Try to establish P2P connection with user
+     * 🆕 ASYNC NON-BLOCKING P2P Connection Management
+     * Try to establish P2P connection with user (prevents duplicate requests)
      */
     private void tryP2PConnection(String username) {
-        // Skip P2P for groups or if already connected
-        if (username.contains("Grubu") || 
-            username.equals("meeting_phoenix") ||
-            "P2P Active".equals(connectionStatus.get(username))) {
-            System.out.printf("[P2P] Skipping P2P for group or already connected user: %s%n", username);
+        // Skip P2P for groups
+        if (username.contains("Grubu") || username.equals("meeting_phoenix")) {
+            System.out.printf("[P2P] ⏭️ Skipping P2P for group: %s%n", username);
             return;
         }
         
+        // 🆕 Check if P2P already established at NatAnalyzer level (incoming connections)
+        if (com.saferoom.natghost.NatAnalyzer.isP2PActive(username)) {
+            System.out.printf("[P2P] ✅ P2P already active (from activePeers) for %s%n", username);
+            connectionStatus.put(username, "P2P Active");
+            updateContactStatus(username, "🔗 P2P Connected");
+            return;
+        }
+        
+        // Check current status in UI cache
+        String currentStatus = connectionStatus.get(username);
+        
+        // Skip if already connected
+        if ("P2P Active".equals(currentStatus)) {
+            System.out.printf("[P2P] ✅ Already connected (from UI cache) to %s%n", username);
+            return;
+        }
+        
+        // Skip if already connecting (CRITICAL - prevents duplicate requests)
+        if ("Connecting...".equals(currentStatus)) {
+            System.out.printf("[P2P] ⏳ Connection already in progress for %s%n", username);
+            return;
+        }
+        
+        // Mark as connecting BEFORE starting async operation
         connectionStatus.put(username, "Connecting...");
         updateContactStatus(username, "P2P connecting...");
+        System.out.printf("[P2P] 🚀 Starting P2P connection for %s%n", username);
         
-        CompletableFuture.supplyAsync(() -> {
-            try {
-                String myUsername = com.saferoom.gui.utils.UserSession.getInstance().getDisplayName();
-                return ClientMenu.startP2PHolePunch(myUsername, username);
-            } catch (Exception e) {
-                System.err.println("[P2P] Connection error: " + e.getMessage());
-                return false;
-            }
-        }).thenAcceptAsync(success -> {
-            Platform.runLater(() -> {
-                if (success) {
-                    connectionStatus.put(username, "P2P Active");
-                    updateContactStatus(username, "🔗 P2P Connected");
-                    System.out.println("[P2P] ✅ P2P connection established with " + username);
-                } else {
+        // Get current user
+        String myUsername = com.saferoom.gui.utils.UserSession.getInstance().getDisplayName();
+        
+        // Use ASYNC NON-BLOCKING version (no ForkJoinPool blocking)
+        ClientMenu.startP2PHolePunchAsync(myUsername, username)
+            .thenAcceptAsync(success -> {
+                // Update UI on JavaFX thread
+                javafx.application.Platform.runLater(() -> {
+                    if (success) {
+                        connectionStatus.put(username, "P2P Active");
+                        updateContactStatus(username, "🔗 P2P Connected");
+                        System.out.println("[P2P] ✅ P2P connection established with " + username);
+                    } else {
+                        connectionStatus.put(username, "Server Relay");
+                        updateContactStatus(username, "📡 Server Relay");
+                        System.out.println("[P2P] ⚠️ Using server relay for " + username);
+                    }
+                });
+            })
+            .exceptionally(e -> {
+                // Handle errors on JavaFX thread
+                javafx.application.Platform.runLater(() -> {
                     connectionStatus.put(username, "Server Relay");
                     updateContactStatus(username, "📡 Server Relay");
-                    System.out.println("[P2P] ⚠️ Using server relay for " + username);
-                }
+                    System.err.println("[P2P] ❌ Connection error: " + e.getMessage());
+                });
+                return null;
             });
-        });
     }
     
     /**

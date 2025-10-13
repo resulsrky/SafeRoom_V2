@@ -586,11 +586,52 @@ public class ClientMenu{
 	}
 	
 	/**
-	 * Start P2P hole punching process with target user - NEW UNIDIRECTIONAL VERSION
+	 * 🆕 ASYNC NON-BLOCKING P2P Connection Request
+	 * Start hole punch asynchronously and return CompletableFuture
+	 * 
+	 * @param myUsername Current user's username
+	 * @param targetUsername Target user to connect to
+	 * @return CompletableFuture<Boolean> that completes when P2P establishes
+	 */
+	public static java.util.concurrent.CompletableFuture<Boolean> startP2PHolePunchAsync(String myUsername, String targetUsername) {
+		try {
+			System.out.println("[P2P] 🚀 Initiating ASYNC P2P request: " + myUsername + " -> " + targetUsername);
+			
+			// Create signaling server address
+			InetSocketAddress signalingServer = new InetSocketAddress(Server, UDP_Port);
+			
+			// Use new async unidirectional P2P request system
+			return NatAnalyzer.requestP2PConnectionAsync(myUsername, targetUsername, signalingServer)
+				.thenApply(success -> {
+					if (success) {
+						System.out.println("[P2P] ✅ Async P2P connection successful");
+					} else {
+						System.out.println("[P2P] ❌ Async P2P failed - will use server relay");
+					}
+					return success;
+				})
+				.exceptionally(e -> {
+					System.err.println("[P2P] ❌ Error during async P2P: " + e.getMessage());
+					return false;
+				});
+			
+		} catch (Exception e) {
+			System.err.println("[P2P] ❌ Error initializing async P2P: " + e.getMessage());
+			e.printStackTrace();
+			return java.util.concurrent.CompletableFuture.completedFuture(false);
+		}
+	}
+	
+	/**
+	 * 🔴 DEPRECATED - Start P2P hole punching process with target user (BLOCKING VERSION)
+	 * Use startP2PHolePunchAsync() instead to avoid ForkJoinPool exhaustion
+	 * 
 	 * @param myUsername Current user's username
 	 * @param targetUsername Target user to connect to
 	 * @return true if hole punch successful, false if should use server relay
+	 * @deprecated Use {@link #startP2PHolePunchAsync(String, String)} instead
 	 */
+	@Deprecated
 	public static boolean startP2PHolePunch(String myUsername, String targetUsername) {
 		try {
 			System.out.println("[P2P] Initiating UNIDIRECTIONAL P2P request: " + myUsername + " -> " + targetUsername);

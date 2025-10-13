@@ -29,6 +29,13 @@ public class NatAnalyzer {
     // Global KeepAliveManager instance (ONE per application)
     private static KeepAliveManager globalKeepAlive = null;
     
+    // 🆕 Dedicated thread pool for P2P operations (prevents ForkJoinPool exhaustion)
+    private static final ExecutorService P2P_EXECUTOR = Executors.newCachedThreadPool(r -> {
+        Thread t = new Thread(r, "P2P-Worker");
+        t.setDaemon(true);
+        return t;
+    });
+    
     // 🆕 P2P Connection Futures - for async coordination
     private static final Map<String, CompletableFuture<Boolean>> pendingP2PConnections = new ConcurrentHashMap<>();
     
@@ -669,21 +676,36 @@ public class NatAnalyzer {
     }
     
     /**
-     * Request P2P connection to target user - UNIDIRECTIONAL initiation
+     * 🆕 ASYNC NON-BLOCKING P2P Connection Request
+     * Returns CompletableFuture instead of blocking with get()
+     * 
      * @param myUsername Current user's username
      * @param targetUsername Target user to connect to
      * @param signalingServer Signaling server address
-     * @return true if P2P connection established successfully
+     * @return CompletableFuture<Boolean> that completes when P2P establishes (or times out)
      */
-    public static boolean requestP2PConnection(String myUsername, String targetUsername, 
+    public static CompletableFuture<Boolean> requestP2PConnectionAsync(String myUsername, String targetUsername, 
                                              InetSocketAddress signalingServer) {
         try {
-            System.out.printf("[P2P] Requesting P2P connection: %s -> %s%n", myUsername, targetUsername);
+            System.out.printf("[P2P] 🚀 Requesting P2P connection (ASYNC): %s -> %s%n", myUsername, targetUsername);
             
-            // Ensure we have an active channel (from registration)
+            // Check if already connected
+            if (activePeers.containsKey(targetUsername)) {
+                System.out.println("[P2P] ✅ Already connected to " + targetUsername);
+                return CompletableFuture.completedFuture(true);
+            }
+            
+            // Check if request already in progress
+            CompletableFuture<Boolean> existingFuture = pendingP2PConnections.get(targetUsername);
+            if (existingFuture != null && !existingFuture.isDone()) {
+                System.out.println("[P2P] ⏳ P2P request already in progress for " + targetUsername);
+                return existingFuture;
+            }
+            
+            // Ensure we have an active channel
             if (stunChannel == null || !stunChannel.isOpen()) {
-                System.err.println("[P2P] No active channel - user not registered?");
-                return false;
+                System.err.println("[P2P] ❌ No active channel - user not registered?");
+                return CompletableFuture.completedFuture(false);
             }
             
             // Create a CompletableFuture for this connection
@@ -693,31 +715,59 @@ public class NatAnalyzer {
             // Send P2P request to server
             ByteBuffer requestPacket = LLS.New_P2PRequest_Packet(myUsername, targetUsername);
             stunChannel.send(requestPacket, signalingServer);
-            System.out.println("[P2P] P2P connection request sent to server");
+            System.out.println("[P2P] 📤 P2P connection request sent to server");
             
-            // Wait for coordination to complete (with timeout)
-            // The future will be completed by executeStandardHolePunch/etc when connection establishes
-            try {
-                boolean success = connectionFuture.get(10, TimeUnit.SECONDS);
-                pendingP2PConnections.remove(targetUsername);
-                
-                if (success) {
-                    System.out.println("[P2P] ✅ P2P connection established with " + targetUsername);
-                } else {
-                    System.out.println("[P2P] ❌ P2P connection failed with " + targetUsername);
+            // Set timeout on the future (completes after 10s if not resolved)
+            CompletableFuture.delayedExecutor(10, TimeUnit.SECONDS, P2P_EXECUTOR).execute(() -> {
+                if (!connectionFuture.isDone()) {
+                    System.out.println("[P2P] ⏰ Connection timeout for " + targetUsername);
+                    pendingP2PConnections.remove(targetUsername);
+                    
+                    // Check if peer registered anyway (late response)
+                    boolean connected = activePeers.containsKey(targetUsername);
+                    connectionFuture.complete(connected);
                 }
-                return success;
-                
-            } catch (TimeoutException e) {
-                System.out.println("[P2P] ⏰ Connection timeout - coordination may still be in progress");
-                pendingP2PConnections.remove(targetUsername);
-                // Check if peer is registered (might have succeeded but future not completed)
-                return activePeers.containsKey(targetUsername);
-            }
+            });
+            
+            return connectionFuture;
             
         } catch (Exception e) {
-            System.err.printf("[P2P] P2P request error: %s%n", e.getMessage());
+            System.err.printf("[P2P] ❌ P2P request error: %s%n", e.getMessage());
             e.printStackTrace();
+            pendingP2PConnections.remove(targetUsername);
+            return CompletableFuture.completedFuture(false);
+        }
+    }
+    
+    /**
+     * 🔴 DEPRECATED BLOCKING VERSION - Use requestP2PConnectionAsync() instead
+     * This method causes ForkJoinPool exhaustion when called from async context
+     * 
+     * @deprecated Use {@link #requestP2PConnectionAsync(String, String, InetSocketAddress)} instead
+     */
+    @Deprecated
+    public static boolean requestP2PConnection(String myUsername, String targetUsername, 
+                                             InetSocketAddress signalingServer) {
+        try {
+            System.out.println("[P2P] ⚠️ Using deprecated BLOCKING P2P request - consider using async version");
+            
+            // Ensure we have an active channel (from registration)
+            if (stunChannel == null || !stunChannel.isOpen()) {
+                System.err.println("[P2P] No active channel - user not registered?");
+                return false;
+            }
+            
+            // Delegate to async version but BLOCK on our own executor (not ForkJoinPool)
+            CompletableFuture<Boolean> future = requestP2PConnectionAsync(myUsername, targetUsername, signalingServer);
+            
+            // Block with timeout - but at least we're using our dedicated pool
+            return future.get(10, TimeUnit.SECONDS);
+            
+        } catch (TimeoutException e) {
+            System.out.println("[P2P] ⏰ Blocking request timeout");
+            return activePeers.containsKey(targetUsername);
+        } catch (Exception e) {
+            System.err.printf("[P2P] ❌ Blocking request error: %s%n", e.getMessage());
             return false;
         }
     }
