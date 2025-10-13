@@ -2692,7 +2692,8 @@ public class NatAnalyzer {
      * Called by KeepAliveManager when file transfer packet detected
      */
     public static void onFileTransferPacket(ByteBuffer packet, SocketAddress senderAddr) {
-        System.out.printf("[NAT-FILE] 📁 Received file packet from %s%n", senderAddr);
+        // Don't log every packet - too much spam
+        // Only dispatcher will log important events
         FileTransferDispatcher.forwardPacket((InetSocketAddress) senderAddr, packet);
     }
     

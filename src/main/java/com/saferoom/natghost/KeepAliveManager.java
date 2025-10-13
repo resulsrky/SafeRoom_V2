@@ -394,15 +394,21 @@ public final class KeepAliveManager implements AutoCloseable {
                             // 📁 File transfer packet detection by size and structure
                             int size = buf.remaining();
                             boolean isFilePacket = false;
+                            String packetType = null;
                             
                             // HandShake_Packet: 21 bytes (type + fileId + state + seqNum + ackNum)
                             if (size == 21) {
-                                System.out.printf("[KA] 📁 File HANDSHAKE packet detected (%d bytes) from %s%n", size, from);
+                                packetType = "HANDSHAKE";
                                 isFilePacket = true;
                             }
                             // NackFrame: 28 bytes (type + fileId + lostSeqStart + bitmap + timestamp)
                             else if (size == 28) {
-                                System.out.printf("[KA] 📁 File NACK packet detected (%d bytes) from %s%n", size, from);
+                                packetType = "NACK";
+                                isFilePacket = true;
+                            }
+                            // Completion signal: 8 bytes
+                            else if (size == 8) {
+                                packetType = "COMPLETION";
                                 isFilePacket = true;
                             }
                             // CRC32C_Packet: 22+ bytes (type + fileId + seqNum + CRC32 + data)
@@ -413,20 +419,29 @@ public final class KeepAliveManager implements AutoCloseable {
                                 long fileId = verify.getLong(); // Read fileId
                                 
                                 if (fileId != 0) { // Valid fileId
-                                    System.out.printf("[KA] 📁 File DATA packet detected (%d bytes, fileId=%d) from %s%n", 
-                                        size, fileId, from);
+                                    packetType = "DATA";
                                     isFilePacket = true;
                                 }
                             }
                             
                             if (isFilePacket) {
+                                // Only log non-data packets to avoid spam
+                                if (!"DATA".equals(packetType)) {
+                                    System.out.printf("[KA] 📁 File %s packet detected (%d bytes) from %s%n", 
+                                        packetType, size, from);
+                                }
+                                
                                 // Forward to NatAnalyzer.FileTransferDispatcher
                                 try {
                                     java.lang.reflect.Method method = Class.forName("com.saferoom.natghost.NatAnalyzer")
                                         .getDeclaredMethod("onFileTransferPacket", ByteBuffer.class, SocketAddress.class);
                                     method.setAccessible(true);
                                     method.invoke(null, buf.duplicate(), from);
-                                    System.out.println("[KA] ✅ File packet forwarded to NatAnalyzer");
+                                    
+                                    // Only log forwarding for non-data packets
+                                    if (!"DATA".equals(packetType)) {
+                                        System.out.println("[KA] ✅ File packet forwarded to NatAnalyzer");
+                                    }
                                 } catch (Exception e) {
                                     System.err.println("[KA] ❌ Error forwarding file packet: " + e.getMessage());
                                     e.printStackTrace();

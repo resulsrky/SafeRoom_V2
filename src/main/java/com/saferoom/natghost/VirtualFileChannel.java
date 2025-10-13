@@ -149,8 +149,14 @@ public class VirtualFileChannel extends DatagramChannel {
         SocketAddress actualTarget = (target != null ? target : targetAddress);
         int bytesSent = realChannel.send(src, actualTarget);
         
-        System.out.printf("[VirtualFileChannel] 📤 Sent %d bytes to %s (via stunChannel)%n", 
-            bytesSent, actualTarget);
+        // Only log handshake packets (21 bytes) and completion signals (8 bytes)
+        // Skip data packets (22+ bytes) to avoid log spam
+        if (bytesSent <= 21 || bytesSent == 8) {
+            String packetType = bytesSent == 21 ? "HANDSHAKE" : 
+                               bytesSent == 8 ? "COMPLETION" : "PACKET";
+            System.out.printf("[VirtualFileChannel] 📤 %s sent: %d bytes to %s%n", 
+                packetType, bytesSent, actualTarget);
+        }
         
         return bytesSent;
     }
