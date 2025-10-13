@@ -264,11 +264,13 @@ public class ReliableMessageReceiver {
     public void handleFIN(long messageId) {
         ReceiveState state = activeMessages.get(messageId);
         if (state == null) {
+            System.out.printf("[RMSG-RECV] 🏁 FIN received for unknown msgId=%d (already cleaned up)%n", messageId);
             return; // Unknown message (probably already completed and removed)
         }
         
         // Skip if already processed (FIN already received)
         if (state.finReceived) {
+            System.out.printf("[RMSG-RECV] 🏁 Duplicate FIN for msgId=%d (already processed) - sending ACK again%n", messageId);
             // Just send ACK again (idempotent operation)
             try {
                 sendACK(state);
@@ -278,12 +280,22 @@ public class ReliableMessageReceiver {
             return;
         }
         
-        System.out.printf("[RMSG-RECV] 🏁 FIN received: msgId=%d%n", messageId);
+        System.out.printf("[RMSG-RECV] 🏁 FIN received: msgId=%d (received=%d/%d chunks)%n", 
+            messageId, state.receivedChunks.size(), state.totalChunks);
         state.finReceived = true;
         
-        // Check if we can complete now
+        // FIN is just a "sender finished" signal
+        // If message is already complete (all chunks received), it was already processed
+        // If incomplete, request missing chunks
         if (state.isComplete()) {
-            completeMessage(state);
+            System.out.printf("[RMSG-RECV] ✅ FIN acknowledged - message already complete (msgId=%d)%n", messageId);
+            // Just send final ACK - message was already completed when last chunk arrived
+            try {
+                sendACK(state);
+            } catch (Exception e) {
+                System.err.printf("[RMSG-RECV] ❌ Failed to send final ACK for msgId=%d: %s%n", 
+                    messageId, e.getMessage());
+            }
         } else {
             // Send NACK for missing chunks
             System.out.printf("[RMSG-RECV] ⚠️  FIN received but %d chunks missing - sending NACK%n",
