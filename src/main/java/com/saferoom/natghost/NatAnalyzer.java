@@ -688,65 +688,11 @@ public class NatAnalyzer {
             stunChannel.send(requestPacket, signalingServer);
             System.out.println("[P2P] P2P connection request sent to server");
             
-            // Step 2: Wait for peer info from server
-            Selector peerSelector = Selector.open();
-            stunChannel.register(peerSelector, SelectionKey.OP_READ);
-            
-            long deadline = System.currentTimeMillis() + HOLE_TIMEOUT_MS;
-            InetAddress peerIP = null;
-            int peerPort = 0;
-            boolean peerInfoReceived = false;
-            
-            while (System.currentTimeMillis() < deadline && !peerInfoReceived) {
-                if (peerSelector.select(SELECT_BLOCK_MS) == 0) continue;
-                
-                Iterator<SelectionKey> it = peerSelector.selectedKeys().iterator();
-                while (it.hasNext()) {
-                    SelectionKey key = it.next();
-                    it.remove();
-                    
-                    if (!key.isReadable()) continue;
-                    
-                    DatagramChannel dc = (DatagramChannel) key.channel();
-                    ByteBuffer buf = ByteBuffer.allocate(512);
-                    SocketAddress from = dc.receive(buf);
-                    if (from == null) continue;
-                    buf.flip();
-                    
-                    if (!LLS.hasWholeFrame(buf)) continue;
-                    byte type = LLS.peekType(buf);
-                    
-                    if (type == LLS.SIG_PUNCH_INSTRUCT) {
-                        // Server sent intelligent hole punch instruction
-                        System.out.println("[P2P] 🧠 Received intelligent punch instruction from server");
-                        handlePunchInstruction(buf.duplicate());
-                        peerInfoReceived = true; // Consider instruction as coordination complete
-                        peerSelector.close();
-                        return true; // Strategy already executed, no need for legacy hole punch
-                    } else if (type == LLS.SIG_PORT) {
-                        // Legacy: Server sent peer info directly
-                        List<Object> info = LLS.parsePortInfo(buf.duplicate());
-                        peerIP = (InetAddress) info.get(0);
-                        peerPort = (Integer) info.get(1);
-                        peerInfoReceived = true;
-                        System.out.printf("[P2P] Legacy peer info received: %s:%d%n", peerIP, peerPort);
-                        break;
-                    }
-                }
-            }
-            
-            if (!peerInfoReceived) {
-                System.err.println("[P2P] Timeout waiting for peer info");
-                peerSelector.close();
-                return false;
-            }
-            
-            // Step 3: Start hole punching process (ONLY for legacy path)
-            InetSocketAddress peerAddr = new InetSocketAddress(peerIP, peerPort);
-            boolean success = performDirectHolePunching(peerAddr, targetUsername);
-            
-            peerSelector.close();
-            return success;
+            // 🆕 NEW APPROACH: Don't wait for response here!
+            // The SIG_PUNCH_INSTRUCT will be handled by KeepAliveManager automatically
+            // Just return true to indicate request was sent successfully
+            System.out.println("[P2P] ✅ P2P request sent - coordination will happen via KeepAliveManager");
+            return true;
             
         } catch (Exception e) {
             System.err.printf("[P2P] P2P request error: %s%n", e.getMessage());
