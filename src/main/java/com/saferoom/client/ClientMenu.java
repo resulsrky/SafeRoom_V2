@@ -576,7 +576,32 @@ public class ClientMenu{
 			System.out.println("[P2P] Registering user with server: " + username);
 			
 			InetSocketAddress signalingServer = new InetSocketAddress(Server, UDP_Port); // P2PSignalingServer.SIGNALING_PORT
-			return NatAnalyzer.registerWithServer(username, signalingServer);
+			boolean registered = NatAnalyzer.registerWithServer(username, signalingServer);
+			
+			if (registered) {
+				// Initialize reliable messaging protocol
+				System.out.println("[P2P] 🔧 Initializing reliable messaging protocol...");
+				NatAnalyzer.initializeReliableMessaging(username);
+				
+				// Set callback for received messages
+				NatAnalyzer.setReliableMessageCallback((sender, message) -> {
+					System.out.printf("[P2P-CALLBACK] 📨 Received from %s: \"%s\"%n", sender, message);
+					
+					// Forward to ChatService GUI
+					javafx.application.Platform.runLater(() -> {
+						try {
+							com.saferoom.gui.service.ChatService.getInstance()
+								.receiveP2PMessage(sender, username, message);
+						} catch (Exception e) {
+							System.err.println("[P2P-CALLBACK] Error forwarding to GUI: " + e.getMessage());
+						}
+					});
+				});
+				
+				System.out.println("[P2P] ✅ Reliable messaging initialized for: " + username);
+			}
+			
+			return registered;
 			
 		} catch (Exception e) {
 			System.err.println("[P2P] Error during user registration: " + e.getMessage());

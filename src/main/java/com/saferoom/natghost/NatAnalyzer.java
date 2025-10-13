@@ -51,6 +51,13 @@ public class NatAnalyzer {
     private static ReliableMessageReceiver reliableReceiver = null;
     private static String currentUsername = null;
     
+    // 🆕 Callback for received reliable messages
+    @FunctionalInterface
+    public interface ReliableMessageCallback {
+        void onMessageReceived(String sender, String message);
+    }
+    private static ReliableMessageCallback messageCallback = null;
+    
     // NAT profile data
     public static class NATProfile {
         public byte natType;
@@ -2344,8 +2351,22 @@ public class NatAnalyzer {
      * Callback for received reliable messages (override in application)
      */
     private static void onReliableMessageReceived(String sender, String message) {
-        // Default implementation - can be overridden by setting a callback
-        System.out.println("[NAT] 💬 Message from " + sender + ": " + message);
+        // Forward to registered callback if available
+        if (messageCallback != null) {
+            messageCallback.onMessageReceived(sender, message);
+        } else {
+            // Default implementation - just log
+            System.out.println("[NAT] 💬 Message from " + sender + ": " + message);
+        }
+    }
+    
+    /**
+     * Set callback for received reliable messages
+     * @param callback Callback to handle received messages
+     */
+    public static void setReliableMessageCallback(ReliableMessageCallback callback) {
+        messageCallback = callback;
+        System.out.println("[NAT] 📞 Reliable message callback registered");
     }
     
     /**
