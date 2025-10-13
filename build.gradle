@@ -56,6 +56,9 @@ dependencies {
     // Logging
     implementation files('libs/slf4j-api-1.7.36.jar')
     implementation files('libs/slf4j-simple-1.7.36.jar')
+
+    // JUnit 5 for testing
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
 }
 
 application {
