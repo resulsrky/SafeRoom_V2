@@ -209,18 +209,17 @@ public class ChatViewController {
     private void sendFile(Path filePath) {
         System.out.println("[ChatView] 📤 Sending file: " + filePath.getFileName());
         
-        // TODO: Call NatAnalyzer.sendFile() via ChatService
-        // For now, show placeholder message
-        String placeholderMsg = String.format(
-            "📎 Sending file: %s (%s)...",
+        // Call ChatService.sendFile() which routes to NatAnalyzer
+        chatService.sendFile(currentChannelId, filePath);
+        
+        // Show file send message in chat
+        String fileMsg = String.format(
+            "📎 Sending file: %s (%s)",
             filePath.getFileName(),
             formatFileSize(filePath.toFile().length())
         );
         
-        chatService.sendMessage(currentChannelId, placeholderMsg, currentUser);
-        
-        // TODO: Implement actual file transfer
-        // chatService.sendFile(currentChannelId, filePath);
+        chatService.sendMessage(currentChannelId, fileMsg, currentUser);
     }
     
     /**

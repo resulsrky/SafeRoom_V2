@@ -599,6 +599,95 @@ public class ClientMenu{
 				});
 				
 				System.out.println("[P2P] ✅ Reliable messaging initialized for: " + username);
+				
+				// 📁 Set callback for incoming file transfers
+				System.out.println("[P2P] 🔧 Registering file transfer callback...");
+				NatAnalyzer.setFileTransferCallback(new NatAnalyzer.FileTransferCallback() {
+					@Override
+					public void onFileTransferRequest(String sender, long fileId, String fileName, long fileSize, int totalChunks) {
+						System.out.printf("[P2P-FILE-CALLBACK] 📁 Incoming file from %s: %s (%d bytes)%n", 
+							sender, fileName, fileSize);
+						
+						// Show FileTransferDialog on JavaFX thread
+						javafx.application.Platform.runLater(() -> {
+							try {
+								com.saferoom.gui.dialog.FileTransferDialog dialog = 
+									new com.saferoom.gui.dialog.FileTransferDialog(
+										sender, 
+										fileId,
+										fileName, 
+										fileSize
+									);
+								
+								java.util.Optional<java.nio.file.Path> result = dialog.showAndWait();
+								
+								if (result.isPresent()) {
+									// User accepted - call NatAnalyzer.acceptFileTransfer()
+									java.nio.file.Path savePath = result.get();
+									System.out.printf("[P2P-FILE-CALLBACK] ✅ User accepted file - saving to: %s%n", 
+										savePath);
+									
+									// Accept file transfer
+									NatAnalyzer.acceptFileTransfer(sender, fileId, savePath);
+									
+									// Show success message in chat
+									com.saferoom.gui.service.ChatService.getInstance()
+										.receiveP2PMessage(
+											sender, 
+											username, 
+											String.format("📎 Receiving file: %s", fileName)
+										);
+									
+								} else {
+									// User declined
+									System.out.printf("[P2P-FILE-CALLBACK] ❌ User declined file from %s%n", sender);
+									
+									// TODO: Send rejection notification to sender
+								}
+								
+							} catch (Exception e) {
+								System.err.println("[P2P-FILE-CALLBACK] Error showing file dialog: " + e.getMessage());
+								e.printStackTrace();
+							}
+						});
+					}
+					
+					@Override
+					public void onFileTransferComplete(String peer, long fileId, java.nio.file.Path filePath) {
+						System.out.printf("[P2P-FILE-CALLBACK] ✅ File transfer complete: %s%n", filePath);
+						
+						javafx.application.Platform.runLater(() -> {
+							com.saferoom.gui.service.ChatService.getInstance()
+								.receiveP2PMessage(
+									peer, 
+									username, 
+									String.format("✅ File received: %s", filePath.getFileName())
+								);
+						});
+					}
+					
+					@Override
+					public void onFileTransferError(String peer, long fileId, Exception error) {
+						System.err.printf("[P2P-FILE-CALLBACK] ❌ File transfer error: %s%n", error.getMessage());
+						
+						javafx.application.Platform.runLater(() -> {
+							javafx.scene.control.Alert alert = new javafx.scene.control.Alert(
+								javafx.scene.control.Alert.AlertType.ERROR);
+							alert.setTitle("File Transfer Error");
+							alert.setHeaderText("File Transfer Failed");
+							alert.setContentText(error.getMessage());
+							alert.show();
+						});
+					}
+					
+					@Override
+					public void onFileTransferProgress(String peer, long fileId, int current, int total) {
+						// Update progress in GUI (TODO: implement progress bar)
+						System.out.printf("[P2P-FILE-CALLBACK] 📊 Progress: %d/%d chunks%n", current, total);
+					}
+				});
+				
+				System.out.println("[P2P] ✅ File transfer callback registered");
 			}
 			
 			return registered;

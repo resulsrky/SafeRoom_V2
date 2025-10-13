@@ -391,7 +391,49 @@ public final class KeepAliveManager implements AutoCloseable {
                                 System.err.println("[KA] ❌ Error handling reliable FIN: " + e.getMessage());
                             }
                         } else {
-                            System.out.printf("[KA] ❓ Unknown packet type 0x%02X from %s%n", type, from);
+                            // 📁 File transfer packet detection by size and structure
+                            int size = buf.remaining();
+                            boolean isFilePacket = false;
+                            
+                            // HandShake_Packet: 21 bytes (type + fileId + state + seqNum + ackNum)
+                            if (size == 21) {
+                                System.out.printf("[KA] 📁 File HANDSHAKE packet detected (%d bytes) from %s%n", size, from);
+                                isFilePacket = true;
+                            }
+                            // NackFrame: 28 bytes (type + fileId + lostSeqStart + bitmap + timestamp)
+                            else if (size == 28) {
+                                System.out.printf("[KA] 📁 File NACK packet detected (%d bytes) from %s%n", size, from);
+                                isFilePacket = true;
+                            }
+                            // CRC32C_Packet: 22+ bytes (type + fileId + seqNum + CRC32 + data)
+                            else if (size >= 22) {
+                                // Verify it has fileId structure (8 bytes after type)
+                                ByteBuffer verify = buf.duplicate();
+                                verify.get(); // Skip type
+                                long fileId = verify.getLong(); // Read fileId
+                                
+                                if (fileId != 0) { // Valid fileId
+                                    System.out.printf("[KA] 📁 File DATA packet detected (%d bytes, fileId=%d) from %s%n", 
+                                        size, fileId, from);
+                                    isFilePacket = true;
+                                }
+                            }
+                            
+                            if (isFilePacket) {
+                                // Forward to NatAnalyzer.FileTransferDispatcher
+                                try {
+                                    java.lang.reflect.Method method = Class.forName("com.saferoom.natghost.NatAnalyzer")
+                                        .getDeclaredMethod("onFileTransferPacket", ByteBuffer.class, SocketAddress.class);
+                                    method.setAccessible(true);
+                                    method.invoke(null, buf.duplicate(), from);
+                                    System.out.println("[KA] ✅ File packet forwarded to NatAnalyzer");
+                                } catch (Exception e) {
+                                    System.err.println("[KA] ❌ Error forwarding file packet: " + e.getMessage());
+                                    e.printStackTrace();
+                                }
+                            } else {
+                                System.out.printf("[KA] ❓ Unknown packet type 0x%02X (%d bytes) from %s%n", type, size, from);
+                            }
                         }
                     }
                 }

@@ -167,6 +167,64 @@ public class ChatService {
         
         System.out.printf("[Chat] ✅ P2P message added to channel: %s%n", sender);
     }
+    
+    /**
+     * Dosya transfer işlemi başlat (P2P)
+     * @param targetUser Dosya gönderilecek kullanıcı
+     * @param filePath Gönderilecek dosyanın yolu
+     */
+    public void sendFile(String targetUser, java.nio.file.Path filePath) {
+        if (targetUser == null || filePath == null) {
+            System.err.println("[Chat] ❌ Invalid sendFile parameters");
+            return;
+        }
+        
+        System.out.printf("[Chat] 📁 Starting file transfer: %s -> %s%n", 
+            filePath.getFileName(), targetUser);
+        
+        // Check P2P connection
+        if (!ClientMenu.isP2PMessagingAvailable(targetUser)) {
+            System.err.printf("[Chat] ❌ No P2P connection with %s%n", targetUser);
+            javafx.application.Platform.runLater(() -> {
+                javafx.scene.control.Alert alert = new javafx.scene.control.Alert(
+                    javafx.scene.control.Alert.AlertType.ERROR);
+                alert.setTitle("P2P Error");
+                alert.setHeaderText("No P2P Connection");
+                alert.setContentText("Cannot send file - no active P2P connection with " + targetUser);
+                alert.showAndWait();
+            });
+            return;
+        }
+        
+        try {
+            // Call NatAnalyzer.sendFile()
+            com.saferoom.natghost.NatAnalyzer.sendFile(targetUser, filePath);
+            System.out.printf("[Chat] ✅ File transfer initiated: %s%n", filePath.getFileName());
+            
+            // Show success notification
+            javafx.application.Platform.runLater(() -> {
+                javafx.scene.control.Alert alert = new javafx.scene.control.Alert(
+                    javafx.scene.control.Alert.AlertType.INFORMATION);
+                alert.setTitle("File Transfer");
+                alert.setHeaderText("File Transfer Started");
+                alert.setContentText("Sending " + filePath.getFileName() + " to " + targetUser);
+                alert.show();
+            });
+            
+        } catch (Exception e) {
+            System.err.printf("[Chat] ❌ File transfer error: %s%n", e.getMessage());
+            e.printStackTrace();
+            
+            javafx.application.Platform.runLater(() -> {
+                javafx.scene.control.Alert alert = new javafx.scene.control.Alert(
+                    javafx.scene.control.Alert.AlertType.ERROR);
+                alert.setTitle("File Transfer Error");
+                alert.setHeaderText("Failed to Send File");
+                alert.setContentText(e.getMessage());
+                alert.showAndWait();
+            });
+        }
+    }
 
     // No dummy messages - start with clean slate
     private void setupDummyMessages() {

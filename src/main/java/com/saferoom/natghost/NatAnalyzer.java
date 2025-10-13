@@ -2395,4 +2395,296 @@ public class NatAnalyzer {
             reliableSender.getStats(),
             reliableReceiver.getStats());
     }
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // FILE TRANSFER MANAGEMENT
+    // ═══════════════════════════════════════════════════════════════════
+    
+    /**
+     * File transfer callback interface
+     */
+    public interface FileTransferCallback {
+        void onFileTransferRequest(String sender, long fileId, String fileName, long fileSize, int totalChunks);
+        void onFileTransferComplete(String peer, long fileId, java.nio.file.Path filePath);
+        void onFileTransferError(String peer, long fileId, Exception error);
+        void onFileTransferProgress(String peer, long fileId, int current, int total);
+    }
+    
+    private static FileTransferCallback fileTransferCallback = null;
+    
+    /**
+     * Set file transfer callback
+     */
+    public static void setFileTransferCallback(FileTransferCallback callback) {
+        fileTransferCallback = callback;
+        System.out.println("[NAT] 📁 File transfer callback registered");
+    }
+    
+    // File transfer sessions - track active transfers
+    private static final Map<Long, FileTransferSession> fileTransferSessions = new ConcurrentHashMap<>();
+    
+    /**
+     * File transfer session tracking
+     */
+    private static class FileTransferSession {
+        final String peerUsername;
+        final long fileId;
+        final InetSocketAddress peerAddress;
+        final Role role;
+        
+        // Instances (only one will be non-null based on role)
+        com.saferoom.file_transfer.EnhancedFileTransferSender sender;
+        com.saferoom.file_transfer.FileTransferReceiver receiver;
+        
+        // Progress
+        volatile boolean active = true;
+        
+        enum Role { SENDER, RECEIVER }
+        
+        FileTransferSession(String peer, long fileId, InetSocketAddress addr, Role role) {
+            this.peerUsername = peer;
+            this.fileId = fileId;
+            this.peerAddress = addr;
+            this.role = role;
+        }
+    }
+    
+    /**
+     * Send file to peer (SENDER role)
+     */
+    public static CompletableFuture<Void> sendFile(String targetUser, java.nio.file.Path filePath) {
+        InetSocketAddress peerAddr = activePeers.get(targetUser);
+        if (peerAddr == null) {
+            return CompletableFuture.failedFuture(
+                new IllegalStateException("No P2P connection to " + targetUser)
+            );
+        }
+        
+        return CompletableFuture.runAsync(() -> {
+            long fileId = System.currentTimeMillis();
+            
+            try {
+                System.out.printf("[FILE-SEND] 📤 Sending %s to %s (fileId=%d)%n",
+                    filePath.getFileName(), targetUser, fileId);
+                
+                // Register session queue
+                BlockingQueue<ByteBuffer> queue = FileTransferDispatcher.registerSession(fileId);
+                
+                // Create virtual channel
+                VirtualFileChannel virtualChannel = new VirtualFileChannel(
+                    stunChannel,
+                    peerAddr,
+                    queue
+                );
+                
+                // Create session
+                FileTransferSession session = new FileTransferSession(
+                    targetUser, fileId, peerAddr, FileTransferSession.Role.SENDER
+                );
+                fileTransferSessions.put(fileId, session);
+                
+                // Create sender with virtual channel
+                session.sender = new com.saferoom.file_transfer.EnhancedFileTransferSender(virtualChannel);
+                
+                // Send file (blocks)
+                session.sender.sendFile(filePath, fileId);
+                
+                System.out.printf("[FILE-SEND] ✅ File sent: fileId=%d%n", fileId);
+                
+                // Callback
+                if (fileTransferCallback != null) {
+                    fileTransferCallback.onFileTransferComplete(targetUser, fileId, filePath);
+                }
+                
+            } catch (Exception e) {
+                System.err.printf("[FILE-SEND] ❌ Error: %s%n", e.getMessage());
+                if (fileTransferCallback != null) {
+                    fileTransferCallback.onFileTransferError(targetUser, fileId, e);
+                }
+                throw new RuntimeException(e);
+            } finally {
+                fileTransferSessions.remove(fileId);
+                FileTransferDispatcher.unregisterSession(fileId);
+            }
+        }, P2P_EXECUTOR);
+    }
+    
+    /**
+     * Accept incoming file transfer (RECEIVER role)
+     */
+    public static void acceptFileTransfer(String senderUsername, long fileId, java.nio.file.Path savePath) {
+        
+        InetSocketAddress senderAddr = activePeers.get(senderUsername);
+        if (senderAddr == null) {
+            System.err.println("[FILE-RECV] No P2P connection to sender: " + senderUsername);
+            return;
+        }
+        
+        CompletableFuture.runAsync(() -> {
+            try {
+                System.out.printf("[FILE-RECV] 📥 Accepting file transfer: fileId=%d, savePath=%s%n",
+                    fileId, savePath);
+                
+                // Register session queue
+                BlockingQueue<ByteBuffer> queue = FileTransferDispatcher.registerSession(fileId);
+                
+                // Create virtual channel
+                VirtualFileChannel virtualChannel = new VirtualFileChannel(
+                    stunChannel,
+                    senderAddr,
+                    queue
+                );
+                
+                // Create session
+                FileTransferSession session = new FileTransferSession(
+                    senderUsername, fileId, senderAddr, FileTransferSession.Role.RECEIVER
+                );
+                fileTransferSessions.put(fileId, session);
+                
+                // Create receiver with virtual channel
+                session.receiver = new com.saferoom.file_transfer.FileTransferReceiver();
+                session.receiver.channel = virtualChannel;
+                session.receiver.filePath = savePath;
+                
+                // Receive file (blocks)
+                session.receiver.ReceiveData();
+                
+                System.out.printf("[FILE-RECV] ✅ File received: fileId=%d%n", fileId);
+                
+                // Callback
+                if (fileTransferCallback != null) {
+                    fileTransferCallback.onFileTransferComplete(senderUsername, fileId, savePath);
+                }
+                
+            } catch (Exception e) {
+                System.err.printf("[FILE-RECV] ❌ Error: %s%n", e.getMessage());
+                if (fileTransferCallback != null) {
+                    fileTransferCallback.onFileTransferError(senderUsername, fileId, e);
+                }
+            } finally {
+                fileTransferSessions.remove(fileId);
+                FileTransferDispatcher.unregisterSession(fileId);
+            }
+        }, P2P_EXECUTOR);
+    }
+    
+    /**
+     * File transfer packet dispatcher
+     * Receives packets from KeepAliveManager and forwards to appropriate handler
+     */
+    private static class FileTransferDispatcher {
+        
+        // Packet queues for active sessions
+        private static final Map<Long, BlockingQueue<ByteBuffer>> sessionQueues = new ConcurrentHashMap<>();
+        
+        /**
+         * Forward packet to appropriate session
+         */
+        static void forwardPacket(InetSocketAddress senderAddr, ByteBuffer packet) {
+            
+            int packetSize = packet.remaining();
+            
+            // Handshake detection
+            if (packetSize == com.saferoom.file_transfer.HandShake_Packet.HEADER_SIZE) {
+                byte signal = packet.get(0);
+                
+                if (signal == com.saferoom.file_transfer.HandShake_Packet.SYN) {
+                    // NEW FILE TRANSFER REQUEST!
+                    handleIncomingFileTransferSYN(senderAddr, packet);
+                    return;
+                }
+                
+                // ACK/SYN_ACK - forward to existing session
+                long fileId = com.saferoom.file_transfer.HandShake_Packet.get_file_Id(packet);
+                forwardToSession(fileId, packet);
+                return;
+            }
+            
+            // Data or NACK packet
+            long fileId = extractFileId(packet, packetSize);
+            if (fileId > 0) {
+                forwardToSession(fileId, packet);
+            }
+        }
+        
+        private static void forwardToSession(long fileId, ByteBuffer packet) {
+            BlockingQueue<ByteBuffer> queue = sessionQueues.get(fileId);
+            if (queue != null) {
+                // Deep copy packet (buffer will be reused)
+                ByteBuffer copy = ByteBuffer.allocate(packet.remaining());
+                copy.put(packet.duplicate());
+                copy.flip();
+                
+                queue.offer(copy);
+            }
+        }
+        
+        /**
+         * Register new session
+         */
+        static BlockingQueue<ByteBuffer> registerSession(long fileId) {
+            BlockingQueue<ByteBuffer> queue = new LinkedBlockingQueue<>();
+            sessionQueues.put(fileId, queue);
+            return queue;
+        }
+        
+        /**
+         * Unregister session
+         */
+        static void unregisterSession(long fileId) {
+            sessionQueues.remove(fileId);
+        }
+        
+        private static long extractFileId(ByteBuffer packet, int size) {
+            if (size >= com.saferoom.file_transfer.CRC32C_Packet.HEADER_SIZE) {
+                return com.saferoom.file_transfer.CRC32C_Packet.fileId(packet);
+            } else if (size == com.saferoom.file_transfer.NackFrame.SIZE) {
+                return com.saferoom.file_transfer.NackFrame.fileId(packet);
+            }
+            return -1;
+        }
+        
+        private static void handleIncomingFileTransferSYN(InetSocketAddress senderAddr, ByteBuffer synPacket) {
+            
+            long fileId = com.saferoom.file_transfer.HandShake_Packet.get_file_Id(synPacket);
+            long fileSize = com.saferoom.file_transfer.HandShake_Packet.get_file_size(synPacket);
+            int totalSeq = com.saferoom.file_transfer.HandShake_Packet.get_total_seq(synPacket);
+            
+            // Find peer username
+            String senderUsername = findUsernameByAddress(senderAddr);
+            
+            // Extract filename from... wait, we don't have filename in handshake!
+            // Generate a default name
+            String fileName = "file_" + fileId + ".bin";
+            
+            System.out.printf("[FILE-RECV] 📥 Incoming file from %s: size=%d bytes, chunks=%d (fileId=%d)%n",
+                senderUsername, fileSize, totalSeq, fileId);
+            
+            // Notify GUI
+            if (fileTransferCallback != null) {
+                fileTransferCallback.onFileTransferRequest(
+                    senderUsername, fileId, fileName, fileSize, totalSeq
+                );
+            }
+            
+            // Forward SYN to dispatcher (receiver will read it)
+            forwardToSession(fileId, synPacket);
+        }
+    }
+    
+    /**
+     * Called by KeepAliveManager when file transfer packet detected
+     */
+    public static void onFileTransferPacket(InetSocketAddress senderAddr, ByteBuffer packet) {
+        FileTransferDispatcher.forwardPacket(senderAddr, packet);
+    }
+    
+    private static String findUsernameByAddress(InetSocketAddress addr) {
+        for (Map.Entry<String, InetSocketAddress> entry : activePeers.entrySet()) {
+            if (entry.getValue().equals(addr)) {
+                return entry.getKey();
+            }
+        }
+        return "Unknown";
+    }
 }
