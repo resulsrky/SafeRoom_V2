@@ -151,6 +151,17 @@ public class EnhancedFileTransferSender {
 	    }
 	    
 	    public void sendFile(Path filePath, long fileId) throws IOException{
+	    	sendFileInternal(filePath, fileId, true); // With handshake
+	    }
+	    
+	    /**
+	     * Send file WITHOUT handshake - handshake already done by KeepAliveManager!
+	     */
+	    public void sendFileWithoutHandshake(Path filePath, long fileId) throws IOException{
+	    	sendFileInternal(filePath, fileId, false); // Skip handshake
+	    }
+	    
+	    private void sendFileInternal(Path filePath, long fileId, boolean doHandshake) throws IOException{
 	    	if(channel == null) throw new IllegalStateException("Datagram Channel is null you must bind and connect first");
 	    	if(stopRequested) throw new IllegalStateException("Transfer was stopped");
 	    	
@@ -165,23 +176,27 @@ public class EnhancedFileTransferSender {
 	    		CRC32C initialCrc = new CRC32C();
 	    		CRC32C_Packet initialPkt = new CRC32C_Packet();
 	    		
-			long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
-			final long MAX_BACKOFF = 10_000_000L;
-			long backoff  = 1_000_000L;
-		boolean hand_shaking;
-		do{
-			hand_shaking = handshake(fileId, fileSize, totalSeq);  // Changed: long fileSize (no cast)
-			if(hand_shaking) break;				if(Thread.currentThread().isInterrupted()){
-					throw new IllegalStateException("Handshake Thread interrupted");
-				}
-				if(System.nanoTime() > deadline){
-					throw new IllegalStateException("Handshake timeout");
-				}
-				LockSupport.parkNanos(backoff);
-				 if (backoff < MAX_BACKOFF) {
-					   backoff = Math.min(MAX_BACKOFF, backoff << 1);
+			if (doHandshake) {
+				long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+				final long MAX_BACKOFF = 10_000_000L;
+				long backoff  = 1_000_000L;
+			boolean hand_shaking;
+			do{
+				hand_shaking = handshake(fileId, fileSize, totalSeq);  // Changed: long fileSize (no cast)
+				if(hand_shaking) break;				if(Thread.currentThread().isInterrupted()){
+						throw new IllegalStateException("Handshake Thread interrupted");
 					}
-			}while(!hand_shaking);
+					if(System.nanoTime() > deadline){
+						throw new IllegalStateException("Handshake timeout");
+					}
+					LockSupport.parkNanos(backoff);
+					 if (backoff < MAX_BACKOFF) {
+						   backoff = Math.min(MAX_BACKOFF, backoff << 1);
+						}
+				}while(!hand_shaking);
+			} else {
+				System.out.println("[FILE-SEND] ⏩ Skipping handshake - already done by KeepAliveManager");
+			}
 
 	    	ConcurrentLinkedQueue<Integer> retxQueue = new ConcurrentLinkedQueue<>();
 	    	
