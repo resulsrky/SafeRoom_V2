@@ -2468,6 +2468,13 @@ public class NatAnalyzer {
                 System.out.printf("[FILE-SEND] 📤 Sending %s to %s%n",
                     filePath.getFileName(), targetUser);
                 
+                // STOP KeepAliveManager to avoid packet interference
+                if (globalKeepAlive != null) {
+                    System.out.println("[FILE-SEND] ⏸️  Pausing KeepAliveManager");
+                    globalKeepAlive.stopMessageListening();
+                    Thread.sleep(100); // Wait for listener to stop
+                }
+                
                 // Connect stunChannel to peer for file transfer
                 synchronized (stunChannel) {
                     stunChannel.connect(peerAddr);
@@ -2500,6 +2507,12 @@ public class NatAnalyzer {
                     fileTransferCallback.onFileTransferError(targetUser, fileId, e);
                 }
                 throw new RuntimeException(e);
+            } finally {
+                // RESTART KeepAliveManager
+                if (globalKeepAlive != null) {
+                    System.out.println("[FILE-SEND] ▶️  Resuming KeepAliveManager");
+                    globalKeepAlive.startMessageListening(stunChannel);
+                }
             }
         }, P2P_EXECUTOR);
     }
@@ -2520,19 +2533,20 @@ public class NatAnalyzer {
             try {
                 System.out.printf("[FILE-RECV] 📥 Accepting file transfer, saving to: %s%n", savePath);
                 
-                // Connect stunChannel to sender for file transfer
+                // Connect stunChannel to sender FIRST - this makes channel read only from sender!
                 synchronized (stunChannel) {
                     stunChannel.connect(senderAddr);
-                    System.out.printf("[FILE-RECV] 🔗 Connected to %s%n", senderAddr);
+                    System.out.printf("[FILE-RECV] 🔗 Connected to %s (channel now filters packets from this peer only)%n", senderAddr);
                 
                     try {
-                        // Create receiver with connected stunChannel
+                        // Create receiver with connected stunChannel  
+                        // Receiver will do handshake - sender will retry SYN if needed
                         com.saferoom.file_transfer.FileTransferReceiver receiver = 
                             new com.saferoom.file_transfer.FileTransferReceiver();
                         receiver.channel = stunChannel;
                         receiver.filePath = savePath;
                         
-                        // Receive file - receiver does all the work!
+                        // Receive file - receiver does handshake + data transfer!
                         receiver.ReceiveData();
                         
                         System.out.printf("[FILE-RECV] ✅ File received successfully%n");
