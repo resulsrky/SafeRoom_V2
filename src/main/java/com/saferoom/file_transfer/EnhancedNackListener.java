@@ -80,8 +80,11 @@ public class EnhancedNackListener implements Runnable{
 							try {
 								onTransferComplete.run();
 							} catch(Exception e) {
-								System.err.println("Error in completion callback: " + e);
+								System.err.println("❌ Error in completion callback: " + e.getMessage());
+								e.printStackTrace();
 							}
+						} else {
+							System.err.println("⚠️  onTransferComplete callback is null!");
 						}
 						break; // Exit listener loop
 					}
