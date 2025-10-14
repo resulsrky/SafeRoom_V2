@@ -2451,7 +2451,6 @@ public class NatAnalyzer {
     
     /**
      * Send file to peer (SENDER role)  
-     * Handshake done by KeepAliveManager, then just send data!
      */
     public static CompletableFuture<Void> sendFile(String targetUser, java.nio.file.Path filePath) {
         InetSocketAddress peerAddr = activePeers.get(targetUser);
@@ -2468,55 +2467,25 @@ public class NatAnalyzer {
                 System.out.printf("[FILE-SEND] 📤 Sending %s to %s%n",
                     filePath.getFileName(), targetUser);
                 
-                // 1. Send SYN (KeepAliveManager is running and will handle ACK/SYN_ACK)
-                long fileSize = java.nio.file.Files.size(filePath);
-                int totalSeq = (int) ((fileSize + 1449) / 1450); // Calculate chunks
-                
-                com.saferoom.file_transfer.HandShake_Packet synPkt = 
-                    new com.saferoom.file_transfer.HandShake_Packet();
-                synPkt.make_SYN(fileId, fileSize, totalSeq);
-                
-                int synBytes = stunChannel.send(synPkt.get_header().duplicate(), peerAddr);
-                System.out.printf("[FILE-HANDSHAKE] 📤 SYN sent: %d bytes (fileId=%d, size=%d, chunks=%d)%n", 
-                    synBytes, fileId, fileSize, totalSeq);
-                
-                // 2. Wait for READY-ACK from receiver (via latch)
-                System.out.println("[FILE-HANDSHAKE] ⏳ Waiting for receiver to accept...");
-                
-                java.util.concurrent.CountDownLatch readyLatch = FileTransferDispatcher.readyAckLatches.get(fileId);
-                
-                // Wait for up to 30 seconds for receiver to accept
-                boolean receiverReady = false;
-                if (readyLatch != null) {
-                    receiverReady = readyLatch.await(30, java.util.concurrent.TimeUnit.SECONDS);
-                    FileTransferDispatcher.readyAckLatches.remove(fileId); // Cleanup
-                }
-                
-                if (!receiverReady) {
-                    throw new java.io.IOException("Receiver did not accept file transfer within 30 seconds");
-                }
-                
-                System.out.println("[FILE-HANDSHAKE] ✅ Receiver is ready - starting data transfer!");
-                
-                // 3. NOW stop KeepAliveManager and take control
+                // STOP KeepAliveManager
                 if (globalKeepAlive != null) {
                     System.out.println("[FILE-SEND] ⏸️  Stopping KeepAliveManager");
                     globalKeepAlive.stopMessageListening();
                     Thread.sleep(100);
                 }
                 
-                // 4. Connect stunChannel to peer for file transfer
+                // Connect stunChannel to peer for file transfer
                 synchronized (stunChannel) {
                     stunChannel.connect(peerAddr);
                     System.out.printf("[FILE-SEND] 🔗 Connected to %s%n", peerAddr);
                 
                     try {
-                        // 5. Create sender with connected stunChannel
+                        // Create sender - will do normal handshake
                         com.saferoom.file_transfer.EnhancedFileTransferSender sender = 
                             new com.saferoom.file_transfer.EnhancedFileTransferSender(stunChannel);
                         
-                        // 6. Send file WITHOUT handshake (already done by KeepAliveManager!)
-                        sender.sendFileWithoutHandshake(filePath, fileId);
+                        // Send file - sender does handshake + data transfer
+                        sender.sendFile(filePath, fileId);
                         
                         System.out.printf("[FILE-SEND] ✅ File sent successfully%n");
                         
@@ -2548,151 +2517,12 @@ public class NatAnalyzer {
     }
     
     /**
-     * Accept incoming file transfer (RECEIVER role)
-     * Just creates receiver and gives it the path - receiver handles EVERYTHING!
+     * Accept incoming file transfer (DEPRECATED - now auto-accepts)
+     * Kept for compatibility
      */
     public static void acceptFileTransfer(String senderUsername, long fileId, java.nio.file.Path savePath) {
-        
-        InetSocketAddress senderAddr = activePeers.get(senderUsername);
-        if (senderAddr == null) {
-            System.err.println("[FILE-RECV] No P2P connection to sender: " + senderUsername);
-            return;
-        }
-        
-        CompletableFuture.runAsync(() -> {
-            java.nio.channels.FileChannel fc = null;
-            
-            try {
-                System.out.printf("[FILE-RECV] 📥 Accepting file transfer, saving to: %s%n", savePath);
-                
-                // Get cached metadata (handshake already completed by KeepAliveManager!)
-                ByteBuffer cachedSYN = FileTransferDispatcher.cachedSYNPackets.remove(fileId);
-                if (cachedSYN == null) {
-                    System.err.println("[FILE-RECV] ❌ No cached metadata for fileId=" + fileId);
-                    return;
-                }
-                
-                // Extract metadata
-                long receivedFileId = com.saferoom.file_transfer.HandShake_Packet.get_file_Id(cachedSYN);
-                long fileSize = com.saferoom.file_transfer.HandShake_Packet.get_file_size(cachedSYN);
-                int totalSeq = com.saferoom.file_transfer.HandShake_Packet.get_total_seq(cachedSYN);
-                
-                System.out.printf("[FILE-RECV] 📋 Metadata: fileId=%d, size=%d bytes, chunks=%d%n", 
-                    receivedFileId, fileSize, totalSeq);
-                
-                // Send "READY" ACK to sender - confirming we're ready to receive data!
-                com.saferoom.file_transfer.HandShake_Packet readyAck = 
-                    new com.saferoom.file_transfer.HandShake_Packet();
-                readyAck.make_ACK(receivedFileId, fileSize, totalSeq);
-                
-                int readyBytes = stunChannel.send(readyAck.get_header().duplicate(), senderAddr);
-                System.out.printf("[FILE-RECV] 📤 Sent READY-ACK: %d bytes (receiver is ready!)%n", readyBytes);
-                
-                // STOP KeepAliveManager - we're taking control now!
-                if (globalKeepAlive != null) {
-                    System.out.println("[FILE-RECV] ⏸️  Stopping KeepAliveManager");
-                    globalKeepAlive.stopMessageListening();
-                    Thread.sleep(100);
-                }
-                
-                // Connect to sender
-                synchronized (stunChannel) {
-                    stunChannel.connect(senderAddr);
-                    System.out.printf("[FILE-RECV] 🔗 Connected to %s%n", senderAddr);
-                    
-                    try {
-                        // Open file
-                        fc = java.nio.channels.FileChannel.open(savePath, 
-                            java.nio.file.StandardOpenOption.CREATE,
-                            java.nio.file.StandardOpenOption.READ,
-                            java.nio.file.StandardOpenOption.WRITE,
-                            java.nio.file.StandardOpenOption.SYNC);
-                        
-                        fc.truncate(fileSize);
-                        
-                        // Start data transfer using NackSender (handshake already done!)
-                        long transferStartTime = System.currentTimeMillis();
-                        
-                        com.saferoom.file_transfer.HybridCongestionController congestionControl = 
-                            new com.saferoom.file_transfer.HybridCongestionController();
-                        
-                        com.saferoom.file_transfer.NackSender nackSender;
-                        
-                        if (fileSize <= com.saferoom.file_transfer.FileTransferReceiver.MAX_FILE_SIZE) {
-                            java.nio.MappedByteBuffer memBuf = fc.map(
-                                java.nio.channels.FileChannel.MapMode.READ_WRITE, 0, fileSize);
-                            nackSender = new com.saferoom.file_transfer.NackSender(
-                                stunChannel, receivedFileId, fileSize, totalSeq, memBuf, congestionControl);
-                        } else {
-                            System.out.println("[FILE-RECV] ⚠️  Large file - using chunked I/O");
-                            com.saferoom.file_transfer.ChunkManager chunkManager = 
-                                new com.saferoom.file_transfer.ChunkManager(fc, fileSize, 1450);
-                            nackSender = new com.saferoom.file_transfer.NackSender(
-                                stunChannel, receivedFileId, fileSize, totalSeq, chunkManager, congestionControl);
-                        }
-                        
-                        java.util.concurrent.CountDownLatch transferLatch = 
-                            new java.util.concurrent.CountDownLatch(1);
-                        
-                        nackSender.onTransferComplete = () -> {
-                            System.out.println("[FILE-RECV] 🎉 All packets received!");
-                            transferLatch.countDown();
-                        };
-                        
-                        Thread nackThread = new Thread(nackSender, "file-nack-sender");
-                        nackThread.start();
-                        
-                        boolean completed = transferLatch.await(300, java.util.concurrent.TimeUnit.SECONDS);
-                        
-                        if (!completed) {
-                            System.err.println("[FILE-RECV] ⚠️  Transfer timeout");
-                        }
-                        
-                        nackThread.interrupt();
-                        
-                        long transferTime = System.currentTimeMillis() - transferStartTime;
-                        double transferTimeSec = transferTime / 1000.0;
-                        double speedMBps = (fileSize / (1024.0 * 1024.0)) / transferTimeSec;
-                        
-                        System.out.printf("[FILE-RECV] ✅ Transfer complete: %.2f MB in %.2f sec (%.2f MB/s)%n",
-                            fileSize / (1024.0 * 1024.0), transferTimeSec, speedMBps);
-                        
-                        // Send completion signal
-                        ByteBuffer completionFrame = ByteBuffer.allocate(8);
-                        completionFrame.putInt(0xDEADBEEF);
-                        completionFrame.putInt((int)receivedFileId);
-                        completionFrame.flip();
-                        stunChannel.write(completionFrame);
-                        Thread.sleep(100);
-                        
-                        if (fileTransferCallback != null) {
-                            fileTransferCallback.onFileTransferComplete(senderUsername, fileId, savePath);
-                        }
-                        
-                    } finally {
-                        stunChannel.disconnect();
-                        System.out.println("[FILE-RECV] 🔌 Disconnected");
-                        
-                        if (fc != null) {
-                            fc.close();
-                        }
-                    }
-                }
-                
-            } catch (Exception e) {
-                System.err.printf("[FILE-RECV] ❌ Failed: %s%n", e.getMessage());
-                e.printStackTrace();
-                if (fileTransferCallback != null) {
-                    fileTransferCallback.onFileTransferError(senderUsername, fileId, e);
-                }
-            } finally {
-                // RESTART KeepAliveManager
-                if (globalKeepAlive != null) {
-                    System.out.println("[FILE-RECV] ▶️  Restarting KeepAliveManager");
-                    globalKeepAlive.startMessageListening(stunChannel);
-                }
-            }
-        }, P2P_EXECUTOR);
+        System.out.println("[FILE-RECV] ⚠️ acceptFileTransfer() called but receiver already auto-started!");
+        // Receiver is already running automatically when SYN was received
     }
     
     /**
@@ -2701,23 +2531,10 @@ public class NatAnalyzer {
      */
     private static class FileTransferDispatcher {
         
-        // Packet queues for active sessions
-        private static final Map<Long, BlockingQueue<ByteBuffer>> sessionQueues = new ConcurrentHashMap<>();
+        // Not needed anymore - receiver auto-starts on SYN
+        // Keeping for compatibility
         
-        // Cache SYN packets until user accepts/declines
-        private static final Map<Long, ByteBuffer> cachedSYNPackets = new ConcurrentHashMap<>();
-        
-        // READY-ACK latches for sender to wait for receiver ready
-        private static final Map<Long, java.util.concurrent.CountDownLatch> readyAckLatches = new ConcurrentHashMap<>();
-        
-        // Debug counter for DATA packet logging
-        private static int dataPacketDebugCount = 0;
-        
-        /**
-         * Forward packet to appropriate session
-         */
         static void forwardPacket(InetSocketAddress senderAddr, ByteBuffer packet) {
-            
             int packetSize = packet.remaining();
             
             // Handshake detection
@@ -2725,126 +2542,16 @@ public class NatAnalyzer {
                 byte signal = packet.get(0);
                 
                 if (signal == com.saferoom.file_transfer.HandShake_Packet.SYN) {
-                    // NEW FILE TRANSFER REQUEST!
+                    // NEW FILE TRANSFER REQUEST - Auto-start receiver!
                     handleIncomingFileTransferSYN(senderAddr, packet);
                     return;
                 }
                 
-                if (signal == com.saferoom.file_transfer.HandShake_Packet.ACK) {
-                    // ACK received - receiver responded to our SYN!
-                    long fileId = com.saferoom.file_transfer.HandShake_Packet.get_file_Id(packet);
-                    System.out.printf("[FILE-HANDSHAKE] ✅ ACK received for fileId=%d%n", fileId);
-                    
-                    // Check if this is FIRST ACK (initial handshake) or READY-ACK (receiver ready)
-                    java.util.concurrent.CountDownLatch readyLatch = readyAckLatches.get(fileId);
-                    
-                    if (readyLatch == null) {
-                        // FIRST ACK - send SYN_ACK and create latch for READY-ACK
-                        try {
-                            com.saferoom.file_transfer.HandShake_Packet synAckPkt = 
-                                new com.saferoom.file_transfer.HandShake_Packet();
-                            synAckPkt.make_SYN_ACK(fileId);
-                            
-                            int synAckBytes = stunChannel.send(synAckPkt.get_header().duplicate(), senderAddr);
-                            System.out.printf("[FILE-HANDSHAKE] 📤 Auto-sent SYN_ACK: %d bytes%n", synAckBytes);
-                            
-                            // Create latch for READY-ACK
-                            readyAckLatches.put(fileId, new java.util.concurrent.CountDownLatch(1));
-                            System.out.println("[FILE-HANDSHAKE] ⏳ Waiting for READY-ACK from receiver...");
-                            
-                        } catch (Exception e) {
-                            System.err.println("[FILE-HANDSHAKE] ❌ Failed to send SYN_ACK: " + e.getMessage());
-                        }
-                    } else {
-                        // READY-ACK received - receiver is ready to receive data!
-                        System.out.printf("[FILE-HANDSHAKE] ✅ READY-ACK received for fileId=%d - receiver is ready!%n", fileId);
-                        readyLatch.countDown();
-                    }
-                    return;
-                }
-                
-                if (signal == com.saferoom.file_transfer.HandShake_Packet.SYN_ACK) {
-                    // SYN_ACK received - handshake complete on receiver side!
-                    long fileId = com.saferoom.file_transfer.HandShake_Packet.get_file_Id(packet);
-                    System.out.printf("[FILE-HANDSHAKE] ✅ SYN_ACK received for fileId=%d (Handshake COMPLETE!)%n", fileId);
-                    // Receiver can now start receiving data
-                    return;
-                }
-                
-                // Forward other handshake packets
-                long fileId = com.saferoom.file_transfer.HandShake_Packet.get_file_Id(packet);
-                forwardToSession(fileId, packet);
+                // Other handshake packets (ACK, SYN_ACK) handled by FileTransferSender/Receiver
                 return;
             }
             
-            // Data or NACK packet
-            long fileId = extractFileId(packet, packetSize);
-            if (fileId > 0) {
-                // Debug: Log first few DATA packets with fileId
-                if (packetSize >= 22 && dataPacketDebugCount < 3) {
-                    System.out.printf("[FILE-DISPATCHER] 🔍 Routing DATA packet: fileId=%d, size=%d%n", 
-                        fileId, packetSize);
-                    dataPacketDebugCount++;
-                }
-                
-                forwardToSession(fileId, packet);
-            } else {
-                System.err.printf("[FILE-DISPATCHER] ❌ Invalid fileId extracted: %d, size=%d%n", 
-                    fileId, packetSize);
-            }
-        }
-        
-        private static void forwardToSession(long fileId, ByteBuffer packet) {
-            BlockingQueue<ByteBuffer> queue = sessionQueues.get(fileId);
-            if (queue != null) {
-                // Deep copy packet (buffer will be reused)
-                ByteBuffer copy = ByteBuffer.allocate(packet.remaining());
-                copy.put(packet.duplicate());
-                copy.flip();
-                
-                boolean offered = queue.offer(copy);
-                
-                // Debug log for DATA packets (only first few to avoid spam)
-                if (offered && copy.remaining() >= 22) {
-                    System.out.printf("[FILE-DISPATCHER] 📦 DATA packet queued for fileId=%d (queue size: %d)%n", 
-                        fileId, queue.size());
-                }
-            } else {
-                System.err.printf("[FILE-DISPATCHER] ❌ No queue registered for fileId=%d%n", fileId);
-            }
-        }
-        
-        /**
-         * Register new session
-         */
-        static BlockingQueue<ByteBuffer> registerSession(long fileId) {
-            BlockingQueue<ByteBuffer> queue = new LinkedBlockingQueue<>();
-            sessionQueues.put(fileId, queue);
-            
-            // If there's a cached SYN packet, add it to queue now
-            ByteBuffer cachedSYN = cachedSYNPackets.remove(fileId);
-            if (cachedSYN != null) {
-                System.out.printf("[FILE-DISPATCHER] 📦 Adding cached SYN to queue for fileId=%d%n", fileId);
-                queue.offer(cachedSYN);
-            }
-            
-            return queue;
-        }
-        
-        /**
-         * Unregister session
-         */
-        static void unregisterSession(long fileId) {
-            sessionQueues.remove(fileId);
-        }
-        
-        private static long extractFileId(ByteBuffer packet, int size) {
-            if (size >= com.saferoom.file_transfer.CRC32C_Packet.HEADER_SIZE) {
-                return com.saferoom.file_transfer.CRC32C_Packet.fileId(packet);
-            } else if (size == com.saferoom.file_transfer.NackFrame.SIZE) {
-                return com.saferoom.file_transfer.NackFrame.fileId(packet);
-            }
-            return -1;
+            // Other packets ignored - receiver is directly connected
         }
         
         private static void handleIncomingFileTransferSYN(InetSocketAddress senderAddr, ByteBuffer synPacket) {
@@ -2856,39 +2563,71 @@ public class NatAnalyzer {
             // Find peer username
             String senderUsername = findUsernameByAddress(senderAddr);
             
-            // Extract filename from... wait, we don't have filename in handshake!
-            // Generate a default name
             String fileName = "file_" + fileId + ".bin";
             
-            System.out.printf("[FILE-HANDSHAKE] 📥 SYN received from %s: size=%d bytes, chunks=%d (fileId=%d)%n",
+            System.out.printf("[FILE-RECV] 📥 SYN received from %s: size=%d bytes, chunks=%d (fileId=%d)%n",
                 senderUsername, fileSize, totalSeq, fileId);
             
-            // **AUTOMATICALLY SEND ACK** - Complete handshake in KeepAliveManager!
-            try {
-                com.saferoom.file_transfer.HandShake_Packet ackPkt = 
-                    new com.saferoom.file_transfer.HandShake_Packet();
-                ackPkt.make_ACK(fileId, fileSize, totalSeq);
+            // **AUTO-START RECEIVER** - No GUI prompt!
+            System.out.println("[FILE-RECV] 🚀 Auto-starting FileTransferReceiver...");
+            
+            // Stop KeepAliveManager
+            if (globalKeepAlive != null) {
+                try {
+                    globalKeepAlive.stopMessageListening();
+                    Thread.sleep(100);
+                } catch (Exception e) {
+                    System.err.println("[FILE-RECV] ⚠️ Error stopping KeepAliveManager: " + e.getMessage());
+                }
+            }
+            
+            // Start receiver in background
+            P2P_EXECUTOR.submit(() -> {
+                java.nio.file.Path savePath = java.nio.file.Paths.get(
+                    System.getProperty("user.home"), "Downloads", fileName);
                 
-                int ackBytes = stunChannel.send(ackPkt.get_header().duplicate(), senderAddr);
-                System.out.printf("[FILE-HANDSHAKE] 📤 Auto-sent ACK: %d bytes to %s%n", ackBytes, senderUsername);
-            } catch (Exception e) {
-                System.err.println("[FILE-HANDSHAKE] ❌ Failed to send ACK: " + e.getMessage());
-            }
-            
-            // Cache metadata for when user accepts
-            ByteBuffer synCopy = ByteBuffer.allocate(synPacket.remaining());
-            synCopy.put(synPacket.duplicate());
-            synCopy.flip();
-            cachedSYNPackets.put(fileId, synCopy);
-            
-            System.out.printf("[FILE-DISPATCHER] 💾 Cached metadata for fileId=%d%n", fileId);
-            
-            // Notify GUI
-            if (fileTransferCallback != null) {
-                fileTransferCallback.onFileTransferRequest(
-                    senderUsername, fileId, fileName, fileSize, totalSeq
-                );
-            }
+                try {
+                    System.out.printf("[FILE-RECV] � Saving to: %s%n", savePath);
+                    
+                    // Connect to sender
+                    synchronized (stunChannel) {
+                        stunChannel.connect(senderAddr);
+                        System.out.printf("[FILE-RECV] 🔗 Connected to %s%n", senderAddr);
+                        
+                        try {
+                            // Create receiver and start receiving
+                            com.saferoom.file_transfer.FileTransferReceiver receiver = 
+                                new com.saferoom.file_transfer.FileTransferReceiver();
+                            receiver.channel = stunChannel;
+                            receiver.filePath = savePath;
+                            
+                            // Receive file - receiver does handshake + data transfer!
+                            receiver.ReceiveData();
+                            
+                            System.out.printf("[FILE-RECV] ✅ File received successfully: %s%n", savePath);
+                            
+                            if (fileTransferCallback != null) {
+                                fileTransferCallback.onFileTransferComplete(senderUsername, fileId, savePath);
+                            }
+                        } finally {
+                            stunChannel.disconnect();
+                            System.out.println("[FILE-RECV] � Disconnected");
+                        }
+                    }
+                } catch (Exception e) {
+                    System.err.printf("[FILE-RECV] ❌ Failed: %s%n", e.getMessage());
+                    e.printStackTrace();
+                    if (fileTransferCallback != null) {
+                        fileTransferCallback.onFileTransferError(senderUsername, fileId, e);
+                    }
+                } finally {
+                    // RESTART KeepAliveManager
+                    if (globalKeepAlive != null) {
+                        System.out.println("[FILE-RECV] ▶️  Restarting KeepAliveManager");
+                        globalKeepAlive.startMessageListening(stunChannel);
+                    }
+                }
+            });
         }
     }
     
