@@ -84,9 +84,12 @@ public class VirtualFileChannel extends DatagramChannel {
     
     @Override
     public SocketAddress receive(ByteBuffer dst) throws IOException {
-        // Read from queue instead of socket
+        // Read from queue instead of socket with adaptive timeout
         try {
-            ByteBuffer packet = receiveQueue.poll(100, TimeUnit.MILLISECONDS);
+            // Adaptive timeout: 1ms if queue has data, 50ms if empty
+            long timeoutMs = receiveQueue.isEmpty() ? 50 : 1;
+            
+            ByteBuffer packet = receiveQueue.poll(timeoutMs, TimeUnit.MILLISECONDS);
             
             if (packet == null) {
                 return null; // Timeout - no packet available
@@ -111,9 +114,13 @@ public class VirtualFileChannel extends DatagramChannel {
     
     @Override
     public int read(ByteBuffer dst) throws IOException {
-        // Read from queue
+        // Read from queue with adaptive timeout
         try {
-            ByteBuffer packet = receiveQueue.poll(100, TimeUnit.MILLISECONDS);
+            // If queue has data, use short timeout (1ms) for low latency
+            // If queue is empty, use longer timeout (50ms) to avoid spinning
+            long timeoutMs = receiveQueue.isEmpty() ? 50 : 1;
+            
+            ByteBuffer packet = receiveQueue.poll(timeoutMs, TimeUnit.MILLISECONDS);
             
             if (packet == null) {
                 return 0; // No data available
@@ -149,11 +156,22 @@ public class VirtualFileChannel extends DatagramChannel {
         SocketAddress actualTarget = (target != null ? target : targetAddress);
         int bytesSent = realChannel.send(src, actualTarget);
         
-        // Only log handshake packets (21 bytes) and completion signals (8 bytes)
-        // Skip data packets (22+ bytes) to avoid log spam
-        if (bytesSent <= 21 || bytesSent == 8) {
-            String packetType = bytesSent == 21 ? "HANDSHAKE" : 
-                               bytesSent == 8 ? "COMPLETION" : "PACKET";
+        // Detect packet type by size
+        int packetSize = src.remaining() + bytesSent; // approximation
+        String packetType = "UNKNOWN";
+        
+        if (bytesSent == 21) {
+            packetType = "HANDSHAKE";
+        } else if (bytesSent == 8) {
+            packetType = "COMPLETION";
+        } else if (bytesSent == 28) {
+            packetType = "NACK";
+        } else if (bytesSent >= 22) {
+            packetType = "DATA";
+        }
+        
+        // Log non-data packets and failures
+        if (!packetType.equals("DATA") || bytesSent == 0) {
             System.out.printf("[VirtualFileChannel] 📤 %s sent: %d bytes to %s%n", 
                 packetType, bytesSent, actualTarget);
         }

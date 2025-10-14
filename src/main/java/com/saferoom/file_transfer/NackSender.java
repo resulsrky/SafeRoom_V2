@@ -161,6 +161,7 @@ public class NackSender implements Runnable{
 			if (chunkManager != null) {
 				// Large file mode: use ChunkManager
 				try {
+					// 🔥 CRITICAL FIX: Do I/O operations OUTSIDE synchronized block to prevent deadlock!
 					int chunkIdx = chunkManager.findChunkForSequence(seqNo);
 					if (chunkIdx < 0) {
 						System.err.println("No chunk found for sequence: " + seqNo);
@@ -172,28 +173,30 @@ public class NackSender implements Runnable{
 					int localSeq = chunkMeta.toLocalSequence(seqNo);
 					int localOff = chunkMeta.getLocalOffset(localSeq, PAYLOAD_SIZE);
 					
+					// Bounds check BEFORE synchronized block
+					if(localOff + payloadLen > chunkBuffer.capacity()) {
+						System.err.println("⚠️  Chunk bounds exceeded: localOff=" + localOff + 
+							", payloadLen=" + payloadLen + ", capacity=" + chunkBuffer.capacity() + 
+							", seqNo=" + seqNo);
+						// Adjust payload length to fit
+						payloadLen = chunkBuffer.capacity() - localOff;
+						System.out.println("✂️  Adjusted payloadLen to: " + payloadLen);
+					}
+					
+					// Prepare buffer views OUTSIDE synchronized block
+					MappedByteBuffer view = chunkBuffer.duplicate();
+					view.position(localOff);
+					view.limit(localOff + payloadLen);
+					
+					ByteBuffer payloadToPut = payload.duplicate();
+					payloadToPut.limit(payloadLen);
+					payloadToPut.rewind();
+					
+					// NOW enter synchronized block - ONLY for BitSet update and write
 					synchronized(this) {
 						if(recv.get(seqNo)) return; // Already received
 						
-						// Bounds check for chunk write
-						if(localOff + payloadLen > chunkBuffer.capacity()) {
-							System.err.println("⚠️  Chunk bounds exceeded: localOff=" + localOff + 
-								", payloadLen=" + payloadLen + ", capacity=" + chunkBuffer.capacity() + 
-								", seqNo=" + seqNo);
-							// Adjust payload length to fit
-							payloadLen = chunkBuffer.capacity() - localOff;
-							System.out.println("✂️  Adjusted payloadLen to: " + payloadLen);
-						}
-						
-						MappedByteBuffer view = chunkBuffer.duplicate();
-						view.position(localOff);
-						view.limit(localOff + payloadLen);
-						
-						ByteBuffer payloadToPut = payload.duplicate();
-						payloadToPut.limit(payloadLen); // Limit to actual payload size
-						payloadToPut.rewind();
 						view.put(payloadToPut);
-						
 						recv.set(seqNo);
 					}
 				} catch(IOException e) {
@@ -213,16 +216,18 @@ public class NackSender implements Runnable{
 					payloadLen = mem_buf.capacity() - off;
 				}
 				
+				// Prepare buffer views OUTSIDE synchronized block
+				MappedByteBuffer view = mem_buf.duplicate();
+				view.position(off);
+				view.limit(off + payloadLen);
+				
+				ByteBuffer payloadToPut = payload.duplicate();
+				payloadToPut.limit(payloadLen);
+				payloadToPut.rewind();
+				
+				// NOW enter synchronized block - ONLY for BitSet update and write
 				synchronized(this) {
-					if(recv.get(seqNo)) return;
-					
-					MappedByteBuffer view = mem_buf.duplicate();
-					view.position(off);
-					view.limit(off + payloadLen);
-					
-					ByteBuffer payloadToPut = payload.duplicate();
-					payloadToPut.limit(payloadLen); // Limit to actual payload size
-					payloadToPut.rewind();
+					if(recv.get(seqNo)) return; // Already received
 					
 					view.put(payloadToPut);
 					recv.set(seqNo);
@@ -280,27 +285,36 @@ public class NackSender implements Runnable{
 
 		int r;
 		int retries = 0;
-		final int MAX_RETRIES = 5;
+		final int MAX_RETRIES = 20; // Increased from 5 to handle UDP buffer congestion
 		
 		try{
 			do{
 				r = channel.write(frame.buffer().duplicate());
 				if(r == 0) {
-					// Dynamic backoff based on congestion state
-					long backoffNs = 50_000; // Default 50μs
+					// Exponential backoff: start at 100μs, double each retry, max 10ms
+					long baseBackoff = 100_000; // 100μs
+					long maxBackoff = 10_000_000; // 10ms
+					long backoffNs = Math.min(baseBackoff << retries, maxBackoff);
+					
+					// Additional congestion-aware adjustment
 					if(hybridControl != null) {
-						// Get current pacing interval as backoff guide
 						long pacingInterval = hybridControl.getPacingInterval();
-						backoffNs = Math.min(pacingInterval / 4, 200_000); // Max 200μs
+						backoffNs = Math.max(backoffNs, pacingInterval / 2);
 					}
+					
 					LockSupport.parkNanos(backoffNs);
 					retries++;
 					if(retries >= MAX_RETRIES) {
-						System.err.println("NACK frame send failed after " + MAX_RETRIES + " retries");
+						System.err.printf("⚠️  NACK frame send failed after %d retries (UDP buffer congested)%n", MAX_RETRIES);
 						return;
 					}
 				}
 			}while(r == 0 && retries < MAX_RETRIES);
+			
+			// Success log (only if there were retries)
+			if (retries > 0) {
+				System.out.printf("[NACK] ✅ NACK sent after %d retries%n", retries);
+			}
 		}catch(IOException e){
 			System.err.println("NACK write failed: " + e.getMessage());
 			// Don't throw RuntimeException, just log and continue

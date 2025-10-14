@@ -2467,15 +2467,11 @@ public class NatAnalyzer {
                 System.out.printf("[FILE-SEND] 📤 Sending %s to %s (fileId=%d)%n",
                     filePath.getFileName(), targetUser, fileId);
                 
-                // Register session queue
-                BlockingQueue<ByteBuffer> queue = FileTransferDispatcher.registerSession(fileId);
-                
-                // Create virtual channel
-                VirtualFileChannel virtualChannel = new VirtualFileChannel(
-                    stunChannel,
-                    peerAddr,
-                    queue
-                );
+                // 🔥 STOP KeepAliveManager to give stunChannel to file transfer
+                if (globalKeepAlive != null) {
+                    System.out.println("[FILE-SEND] ⏸️  Pausing KeepAliveManager during file transfer");
+                    globalKeepAlive.stopMessageListening();
+                }
                 
                 // Create session
                 FileTransferSession session = new FileTransferSession(
@@ -2483,10 +2479,10 @@ public class NatAnalyzer {
                 );
                 fileTransferSessions.put(fileId, session);
                 
-                // Create sender with virtual channel
-                session.sender = new com.saferoom.file_transfer.EnhancedFileTransferSender(virtualChannel);
+                // Create sender with DIRECT stunChannel - NO VirtualFileChannel!
+                session.sender = new com.saferoom.file_transfer.EnhancedFileTransferSender(stunChannel);
                 
-                // Send file (blocks)
+                // Send file (blocks until complete)
                 session.sender.sendFile(filePath, fileId);
                 
                 System.out.printf("[FILE-SEND] ✅ File sent: fileId=%d%n", fileId);
@@ -2504,7 +2500,12 @@ public class NatAnalyzer {
                 throw new RuntimeException(e);
             } finally {
                 fileTransferSessions.remove(fileId);
-                FileTransferDispatcher.unregisterSession(fileId);
+                
+                // 🔥 RESTART KeepAliveManager after file transfer
+                if (globalKeepAlive != null) {
+                    System.out.println("[FILE-SEND] ▶️  Resuming KeepAliveManager");
+                    globalKeepAlive.startMessageListening(stunChannel);
+                }
             }
         }, P2P_EXECUTOR);
     }
@@ -2525,15 +2526,11 @@ public class NatAnalyzer {
                 System.out.printf("[FILE-RECV] 📥 Accepting file transfer: fileId=%d, savePath=%s%n",
                     fileId, savePath);
                 
-                // Register session queue
-                BlockingQueue<ByteBuffer> queue = FileTransferDispatcher.registerSession(fileId);
-                
-                // Create virtual channel
-                VirtualFileChannel virtualChannel = new VirtualFileChannel(
-                    stunChannel,
-                    senderAddr,
-                    queue
-                );
+                // 🔥 STOP KeepAliveManager to give stunChannel to file transfer
+                if (globalKeepAlive != null) {
+                    System.out.println("[FILE-RECV] ⏸️  Pausing KeepAliveManager during file transfer");
+                    globalKeepAlive.stopMessageListening();
+                }
                 
                 // Create session
                 FileTransferSession session = new FileTransferSession(
@@ -2541,12 +2538,12 @@ public class NatAnalyzer {
                 );
                 fileTransferSessions.put(fileId, session);
                 
-                // Create receiver with virtual channel
+                // Create receiver with DIRECT stunChannel - NO VirtualFileChannel!
                 session.receiver = new com.saferoom.file_transfer.FileTransferReceiver();
-                session.receiver.channel = virtualChannel;
+                session.receiver.channel = stunChannel;
                 session.receiver.filePath = savePath;
                 
-                // Receive file (blocks)
+                // Receive file (blocks until complete)
                 session.receiver.ReceiveData();
                 
                 System.out.printf("[FILE-RECV] ✅ File received: fileId=%d%n", fileId);
@@ -2563,7 +2560,12 @@ public class NatAnalyzer {
                 }
             } finally {
                 fileTransferSessions.remove(fileId);
-                FileTransferDispatcher.unregisterSession(fileId);
+                
+                // 🔥 RESTART KeepAliveManager after file transfer
+                if (globalKeepAlive != null) {
+                    System.out.println("[FILE-RECV] ▶️  Resuming KeepAliveManager");
+                    globalKeepAlive.startMessageListening(stunChannel);
+                }
             }
         }, P2P_EXECUTOR);
     }
