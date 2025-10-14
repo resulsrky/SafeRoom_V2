@@ -583,22 +583,26 @@ public class ClientMenu{
 				System.out.println("[P2P] 🔧 Initializing reliable messaging protocol...");
 				NatAnalyzer.initializeReliableMessaging(username);
 				
-				// Set callback for received messages
-				NatAnalyzer.setReliableMessageCallback((sender, message) -> {
-					System.out.printf("[P2P-CALLBACK] 📨 Received from %s: \"%s\"%n", sender, message);
-					
-					// Forward to ChatService GUI
-					javafx.application.Platform.runLater(() -> {
-						try {
-							com.saferoom.gui.service.ChatService.getInstance()
-								.receiveP2PMessage(sender, username, message);
-						} catch (Exception e) {
-							System.err.println("[P2P-CALLBACK] Error forwarding to GUI: " + e.getMessage());
-						}
-					});
-				});
+			// Set callback for received messages
+			NatAnalyzer.setReliableMessageCallback((sender, message) -> {
+				System.out.printf("[P2P-CALLBACK] 📨 Received from %s: \"%s\"%n", sender, message);
 				
-				System.out.println("[P2P] ✅ Reliable messaging initialized for: " + username);
+				// Skip messages from ourselves (we add them manually)
+				if (sender.equals(username)) {
+					System.out.println("[P2P-CALLBACK] ⏭️ Skipping self-sent message");
+					return;
+				}
+				
+				// Forward to ChatService GUI
+				javafx.application.Platform.runLater(() -> {
+					try {
+						com.saferoom.gui.service.ChatService.getInstance()
+							.receiveP2PMessage(sender, username, message);
+					} catch (Exception e) {
+						System.err.println("[P2P-CALLBACK] Error forwarding to GUI: " + e.getMessage());
+					}
+				});
+			});				System.out.println("[P2P] ✅ Reliable messaging initialized for: " + username);
 				
 				// 📁 Set callback for incoming file transfers
 				System.out.println("[P2P] 🔧 Registering file transfer callback...");
