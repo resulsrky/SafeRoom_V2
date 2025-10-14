@@ -656,14 +656,37 @@ public class ClientMenu{
 				public void onFileTransferComplete(String peer, long fileId, java.nio.file.Path filePath) {
 					System.out.printf("[P2P-FILE-CALLBACK] ✅ File transfer complete: %s%n", filePath);
 					
-					// Send "File received" confirmation to sender via P2P
 					String confirmationMessage = String.format("✅ File received: %s", filePath.getFileName());
 					
+					// Add to our GUI as outgoing message FIRST (before sending P2P)
+					javafx.application.Platform.runLater(() -> {
+						try {
+							com.saferoom.gui.model.Message outgoingMsg = new com.saferoom.gui.model.Message(
+								confirmationMessage,
+								username, // I'm the sender of this confirmation
+								username.isEmpty() ? "?" : username.substring(0, 1).toUpperCase()
+							);
+							
+							com.saferoom.gui.service.ChatService.getInstance()
+								.getMessagesForChannel(peer)
+								.add(outgoingMsg);
+							
+							// Update contact service (outgoing message)
+							com.saferoom.gui.service.ContactService.getInstance()
+								.updateLastMessage(peer, confirmationMessage, true);
+							
+							System.out.printf("[P2P-FILE-CALLBACK] ✅ Confirmation added to GUI (outgoing)%n");
+						} catch (Exception e) {
+							System.err.println("[P2P-FILE-CALLBACK] GUI update error: " + e.getMessage());
+						}
+					});
+					
+					// Then send via P2P (sender will receive it as incoming)
 					try {
 						com.saferoom.natghost.NatAnalyzer.sendReliableMessage(peer, confirmationMessage);
-						System.out.printf("[P2P-FILE-CALLBACK] 📤 Sent confirmation to %s%n", peer);
+						System.out.printf("[P2P-FILE-CALLBACK] 📤 Sent confirmation to %s via P2P%n", peer);
 					} catch (Exception e) {
-						System.err.println("[P2P-FILE-CALLBACK] Failed to send confirmation: " + e.getMessage());
+						System.err.println("[P2P-FILE-CALLBACK] P2P send error: " + e.getMessage());
 					}
 				}					@Override
 					public void onFileTransferError(String peer, long fileId, Exception error) {
