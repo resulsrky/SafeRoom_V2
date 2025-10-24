@@ -1089,10 +1089,16 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
 						username = signal.getFrom();
 						WebRTCSessionManager.registerSignalingStream(username, responseObserver);
 						System.out.printf("[WebRTC-Stream] 🔌 User connected: %s%n", username);
+						return; // 🔧 FIX: Don't forward registration signal!
 					}
 					
 					// Forward signal to target user
 					String target = signal.getTo();
+					if (target == null || target.isEmpty()) {
+						System.err.printf("[WebRTC-Stream] ⚠️ Empty target from %s - ignoring%n", username);
+						return; // 🔧 FIX: Ignore signals with no target
+					}
+					
 					if (WebRTCSessionManager.hasSignalingStream(target)) {
 						WebRTCSessionManager.sendSignalToUser(target, signal);
 						System.out.printf("[WebRTC-Stream] 📤 Forwarded %s: %s -> %s%n", 
