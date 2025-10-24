@@ -4,7 +4,10 @@ import com.saferoom.gui.model.Message;
 import com.saferoom.gui.model.User;
 import com.saferoom.gui.service.ChatService;
 import com.saferoom.gui.view.cell.MessageCell;
-import com.saferoom.gui.dialog.FileTransferDialog;
+import com.saferoom.gui.dialog.IncomingCallDialog;
+import com.saferoom.gui.dialog.OutgoingCallDialog;
+import com.saferoom.gui.dialog.ActiveCallDialog;
+import com.saferoom.webrtc.CallManager;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
@@ -73,9 +76,13 @@ public class ChatViewController {
             messageInputField.setOnKeyPressed(this::handleKeyPressed);
         }
         
-        // TEST: Video button simulates incoming file transfer
+        // Setup WebRTC call buttons
+        if (phoneButton != null) {
+            phoneButton.setOnAction(e -> handlePhoneCall());
+        }
+        
         if (videoButton != null) {
-            videoButton.setOnAction(e -> testIncomingFileTransfer());
+            videoButton.setOnAction(e -> handleVideoCall());
         }
     }
 
@@ -255,50 +262,7 @@ public class ChatViewController {
             return String.format("%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0));
         }
     }
-    
-    /**
-     * TEST METHOD: Simulate incoming file transfer
-     * (Remove this after implementing real backend)
-     */
-    private void testIncomingFileTransfer() {
-        System.out.println("[ChatView] 🧪 Testing incoming file transfer dialog...");
-        
-        // Simulate incoming file transfer request
-        String senderUsername = chatPartnerName.getText();
-        long fileId = System.currentTimeMillis();
-        String fileName = "project_report.pdf";
-        long fileSize = 2_500_000; // 2.5 MB
-        
-        // Show dialog
-        FileTransferDialog dialog = new FileTransferDialog(
-            senderUsername,
-            fileId,
-            fileName,
-            fileSize
-        );
-        
-        Optional<Path> savePath = dialog.showAndWait();
-        
-        if (savePath.isPresent()) {
-            System.out.println("[ChatView] ✅ File transfer accepted! Save path: " + savePath.get());
-            
-            // Show acceptance message
-            String msg = String.format(
-                "✅ Accepted file transfer: %s (%s)\nSaving to: %s",
-                fileName,
-                formatFileSize(fileSize),
-                savePath.get().toString()
-            );
-            chatService.sendMessage(currentChannelId, msg, currentUser);
-        } else {
-            System.out.println("[ChatView] ❌ File transfer declined");
-            
-            // Show rejection message
-            String msg = "❌ Declined file transfer from " + senderUsername;
-            chatService.sendMessage(currentChannelId, msg, currentUser);
-        }
-    }
-    
+
     /**
      * Handle key presses in message input field
      */
@@ -320,5 +284,233 @@ public class ChatViewController {
             emptyChatPlaceholder.setManaged(isListEmpty);
         }
         messageListView.setVisible(!isListEmpty);
+    }
+    
+    // ===============================
+    // WebRTC Call Handlers
+    // ===============================
+    
+    /**
+     * Handle phone button click (audio-only call)
+     */
+    @FXML
+    private void handlePhoneCall() {
+        if (currentChannelId == null || currentChannelId.isEmpty()) {
+            System.err.println("[ChatView] ❌ No chat selected");
+            return;
+        }
+        
+        System.out.printf("[ChatView] 📞 Starting audio call to %s%n", currentChannelId);
+        
+        // Show confirmation dialog
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Audio Call");
+        alert.setHeaderText("Start audio call?");
+        alert.setContentText("Do you want to call " + chatPartnerName.getText() + "?");
+        
+        // Style the alert
+        alert.getDialogPane().getStylesheets().add(
+            getClass().getResource("/styles/styles.css").toExternalForm()
+        );
+        
+        Optional<ButtonType> result = alert.showAndWait();
+        
+        if (result.isPresent() && result.get() == ButtonType.OK) {
+            startCall(false); // audio only, no video
+        }
+    }
+    
+    /**
+     * Handle video button click (audio + video call)
+     */
+    @FXML
+    private void handleVideoCall() {
+        if (currentChannelId == null || currentChannelId.isEmpty()) {
+            System.err.println("[ChatView] ❌ No chat selected");
+            return;
+        }
+        
+        System.out.printf("[ChatView] 📹 Starting video call to %s%n", currentChannelId);
+        
+        // Show confirmation dialog
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Video Call");
+        alert.setHeaderText("Start video call?");
+        alert.setContentText("Do you want to video call " + chatPartnerName.getText() + "?");
+        
+        // Style the alert
+        alert.getDialogPane().getStylesheets().add(
+            getClass().getResource("/styles/styles.css").toExternalForm()
+        );
+        
+        Optional<ButtonType> result = alert.showAndWait();
+        
+        if (result.isPresent() && result.get() == ButtonType.OK) {
+            startCall(true); // audio + video
+        }
+    }
+    
+    /**
+     * Start WebRTC call
+     */
+    private void startCall(boolean videoEnabled) {
+        try {
+            String targetUsername = currentChannelId; // currentChannelId is the target username
+            String myUsername = currentUser.getId();
+            
+            System.out.printf("[ChatView] 🚀 Initiating call to %s (video=%b)%n", targetUsername, videoEnabled);
+            
+            // Get CallManager instance
+            CallManager callManager = CallManager.getInstance();
+            
+            // Check if already initialized
+            if (callManager.getCurrentState() == CallManager.CallState.IDLE) {
+                // Not initialized yet - initialize now
+                callManager.initialize(myUsername);
+                
+                // Setup callbacks
+                setupCallManagerCallbacks(callManager);
+            }
+            
+            // Check if not already in a call
+            if (callManager.isInCall()) {
+                showAlert("Call In Progress", "You are already in a call.", Alert.AlertType.WARNING);
+                return;
+            }
+            
+            // Start the call
+            callManager.startCall(targetUsername, true, videoEnabled)
+                .thenAccept(callId -> {
+                    javafx.application.Platform.runLater(() -> {
+                        System.out.printf("[ChatView] ✅ Call started: %s%n", callId);
+                        
+                        // Show "Calling..." message in chat
+                        String callMsg = videoEnabled ? "📹 Starting video call..." : "📞 Starting audio call...";
+                        chatService.sendMessage(currentChannelId, callMsg, currentUser);
+                        
+                        // Open OutgoingCallDialog
+                        OutgoingCallDialog outgoingDialog = new OutgoingCallDialog(
+                            targetUsername, callId, videoEnabled
+                        );
+                        outgoingDialog.show();
+                        
+                        // Store reference for later updates
+                        // (In real implementation, store in a map with callId as key)
+                    });
+                })
+                .exceptionally(e -> {
+                    javafx.application.Platform.runLater(() -> {
+                        System.err.printf("[ChatView] ❌ Failed to start call: %s%n", e.getMessage());
+                        showAlert("Call Failed", "Failed to start call: " + e.getMessage(), Alert.AlertType.ERROR);
+                    });
+                    return null;
+                });
+            
+        } catch (Exception e) {
+            System.err.printf("[ChatView] ❌ Error starting call: %s%n", e.getMessage());
+            e.printStackTrace();
+            showAlert("Error", "Error starting call: " + e.getMessage(), Alert.AlertType.ERROR);
+        }
+    }
+    
+    /**
+     * Setup CallManager callbacks
+     */
+    private void setupCallManagerCallbacks(CallManager callManager) {
+        // Incoming call
+        callManager.setOnIncomingCallCallback(info -> {
+            javafx.application.Platform.runLater(() -> {
+                System.out.printf("[ChatView] 📞 Incoming call from %s (callId: %s)%n", 
+                    info.callerUsername, info.callId);
+                
+                // Show IncomingCallDialog
+                IncomingCallDialog incomingDialog = new IncomingCallDialog(
+                    info.callerUsername, info.callId, info.videoEnabled
+                );
+                
+                incomingDialog.show().thenAccept(accepted -> {
+                    if (accepted) {
+                        callManager.acceptCall(info.callId);
+                    } else {
+                        callManager.rejectCall(info.callId);
+                    }
+                });
+            });
+        });
+        
+        // Call accepted
+        callManager.setOnCallAcceptedCallback(callId -> {
+            javafx.application.Platform.runLater(() -> {
+                System.out.printf("[ChatView] ✅ Call accepted: %s%n", callId);
+                
+                String msg = "✅ Call accepted - connecting...";
+                chatService.sendMessage(currentChannelId, msg, currentUser);
+                
+                // TODO: Update OutgoingCallDialog to show "Call accepted..."
+            });
+        });
+        
+        // Call rejected
+        callManager.setOnCallRejectedCallback(callId -> {
+            javafx.application.Platform.runLater(() -> {
+                System.out.printf("[ChatView] ❌ Call rejected: %s%n", callId);
+                
+                String msg = "❌ Call was rejected";
+                chatService.sendMessage(currentChannelId, msg, currentUser);
+                
+                // TODO: Update OutgoingCallDialog to show rejection
+            });
+        });
+        
+        // Call connected
+        callManager.setOnCallConnectedCallback(() -> {
+            javafx.application.Platform.runLater(() -> {
+                System.out.println("[ChatView] 🔗 Call connected!");
+                
+                String msg = "🔗 Call connected!";
+                chatService.sendMessage(currentChannelId, msg, currentUser);
+                
+                // Open ActiveCallDialog
+                // Get current call info from CallManager
+                String remoteUsername = currentChannelId; // or get from CallManager
+                String callId = "current-call-id"; // Should get from CallManager
+                boolean videoEnabled = true; // Should get from CallManager state
+                
+                ActiveCallDialog activeDialog = new ActiveCallDialog(
+                    remoteUsername, callId, videoEnabled, callManager
+                );
+                activeDialog.show();
+            });
+        });
+        
+        // Call ended
+        callManager.setOnCallEndedCallback(callId -> {
+            javafx.application.Platform.runLater(() -> {
+                System.out.printf("[ChatView] 📴 Call ended: %s%n", callId);
+                
+                String msg = "📴 Call ended";
+                chatService.sendMessage(currentChannelId, msg, currentUser);
+                
+                showAlert("Call Ended", "The call has ended.", Alert.AlertType.INFORMATION);
+                
+                // TODO: Close any open call dialogs
+            });
+        });
+    }
+    
+    /**
+     * Show alert dialog
+     */
+    private void showAlert(String title, String content, Alert.AlertType type) {
+        Alert alert = new Alert(type);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(content);
+        
+        alert.getDialogPane().getStylesheets().add(
+            getClass().getResource("/styles/styles.css").toExternalForm()
+        );
+        
+        alert.show();
     }
 }

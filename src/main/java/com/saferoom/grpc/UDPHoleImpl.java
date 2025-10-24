@@ -28,6 +28,8 @@ import com.saferoom.grpc.SafeRoomProto.UserStats;
 import com.saferoom.grpc.SafeRoomProto.UserActivity;
 import com.saferoom.grpc.SafeRoomProto.FriendRequest;
 import com.saferoom.grpc.SafeRoomProto.FriendResponse;
+import com.saferoom.webrtc.WebRTCSessionManager;
+import com.saferoom.webrtc.WebRTCSessionManager.CallSession;
 import java.text.SimpleDateFormat;
 import java.sql.Timestamp;
 
@@ -1006,8 +1008,266 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
 		}
 	}
 	
-	// ...existing code...
+	// ===============================
+	// WebRTC Signaling Methods
+	// ===============================
 	
+	/**
+	 * Send WebRTC signal (one-way)
+	 * Used for: CALL_REQUEST, CALL_ACCEPT, CALL_REJECT, CALL_END, etc.
+	 */
+	@Override
+	public void sendWebRTCSignal(SafeRoomProto.WebRTCSignal request, StreamObserver<SafeRoomProto.WebRTCResponse> responseObserver) {
+		try {
+			String from = request.getFrom();
+			String to = request.getTo();
+			SafeRoomProto.WebRTCSignal.SignalType type = request.getType();
+			
+			System.out.printf("[WebRTC-RPC] 📨 Received signal: %s from %s to %s%n", type, from, to);
+			
+			// Handle different signal types
+			switch (type) {
+				case CALL_REQUEST:
+					handleCallRequest(request, responseObserver);
+					break;
+					
+				case CALL_ACCEPT:
+					handleCallAccept(request, responseObserver);
+					break;
+					
+				case CALL_REJECT:
+				case CALL_CANCEL:
+					handleCallReject(request, responseObserver);
+					break;
+					
+				case CALL_END:
+					handleCallEnd(request, responseObserver);
+					break;
+					
+				case OFFER:
+				case ANSWER:
+				case ICE_CANDIDATE:
+					// Forward SDP/ICE to target user
+					forwardSignal(request, responseObserver);
+					break;
+					
+				default:
+					responseObserver.onNext(SafeRoomProto.WebRTCResponse.newBuilder()
+						.setSuccess(false)
+						.setMessage("Unknown signal type")
+						.build());
+					responseObserver.onCompleted();
+			}
+			
+		} catch (Exception e) {
+			System.err.printf("[WebRTC-RPC] ❌ Error handling signal: %s%n", e.getMessage());
+			e.printStackTrace();
+			responseObserver.onNext(SafeRoomProto.WebRTCResponse.newBuilder()
+				.setSuccess(false)
+				.setMessage("Error: " + e.getMessage())
+				.build());
+			responseObserver.onCompleted();
+		}
+	}
+	
+	/**
+	 * Bi-directional streaming for WebRTC signaling
+	 * Keeps persistent connection for real-time signaling
+	 */
+	@Override
+	public StreamObserver<SafeRoomProto.WebRTCSignal> streamWebRTCSignals(
+			StreamObserver<SafeRoomProto.WebRTCSignal> responseObserver) {
+		
+		return new StreamObserver<SafeRoomProto.WebRTCSignal>() {
+			private String username = null;
+			
+			@Override
+			public void onNext(SafeRoomProto.WebRTCSignal signal) {
+				try {
+					// First signal should register the user
+					if (username == null) {
+						username = signal.getFrom();
+						WebRTCSessionManager.registerSignalingStream(username, responseObserver);
+						System.out.printf("[WebRTC-Stream] 🔌 User connected: %s%n", username);
+					}
+					
+					// Forward signal to target user
+					String target = signal.getTo();
+					if (WebRTCSessionManager.hasSignalingStream(target)) {
+						WebRTCSessionManager.sendSignalToUser(target, signal);
+						System.out.printf("[WebRTC-Stream] 📤 Forwarded %s: %s -> %s%n", 
+							signal.getType(), username, target);
+					} else {
+						System.err.printf("[WebRTC-Stream] ❌ Target user not connected: %s%n", target);
+					}
+					
+				} catch (Exception e) {
+					System.err.printf("[WebRTC-Stream] ❌ Error processing signal: %s%n", e.getMessage());
+					e.printStackTrace();
+				}
+			}
+			
+			@Override
+			public void onError(Throwable t) {
+				System.err.printf("[WebRTC-Stream] ❌ Stream error for %s: %s%n", username, t.getMessage());
+				if (username != null) {
+					WebRTCSessionManager.unregisterSignalingStream(username);
+				}
+			}
+			
+			@Override
+			public void onCompleted() {
+				System.out.printf("[WebRTC-Stream] 🔌 User disconnected: %s%n", username);
+				if (username != null) {
+					WebRTCSessionManager.unregisterSignalingStream(username);
+				}
+				responseObserver.onCompleted();
+			}
+		};
+	}
+	
+	// ===============================
+	// Private Helper Methods
+	// ===============================
+	
+	private void handleCallRequest(SafeRoomProto.WebRTCSignal request, 
+			StreamObserver<SafeRoomProto.WebRTCResponse> responseObserver) {
+		
+		String caller = request.getFrom();
+		String callee = request.getTo();
+		
+		// Check if callee is busy
+		if (WebRTCSessionManager.isUserInCall(callee)) {
+			System.out.printf("[WebRTC] 📵 User busy: %s%n", callee);
+			responseObserver.onNext(SafeRoomProto.WebRTCResponse.newBuilder()
+				.setSuccess(false)
+				.setMessage("User is busy")
+				.build());
+			responseObserver.onCompleted();
+			return;
+		}
+		
+		// Create call session
+		CallSession session = WebRTCSessionManager.createCall(
+			caller, 
+			callee, 
+			request.getAudioEnabled(), 
+			request.getVideoEnabled()
+		);
+		
+		// Forward call request to callee
+		if (WebRTCSessionManager.sendSignalToUser(callee, 
+				SafeRoomProto.WebRTCSignal.newBuilder(request)
+					.setCallId(session.callId)
+					.build())) {
+			
+			responseObserver.onNext(SafeRoomProto.WebRTCResponse.newBuilder()
+				.setSuccess(true)
+				.setMessage("Call request sent")
+				.setCallId(session.callId)
+				.build());
+		} else {
+			// Callee offline or no signaling connection
+			WebRTCSessionManager.endCall(session.callId);
+			responseObserver.onNext(SafeRoomProto.WebRTCResponse.newBuilder()
+				.setSuccess(false)
+				.setMessage("User is offline")
+				.build());
+		}
+		responseObserver.onCompleted();
+	}
+	
+	private void handleCallAccept(SafeRoomProto.WebRTCSignal request, 
+			StreamObserver<SafeRoomProto.WebRTCResponse> responseObserver) {
+		
+		String callId = request.getCallId();
+		CallSession session = WebRTCSessionManager.getCall(callId);
+		
+		if (session == null) {
+			responseObserver.onNext(SafeRoomProto.WebRTCResponse.newBuilder()
+				.setSuccess(false)
+				.setMessage("Call not found")
+				.build());
+			responseObserver.onCompleted();
+			return;
+		}
+		
+		// Update call state
+		session.state = WebRTCSessionManager.CallState.CONNECTED;
+		
+		// Forward acceptance to caller
+		WebRTCSessionManager.sendSignalToUser(session.caller, request);
+		
+		responseObserver.onNext(SafeRoomProto.WebRTCResponse.newBuilder()
+			.setSuccess(true)
+			.setMessage("Call accepted")
+			.setCallId(callId)
+			.build());
+		responseObserver.onCompleted();
+	}
+	
+	private void handleCallReject(SafeRoomProto.WebRTCSignal request, 
+			StreamObserver<SafeRoomProto.WebRTCResponse> responseObserver) {
+		
+		String callId = request.getCallId();
+		CallSession session = WebRTCSessionManager.getCall(callId);
+		
+		if (session != null) {
+			// Notify other party
+			String target = request.getFrom().equals(session.caller) ? session.callee : session.caller;
+			WebRTCSessionManager.sendSignalToUser(target, request);
+			
+			// End call session
+			WebRTCSessionManager.endCall(callId);
+		}
+		
+		responseObserver.onNext(SafeRoomProto.WebRTCResponse.newBuilder()
+			.setSuccess(true)
+			.setMessage("Call ended")
+			.build());
+		responseObserver.onCompleted();
+	}
+	
+	private void handleCallEnd(SafeRoomProto.WebRTCSignal request, 
+			StreamObserver<SafeRoomProto.WebRTCResponse> responseObserver) {
+		
+		String callId = request.getCallId();
+		CallSession session = WebRTCSessionManager.getCall(callId);
+		
+		if (session != null) {
+			// Notify other party
+			String target = request.getFrom().equals(session.caller) ? session.callee : session.caller;
+			WebRTCSessionManager.sendSignalToUser(target, request);
+			
+			// End call session
+			WebRTCSessionManager.endCall(callId);
+		}
+		
+		responseObserver.onNext(SafeRoomProto.WebRTCResponse.newBuilder()
+			.setSuccess(true)
+			.setMessage("Call ended")
+			.build());
+		responseObserver.onCompleted();
+	}
+	
+	private void forwardSignal(SafeRoomProto.WebRTCSignal request, 
+			StreamObserver<SafeRoomProto.WebRTCResponse> responseObserver) {
+		
+		String target = request.getTo();
+		
+		if (WebRTCSessionManager.sendSignalToUser(target, request)) {
+			responseObserver.onNext(SafeRoomProto.WebRTCResponse.newBuilder()
+				.setSuccess(true)
+				.setMessage("Signal forwarded")
+				.build());
+		} else {
+			responseObserver.onNext(SafeRoomProto.WebRTCResponse.newBuilder()
+				.setSuccess(false)
+				.setMessage("Target user not available")
+				.build());
+		}
+		responseObserver.onCompleted();
+	}
 
 
 }

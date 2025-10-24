@@ -67,6 +67,13 @@ rpc SendPublicKey(SendPublicKeyRequest) returns (Status);
 
 rpc GetPublicKey(RequestByClient_ID) returns (PublicKeyMessage);
 
+// ===============================
+// WebRTC Signaling RPCs
+// ===============================
+rpc SendWebRTCSignal(WebRTCSignal) returns (WebRTCResponse);
+
+rpc StreamWebRTCSignals(stream WebRTCSignal) returns (stream WebRTCSignal);
+
 }
 
 message Menu {
@@ -295,4 +302,49 @@ message HeartbeatRequest {
 message HeartbeatResponse {
     bool success = 1;
     string message = 2;
+}
+
+// ===============================
+// WebRTC Signaling Messages
+// ===============================
+
+message WebRTCSignal {
+    enum SignalType {
+        OFFER = 0;              // SDP offer
+        ANSWER = 1;             // SDP answer
+        ICE_CANDIDATE = 2;      // ICE candidate
+        CALL_REQUEST = 3;       // Arama isteği
+        CALL_ACCEPT = 4;        // Arama kabul edildi
+        CALL_REJECT = 5;        // Arama reddedildi
+        CALL_END = 6;           // Arama sonlandı
+        CALL_BUSY = 7;          // Kullanıcı meşgul
+        CALL_CANCEL = 8;        // Arayan iptal etti
+    }
+    
+    SignalType type = 1;        // Sinyal tipi
+    string from = 2;            // Gönderen username
+    string to = 3;              // Alıcı username
+    string callId = 4;          // Unique call identifier
+    
+    // SDP için (OFFER ve ANSWER)
+    optional string sdp = 5;
+    
+    // ICE Candidate için
+    optional string candidate = 6;
+    optional string sdpMid = 7;
+    optional int32 sdpMLineIndex = 8;
+    
+    // Arama ayarları
+    bool audioEnabled = 9;      // Ses aktif mi?
+    bool videoEnabled = 10;     // Video aktif mi?
+    
+    // Ek bilgiler
+    optional int64 timestamp = 11;
+    optional string metadata = 12;  // JSON format extra data
+}
+
+message WebRTCResponse {
+    bool success = 1;
+    string message = 2;
+    optional string callId = 3;
 }
