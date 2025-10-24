@@ -4,6 +4,8 @@ import com.jfoenix.controls.JFXButton;
 import com.saferoom.gui.MainApp;
 import com.saferoom.gui.utils.UserSession;
 import com.saferoom.webrtc.CallManager;
+import com.saferoom.gui.dialog.IncomingCallDialog;
+import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Pos;
@@ -138,6 +140,10 @@ public class MainController {
             try {
                 CallManager callManager = CallManager.getInstance();
                 callManager.initialize(currentUsername);
+                
+                // 🔧 Setup global incoming call handler
+                setupGlobalCallCallbacks(callManager);
+                
                 System.out.println("[MainController] ✅ CallManager initialized - ready to receive calls");
             } catch (Exception e) {
                 System.err.printf("[MainController] ❌ Failed to initialize CallManager: %s%n", e.getMessage());
@@ -674,7 +680,7 @@ public class MainController {
         navBox.getChildren().forEach(node -> node.getStyleClass().remove("active"));
     }
     
-    /**
+        /**
      * Refresh user information in all views after login
      */
     public void refreshUserInfo() {
@@ -700,5 +706,50 @@ public class MainController {
                 System.err.println("Error refreshing user info: " + e.getMessage());
             }
         }
+    }
+    
+    /**
+     * 🎯 Setup global WebRTC incoming call callbacks
+     * This must be called once during initialization to handle incoming calls globally
+     */
+    private void setupGlobalCallCallbacks(CallManager callManager) {
+        System.out.println("[MainController] 📞 Setting up global incoming call handler");
+        
+        callManager.setOnIncomingCallCallback(callInfo -> {
+            Platform.runLater(() -> {
+                System.out.printf("[MainController] 🔔 Incoming %s call from: %s (callId: %s)%n", 
+                    callInfo.videoEnabled ? "video" : "audio", 
+                    callInfo.callerUsername,
+                    callInfo.callId);
+                
+                try {
+                    // Show incoming call dialog
+                    IncomingCallDialog dialog = new IncomingCallDialog(
+                        callInfo.callerUsername, 
+                        callInfo.callId,
+                        callInfo.videoEnabled
+                    );
+                    
+                    // Handle user response
+                    dialog.show().thenAccept(accepted -> {
+                        if (accepted) {
+                            System.out.printf("[MainController] ✅ Call accepted from: %s (callId: %s)%n", 
+                                callInfo.callerUsername, callInfo.callId);
+                            callManager.acceptCall(callInfo.callId);
+                        } else {
+                            System.out.printf("[MainController] ❌ Call rejected from: %s (callId: %s)%n", 
+                                callInfo.callerUsername, callInfo.callId);
+                            callManager.rejectCall(callInfo.callId);
+                        }
+                    });
+                    
+                } catch (Exception e) {
+                    System.err.printf("[MainController] ❌ Failed to show incoming call dialog: %s%n", e.getMessage());
+                    e.printStackTrace();
+                }
+            });
+        });
+        
+        System.out.println("[MainController] ✅ Global incoming call handler registered");
     }
 }
