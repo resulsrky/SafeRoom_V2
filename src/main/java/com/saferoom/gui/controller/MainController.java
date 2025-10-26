@@ -763,6 +763,22 @@ public class MainController {
                                 );
                                 activeDialog.show();
                                 System.out.println("[MainController] 📺 ActiveCallDialog opened after accepting call");
+                                
+                                // Attach local video track if video enabled
+                                if (callInfo.videoEnabled) {
+                                    dev.onvoid.webrtc.media.video.VideoTrack localVideo = callManager.getLocalVideoTrack();
+                                    System.out.printf("[MainController] 🔍 Local video track: %s%n", 
+                                        localVideo != null ? "EXISTS" : "NULL");
+                                    
+                                    if (localVideo != null) {
+                                        activeDialog.attachLocalVideo(localVideo);
+                                        System.out.println("[MainController] 📹 Local video attached to dialog");
+                                    } else {
+                                        System.err.println("[MainController] ❌ ERROR: Local video track is NULL! Cannot attach.");
+                                    }
+                                } else {
+                                    System.out.println("[MainController] ℹ️ Video not enabled for this call");
+                                }
                             });
                         } else {
                             System.out.printf("[MainController] ❌ Call rejected from: %s (callId: %s)%n", 

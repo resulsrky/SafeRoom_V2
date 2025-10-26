@@ -63,6 +63,9 @@ public class ActiveCallDialog {
         this.callManager = callManager;
         this.callStartTime = Instant.now();
         this.stage = createDialog();
+        
+        // Register remote track callback to automatically attach remote video
+        registerRemoteTrackCallback();
     }
     
     private Stage createDialog() {
@@ -374,6 +377,29 @@ public class ActiveCallDialog {
         if (remoteVideoPanel != null) {
             remoteVideoPanel.detachVideoTrack();
         }
+    }
+    
+    /**
+     * Register callback to receive remote video tracks
+     */
+    private void registerRemoteTrackCallback() {
+        callManager.setOnRemoteTrackCallback(track -> {
+            javafx.application.Platform.runLater(() -> {
+                System.out.printf("[ActiveCallDialog] 📺 Remote track received: kind=%s, id=%s%n", 
+                    track.getKind(), track.getId());
+                
+                // Only attach video tracks
+                if (track instanceof dev.onvoid.webrtc.media.video.VideoTrack) {
+                    dev.onvoid.webrtc.media.video.VideoTrack videoTrack = 
+                        (dev.onvoid.webrtc.media.video.VideoTrack) track;
+                    attachRemoteVideo(videoTrack);
+                    System.out.println("[ActiveCallDialog] 📹 Remote video attached");
+                } else {
+                    System.out.println("[ActiveCallDialog] 🎤 Remote audio track (auto-handled)");
+                }
+            });
+        });
+        System.out.println("[ActiveCallDialog] ✅ Remote track callback registered");
     }
     
     /**
