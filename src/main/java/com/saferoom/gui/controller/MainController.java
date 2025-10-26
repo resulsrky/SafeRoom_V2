@@ -58,6 +58,9 @@ public class MainController {
     @FXML private JFXButton maximizeButton;
     @FXML private JFXButton closeButton;
 
+    // Active call dialog reference (for incoming calls handled by MainController)
+    private ActiveCallDialog currentActiveCallDialog;
+
     // User status types
     public enum UserStatus {
         ONLINE("status-dot-online"),
@@ -755,13 +758,13 @@ public class MainController {
                             
                             // Open ActiveCallDialog
                             Platform.runLater(() -> {
-                                ActiveCallDialog activeDialog = new ActiveCallDialog(
+                                currentActiveCallDialog = new ActiveCallDialog(
                                     callInfo.callerUsername,
                                     callInfo.callId,
                                     callInfo.videoEnabled,
                                     callManager
                                 );
-                                activeDialog.show();
+                                currentActiveCallDialog.show();
                                 System.out.println("[MainController] 📺 ActiveCallDialog opened after accepting call");
                                 
                                 // Attach local video track if video enabled
@@ -771,7 +774,7 @@ public class MainController {
                                         localVideo != null ? "EXISTS" : "NULL");
                                     
                                     if (localVideo != null) {
-                                        activeDialog.attachLocalVideo(localVideo);
+                                        currentActiveCallDialog.attachLocalVideo(localVideo);
                                         System.out.println("[MainController] 📹 Local video attached to dialog");
                                     } else {
                                         System.err.println("[MainController] ❌ ERROR: Local video track is NULL! Cannot attach.");
@@ -790,6 +793,20 @@ public class MainController {
                 } catch (Exception e) {
                     System.err.printf("[MainController] ❌ Failed to show incoming call dialog: %s%n", e.getMessage());
                     e.printStackTrace();
+                }
+            });
+        });
+        
+        // Handle call ended (close dialog)
+        callManager.setOnCallEndedCallback(callId -> {
+            Platform.runLater(() -> {
+                System.out.printf("[MainController] 📴 Call ended: %s%n", callId);
+                
+                // Close active call dialog if it exists
+                if (currentActiveCallDialog != null) {
+                    currentActiveCallDialog.close();
+                    currentActiveCallDialog = null;
+                    System.out.println("[MainController] ✅ ActiveCallDialog closed");
                 }
             });
         });
