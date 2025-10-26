@@ -578,161 +578,18 @@ public class ClientMenu{
 			// Set current username in ChatService for message rendering
 			com.saferoom.gui.service.ChatService.getInstance().setCurrentUsername(username);
 			
-			InetSocketAddress signalingServer = new InetSocketAddress(Server, UDP_Port); // P2PSignalingServer.SIGNALING_PORT
-			boolean registered = NatAnalyzer.registerWithServer(username, signalingServer);
+			// ✅ WEBRTC P2P: Use P2PConnectionManager instead of legacy NatAnalyzer
+			System.out.println("[P2P] 🚀 Initializing WebRTC P2P messaging for: " + username);
 			
-			if (registered) {
-				// Initialize reliable messaging protocol
-				System.out.println("[P2P] 🔧 Initializing reliable messaging protocol...");
-				NatAnalyzer.initializeReliableMessaging(username);
-				
-			// Set callback for received messages
-			NatAnalyzer.setReliableMessageCallback((sender, message) -> {
-				System.out.printf("[P2P-CALLBACK] 📨 Received from %s: \"%s\"%n", sender, message);
-				
-				// Skip messages from ourselves (we add them manually)
-				if (sender.equals(username)) {
-					System.out.println("[P2P-CALLBACK] ⏭️ Skipping self-sent message");
-					return;
-				}
-				
-				// Forward to ChatService GUI
-				javafx.application.Platform.runLater(() -> {
-					try {
-						com.saferoom.gui.service.ChatService.getInstance()
-							.receiveP2PMessage(sender, username, message);
-					} catch (Exception e) {
-						System.err.println("[P2P-CALLBACK] Error forwarding to GUI: " + e.getMessage());
-					}
-				});
-			});				System.out.println("[P2P] ✅ Reliable messaging initialized for: " + username);
-				
-				// 📁 Set callback for incoming file transfers
-				System.out.println("[P2P] 🔧 Registering file transfer callback...");
-				NatAnalyzer.setFileTransferCallback(new NatAnalyzer.FileTransferCallback() {
-					@Override
-					public void onFileTransferRequest(String sender, long fileId, String fileName, long fileSize, int totalChunks) {
-						System.out.printf("[P2P-FILE-CALLBACK] 📁 Incoming file from %s: %s (%d bytes)%n", 
-							sender, fileName, fileSize);
-						
-						// Show FileTransferDialog on JavaFX thread
-						javafx.application.Platform.runLater(() -> {
-							try {
-								com.saferoom.gui.dialog.FileTransferDialog dialog = 
-									new com.saferoom.gui.dialog.FileTransferDialog(
-										sender, 
-										fileId,
-										fileName, 
-										fileSize
-									);
-								
-								java.util.Optional<java.nio.file.Path> result = dialog.showAndWait();
-								
-								if (result.isPresent()) {
-									// User accepted - call NatAnalyzer.acceptFileTransfer()
-									java.nio.file.Path savePath = result.get();
-									System.out.printf("[P2P-FILE-CALLBACK] ✅ User accepted file - saving to: %s%n", 
-										savePath);
-									
-									// Accept file transfer
-									NatAnalyzer.acceptFileTransfer(sender, fileId, savePath);
-									
-									// Show success message in chat
-									com.saferoom.gui.service.ChatService.getInstance()
-										.receiveP2PMessage(
-											sender, 
-											username, 
-											String.format("📎 Receiving file: %s", fileName)
-										);
-									
-								} else {
-									// User declined
-									System.out.printf("[P2P-FILE-CALLBACK] ❌ User declined file from %s%n", sender);
-									
-									// TODO: Send rejection notification to sender
-								}
-								
-							} catch (Exception e) {
-								System.err.println("[P2P-FILE-CALLBACK] Error showing file dialog: " + e.getMessage());
-								e.printStackTrace();
-							}
-						});
-					}
-					
-				@Override
-				public void onFileTransferComplete(String peer, long fileId, java.nio.file.Path filePath) {
-					System.out.printf("[P2P-FILE-CALLBACK] ✅ File transfer complete: %s%n", filePath);
-					
-					String confirmationMessage = String.format("✅ File received: %s", filePath.getFileName());
-					
-					// Add to our GUI as outgoing message FIRST (before sending P2P)
-					javafx.application.Platform.runLater(() -> {
-						try {
-							com.saferoom.gui.model.Message outgoingMsg = new com.saferoom.gui.model.Message(
-								confirmationMessage,
-								username, // I'm the sender of this confirmation
-								username.isEmpty() ? "?" : username.substring(0, 1).toUpperCase()
-							);
-							
-							com.saferoom.gui.service.ChatService.getInstance()
-								.getMessagesForChannel(peer)
-								.add(outgoingMsg);
-							
-							// Update contact service (outgoing message)
-							com.saferoom.gui.service.ContactService.getInstance()
-								.updateLastMessage(peer, confirmationMessage, true);
-							
-							System.out.printf("[P2P-FILE-CALLBACK] ✅ Confirmation added to GUI (outgoing)%n");
-						} catch (Exception e) {
-							System.err.println("[P2P-FILE-CALLBACK] GUI update error: " + e.getMessage());
-						}
-					});
-					
-					// Then send via P2P (sender will receive it as incoming)
-					try {
-						com.saferoom.natghost.NatAnalyzer.sendReliableMessage(peer, confirmationMessage);
-						System.out.printf("[P2P-FILE-CALLBACK] 📤 Sent confirmation to %s via P2P%n", peer);
-					} catch (Exception e) {
-						System.err.println("[P2P-FILE-CALLBACK] P2P send error: " + e.getMessage());
-					}
-				}					@Override
-					public void onFileTransferError(String peer, long fileId, Exception error) {
-						System.err.printf("[P2P-FILE-CALLBACK] ❌ File transfer error: %s%n", error.getMessage());
-						
-						javafx.application.Platform.runLater(() -> {
-							javafx.scene.control.Alert alert = new javafx.scene.control.Alert(
-								javafx.scene.control.Alert.AlertType.ERROR);
-							alert.setTitle("File Transfer Error");
-							alert.setHeaderText("File Transfer Failed");
-							alert.setContentText(error.getMessage());
-							alert.show();
-					});
-				}
-				
-				@Override
-				public void onFileTransferProgress(String peer, long fileId, int current, int total) {
-					// Log every chunk (for debugging)
-					System.out.printf("[P2P-FILE-CALLBACK] 📊 Progress: %d/%d chunks%n", current, total);
-					
-					// Update GUI only at 25%, 50%, 75% milestones
-					int progressPercent = (current * 100) / total;
-					int lastMilestone = ((current - 1) * 100) / total;
-					
-					// Check if we just crossed a 25% milestone
-					if (progressPercent / 25 > lastMilestone / 25) {
-						javafx.application.Platform.runLater(() -> {
-							String progressMsg = String.format("⏳ Progress: %d%% (%d/%d chunks)", 
-								progressPercent, current, total);
-							System.out.printf("[P2P-FILE-CALLBACK] � Milestone: %s%n", progressMsg);
-							// Note: Not adding to chat to avoid spam
-							// Could add a single progress message and update it (advanced UI)
-						});
-					}
-				}
-			});				System.out.println("[P2P] ✅ File transfer callback registered");
-			}
+			// P2PConnectionManager will be initialized when friends come online
+			// No need for legacy STUN registration
 			
-			return registered;
+			System.out.println("[P2P] ✅ WebRTC P2P ready (connections will establish when friends come online)");
+			
+			// ✅ WebRTC callbacks are registered in registerP2PUser() method
+			// (See setupWebRTCCallbacks in P2PConnectionManager)
+			
+			return true;
 			
 		} catch (Exception e) {
 			System.err.println("[P2P] Error during user registration: " + e.getMessage());
