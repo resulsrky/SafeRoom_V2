@@ -272,8 +272,6 @@ public final class KeepAliveManager implements AutoCloseable {
                                 continue; // Ignore server burst packets
                             }
                             
-                            System.out.println("[KA-BURST] ✅ Source validated - AUTO-RESPONDING");
-                            
                             // Auto-respond to burst packets to establish bidirectional NAT mapping
                             try {
                                 // Parse burst packet to get usernames
@@ -282,10 +280,34 @@ public final class KeepAliveManager implements AutoCloseable {
                                 String receiverUsername = (String) parsed.get(3);
                                 String payload = (String) parsed.get(4);
                                 
+                                // 🔧 PREVENT INFINITE LOOP: Don't respond to ACK packets!
+                                if ("BURST-ACK".equals(payload)) {
+                                    System.out.printf("[KA-BURST] ✅ Received ACK from %s - NAT hole confirmed%n", 
+                                        senderUsername);
+                                    
+                                    // Register peer but don't respond
+                                    try {
+                                        java.lang.reflect.Field activePeersField = Class.forName("com.saferoom.natghost.NatAnalyzer")
+                                            .getDeclaredField("activePeers");
+                                        activePeersField.setAccessible(true);
+                                        @SuppressWarnings("unchecked")
+                                        Map<String, InetSocketAddress> activePeers = 
+                                            (Map<String, InetSocketAddress>) activePeersField.get(null);
+                                        activePeers.put(senderUsername, (InetSocketAddress) from);
+                                        System.out.printf("[KA-BURST] 📝 Registered %s for P2P messaging%n", senderUsername);
+                                    } catch (Exception e) {
+                                        System.err.printf("[KA-BURST] ⚠️ Failed to register peer: %s%n", e.getMessage());
+                                    }
+                                    
+                                    continue; // Don't respond to ACK packets!
+                                }
+                                
+                                System.out.println("[KA-BURST] ✅ Source validated - AUTO-RESPONDING");
+                                
                                 System.out.printf("[KA-BURST] Burst from %s -> %s: %s%n", 
                                     senderUsername, receiverUsername, payload);
                                 
-                                // Send immediate response to establish NAT hole
+                                // Send immediate response to establish NAT hole (ONLY if not an ACK)
                                 ByteBuffer response = LLS.New_Burst_Packet(
                                     receiverUsername,  // Me
                                     senderUsername,    // Them
