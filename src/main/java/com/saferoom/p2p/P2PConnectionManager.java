@@ -62,17 +62,16 @@ public class P2PConnectionManager {
         
         // Initialize WebRTC factory (shared with CallManager)
         if (!WebRTCClient.isInitialized()) {
+            System.out.println("[P2P] 🔧 WebRTC not initialized, initializing now...");
             WebRTCClient.initialize();
         }
         
         // Get factory reference from WebRTCClient
-        try {
-            java.lang.reflect.Field factoryField = WebRTCClient.class.getDeclaredField("factory");
-            factoryField.setAccessible(true);
-            this.factory = (PeerConnectionFactory) factoryField.get(null);
-        } catch (Exception e) {
-            System.err.println("[P2P] ❌ Failed to get WebRTC factory: " + e.getMessage());
-            this.factory = null;
+        this.factory = WebRTCClient.getFactory();
+        if (this.factory == null) {
+            System.err.println("[P2P] ⚠️ WebRTC factory is null (running in mock mode)");
+        } else {
+            System.out.println("[P2P] ✅ WebRTC factory initialized successfully");
         }
         
         // ✅ IMPORTANT: Share WebRTCSignalingClient with CallManager

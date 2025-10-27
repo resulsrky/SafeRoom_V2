@@ -104,6 +104,13 @@ public class WebRTCClient {
     }
     
     /**
+     * Get the PeerConnectionFactory (for P2PConnectionManager)
+     */
+    public static PeerConnectionFactory getFactory() {
+        return factory;
+    }
+    
+    /**
      * Constructor
      */
     public WebRTCClient(String callId, String remoteUsername) {

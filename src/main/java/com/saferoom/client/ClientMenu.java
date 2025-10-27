@@ -578,11 +578,11 @@ public class ClientMenu{
 			// Set current username in ChatService for message rendering
 			com.saferoom.gui.service.ChatService.getInstance().setCurrentUsername(username);
 			
-			// ✅ WEBRTC P2P: Use P2PConnectionManager instead of legacy NatAnalyzer
+			// ✅ WEBRTC P2P: Initialize P2PConnectionManager for messaging
 			System.out.println("[P2P] 🚀 Initializing WebRTC P2P messaging for: " + username);
 			
-			// P2PConnectionManager will be initialized when friends come online
-			// No need for legacy STUN registration
+			// Initialize P2PConnectionManager (shares WebRTCSignalingClient with CallManager)
+			com.saferoom.p2p.P2PConnectionManager.getInstance().initialize(username);
 			
 			System.out.println("[P2P] ✅ WebRTC P2P ready (connections will establish when friends come online)");
 			
