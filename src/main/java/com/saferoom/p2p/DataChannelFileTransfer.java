@@ -328,10 +328,9 @@ public class DataChannelFileTransfer {
                     
                     state.sentChunks.set(seqNo);
                     
-                    if (seqNo % 100 == 0) {
-                        System.out.printf("[DCFileTransfer] 📤 Progress: %d/%d chunks%n", 
-                            seqNo + 1, state.totalChunks);
-                    }
+                    // Log every chunk for debugging
+                    System.out.printf("[DCFileTransfer] 📤 Sent chunk %d/%d (offset=%d, size=%d)%n", 
+                        seqNo + 1, state.totalChunks, offset, take);
                     
                     // Small delay to avoid flooding
                     Thread.sleep(1);
@@ -384,12 +383,13 @@ public class DataChannelFileTransfer {
             // Write chunk
             state.writeChunk(seqNo, chunkData);
             
-            if (seqNo % 100 == 0) {
-                System.out.printf("[DCFileTransfer] 📥 Received chunk %d/%d%n", seqNo + 1, totalChunks);
-            }
+            // Log every chunk for debugging
+            System.out.printf("[DCFileTransfer] 📥 Received chunk %d/%d (size=%d)%n", 
+                seqNo + 1, totalChunks, length);
             
         } catch (Exception e) {
             System.err.printf("[DCFileTransfer] Error handling data chunk: %s%n", e.getMessage());
+            e.printStackTrace();
         }
     }
     
