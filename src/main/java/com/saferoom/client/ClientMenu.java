@@ -769,14 +769,16 @@ public class ClientMenu{
 	 * Check if P2P messaging is available with specific peer
 	 */
 	public static boolean isP2PMessagingAvailable(String username) {
-		return NatAnalyzer.isP2PActive(username);
+		// Use WebRTC DataChannel (P2PConnectionManager) instead of NatAnalyzer
+		return com.saferoom.p2p.P2PConnectionManager.getInstance().hasActiveConnection(username);
 	}
 	
 	/**
 	 * Check if any P2P messaging is available
 	 */
 	public static boolean isP2PMessagingAvailable() {
-		return NatAnalyzer.isP2PActive();
+		// WebRTC DataChannel doesn't need global check - check per user
+		return true; // If user has P2P button, they can attempt connection
 	}
 
 }
