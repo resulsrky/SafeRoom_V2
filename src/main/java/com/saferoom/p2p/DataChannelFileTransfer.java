@@ -299,15 +299,18 @@ public class DataChannelFileTransfer {
                     int offset = seqNo * SLICE_SIZE;
                     int take = (int) Math.min(SLICE_SIZE, state.fileSize - offset);
                     
-                    // Calculate CRC
+                    // Zero-copy: duplicate + slice (like EnhancedFileTransferSender)
                     ByteBuffer payload = mem.duplicate();
                     payload.position(offset).limit(offset + take);
+                    payload = payload.slice(); // Independent buffer
+                    
+                    // Calculate CRC on sliced buffer
                     crc.reset();
                     crc.update(payload.duplicate());
                     int crc32c = (int) crc.getValue();
                     
                     // Build DATA packet: signal(1) + fileId(8) + seqNo(4) + totalChunks(4) + length(4) + crc(4) + data(N)
-                    // Total header: 1+8+4+4+4+4 = 25 bytes (not 23!)
+                    // Total header: 25 bytes
                     ByteBuffer packet = ByteBuffer.allocate(25 + take).order(ByteOrder.BIG_ENDIAN);
                     packet.put(DATA);
                     packet.putLong(state.fileId);
@@ -316,10 +319,9 @@ public class DataChannelFileTransfer {
                     packet.putInt(take);
                     packet.putInt(crc32c);
                     
-                    // Copy payload data
-                    ByteBuffer payloadCopy = payload.duplicate();
-                    payloadCopy.position(offset).limit(offset + take);
-                    packet.put(payloadCopy);
+                    // Zero-copy: put from sliced buffer
+                    payload.position(0).limit(take);
+                    packet.put(payload);
                     packet.flip();
                     
                     sendDataChannelMessage(packet);
