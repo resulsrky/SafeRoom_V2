@@ -38,8 +38,9 @@ public class DataChannelFileTransfer {
     
     // Protocol constants (from file_transfer package)
     private static final int SLICE_SIZE = 1450;  // MTU-safe chunk size
-    private static final int HEADER_SIZE = 22;   // HandShake header
-    private static final int PACKET_SIZE = SLICE_SIZE + HEADER_SIZE;
+    private static final int HANDSHAKE_HEADER_SIZE = 21;  // HandShake_Packet: signal(1) + fileId(8) + size(8) + totalSeq(4)
+    private static final int DATA_HEADER_SIZE = 23;       // DATA packet: signal(1) + fileId(8) + seqNo(4) + total(4) + len(4) + crc(4)
+    private static final int PACKET_SIZE = SLICE_SIZE + DATA_HEADER_SIZE;
     
     // Handshake signals
     private static final byte SYN = 0x01;
@@ -149,8 +150,8 @@ public class DataChannelFileTransfer {
      */
     private CompletableFuture<Boolean> performHandshake(SendState state) {
         try {
-            // Send SYN
-            ByteBuffer syn = ByteBuffer.allocate(HEADER_SIZE).order(ByteOrder.BIG_ENDIAN);
+            // Send SYN (HandShake_Packet format)
+            ByteBuffer syn = ByteBuffer.allocate(HANDSHAKE_HEADER_SIZE).order(ByteOrder.BIG_ENDIAN);
             syn.put(SYN);
             syn.putLong(state.fileId);
             syn.putLong(state.fileSize);
@@ -202,8 +203,8 @@ public class DataChannelFileTransfer {
             ReceiveState state = new ReceiveState(fileId, filePath, fileSize, totalChunks);
             receivingFiles.put(fileId, state);
             
-            // Send ACK
-            ByteBuffer ack = ByteBuffer.allocate(HEADER_SIZE).order(ByteOrder.BIG_ENDIAN);
+            // Send ACK (HandShake_Packet format)
+            ByteBuffer ack = ByteBuffer.allocate(HANDSHAKE_HEADER_SIZE).order(ByteOrder.BIG_ENDIAN);
             ack.put(ACK);
             ack.putLong(fileId);
             ack.putLong(fileSize);
@@ -233,8 +234,8 @@ public class DataChannelFileTransfer {
             
             System.out.printf("[DCFileTransfer] ✅ ACK received for fileId=%d%n", fileId);
             
-            // Send SYN_ACK
-            ByteBuffer synAck = ByteBuffer.allocate(HEADER_SIZE).order(ByteOrder.BIG_ENDIAN);
+            // Send SYN_ACK (HandShake_Packet format)
+            ByteBuffer synAck = ByteBuffer.allocate(HANDSHAKE_HEADER_SIZE).order(ByteOrder.BIG_ENDIAN);
             synAck.put(SYN_ACK);
             synAck.putLong(fileId);
             synAck.flip();
@@ -305,8 +306,9 @@ public class DataChannelFileTransfer {
                     crc.update(payload.duplicate());
                     int crc32c = (int) crc.getValue();
                     
-                    // Build packet: signal(1) + fileId(8) + seqNo(4) + totalChunks(4) + length(4) + crc(4) + data(N)
-                    ByteBuffer packet = ByteBuffer.allocate(HEADER_SIZE + take).order(ByteOrder.BIG_ENDIAN);
+                    // Build DATA packet: signal(1) + fileId(8) + seqNo(4) + totalChunks(4) + length(4) + crc(4) + data(N)
+                    // Total header: 1+8+4+4+4+4 = 25 bytes (not 23!)
+                    ByteBuffer packet = ByteBuffer.allocate(25 + take).order(ByteOrder.BIG_ENDIAN);
                     packet.put(DATA);
                     packet.putLong(state.fileId);
                     packet.putInt(seqNo);
@@ -314,8 +316,10 @@ public class DataChannelFileTransfer {
                     packet.putInt(take);
                     packet.putInt(crc32c);
                     
-                    payload.position(offset).limit(offset + take);
-                    packet.put(payload);
+                    // Copy payload data
+                    ByteBuffer payloadCopy = payload.duplicate();
+                    payloadCopy.position(offset).limit(offset + take);
+                    packet.put(payloadCopy);
                     packet.flip();
                     
                     sendDataChannelMessage(packet);
