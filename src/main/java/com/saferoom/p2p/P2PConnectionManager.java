@@ -413,6 +413,32 @@ public class P2PConnectionManager {
     }
     
     /**
+     * Send file via WebRTC DataChannel with file transfer protocol
+     */
+    public CompletableFuture<Boolean> sendFile(String targetUsername, java.nio.file.Path filePath) {
+        P2PConnection connection = activeConnections.get(targetUsername);
+        if (connection == null || !connection.isActive()) {
+            System.err.printf("[P2P] ❌ No active connection to %s%n", targetUsername);
+            return CompletableFuture.completedFuture(false);
+        }
+        
+        if (connection.fileTransfer == null) {
+            System.err.printf("[P2P] ❌ File transfer not initialized for %s%n", targetUsername);
+            return CompletableFuture.completedFuture(false);
+        }
+        
+        try {
+            System.out.printf("[P2P] 📤 Sending file to %s: %s%n", 
+                targetUsername, filePath.getFileName());
+            return connection.fileTransfer.sendFile(targetUsername, filePath);
+            
+        } catch (Exception e) {
+            System.err.printf("[P2P] ❌ Error sending file: %s%n", e.getMessage());
+            return CompletableFuture.completedFuture(false);
+        }
+    }
+    
+    /**
      * P2P Connection class (inner class)
      * Represents one WebRTC peer connection with DataChannel
      */
@@ -423,6 +449,7 @@ public class P2PConnectionManager {
         RTCPeerConnection peerConnection;
         RTCDataChannel dataChannel;
         DataChannelReliableMessaging reliableMessaging;  // Reliable messaging protocol
+        DataChannelFileTransfer fileTransfer;  // File transfer protocol
         
         volatile boolean active = false;
         
@@ -644,15 +671,66 @@ public class P2PConnectionManager {
             });
             
             System.out.printf("[P2P] ✅ Reliable messaging initialized for %s%n", remoteUsername);
+            
+            // Also initialize file transfer
+            initializeFileTransfer();
+        }
+        
+        /**
+         * Initialize file transfer protocol over DataChannel
+         */
+        void initializeFileTransfer() {
+            if (dataChannel == null || dataChannel.getState() != RTCDataChannelState.OPEN) {
+                System.err.println("[P2P] Cannot initialize file transfer - DataChannel not open");
+                return;
+            }
+            
+            fileTransfer = new DataChannelFileTransfer(myUsername, dataChannel);
+            
+            // Set callback for received files
+            fileTransfer.setTransferCallback((sender, fileId, filePath, fileSize) -> {
+                System.out.printf("[P2P] 📁 File received from %s: %s (%d bytes)%n", 
+                    sender, filePath.getFileName(), fileSize);
+                
+                // TODO: Notify GUI
+                javafx.application.Platform.runLater(() -> {
+                    // Show notification or add to chat
+                    System.out.printf("[P2P] 📁 File saved to: %s%n", filePath.toAbsolutePath());
+                });
+            });
+            
+            System.out.printf("[P2P] ✅ File transfer initialized for %s%n", remoteUsername);
+            
+            System.out.printf("[P2P] ✅ Reliable messaging initialized for %s%n", remoteUsername);
         }
         
         void handleDataChannelMessage(RTCDataChannelBuffer buffer) {
             try {
-                // Route to reliable messaging protocol
-                if (reliableMessaging != null) {
-                    reliableMessaging.handleIncomingMessage(buffer);
+                ByteBuffer data = buffer.data.duplicate();
+                if (data.remaining() < 1) return;
+                
+                byte signal = data.get(0);
+                
+                // Route based on signal type
+                // File transfer signals: 0x00-0x03
+                // Messaging signals: 0x20-0x23
+                
+                if (signal >= 0x00 && signal <= 0x03) {
+                    // File transfer protocol
+                    if (fileTransfer != null) {
+                        fileTransfer.handleIncomingMessage(buffer);
+                    } else {
+                        System.err.println("[P2P] ⚠️ Received file transfer message but protocol not initialized");
+                    }
+                } else if (signal >= 0x20 && signal <= 0x23) {
+                    // Reliable messaging protocol
+                    if (reliableMessaging != null) {
+                        reliableMessaging.handleIncomingMessage(buffer);
+                    } else {
+                        System.err.println("[P2P] ⚠️ Received message but reliable messaging not initialized");
+                    }
                 } else {
-                    System.err.println("[P2P] ⚠️ Received message but reliable messaging not initialized");
+                    System.err.printf("[P2P] ⚠️ Unknown protocol signal: 0x%02X%n", signal);
                 }
                 
             } catch (Exception e) {
