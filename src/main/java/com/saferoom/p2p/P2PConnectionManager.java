@@ -386,26 +386,25 @@ public class P2PConnectionManager {
     }
     
     /**
-     * Send message via WebRTC DataChannel
+     * Send message via WebRTC DataChannel with reliable messaging protocol
      * Called from ChatService.sendMessage()
      */
     public CompletableFuture<Boolean> sendMessage(String targetUsername, String message) {
         P2PConnection connection = activeConnections.get(targetUsername);
         if (connection == null || !connection.isActive()) {
+            System.err.printf("[P2P] ❌ No active connection to %s%n", targetUsername);
+            return CompletableFuture.completedFuture(false);
+        }
+        
+        if (connection.reliableMessaging == null) {
+            System.err.printf("[P2P] ❌ Reliable messaging not initialized for %s%n", targetUsername);
             return CompletableFuture.completedFuture(false);
         }
         
         try {
-            // Send message via DataChannel (simple text for now)
-            // TODO: Implement LLS protocol for reliable messaging with chunking/ACK
-            byte[] messageBytes = message.getBytes("UTF-8");
-            ByteBuffer buffer = ByteBuffer.wrap(messageBytes);
-            RTCDataChannelBuffer dcBuffer = new RTCDataChannelBuffer(buffer, true);
-            
-            connection.dataChannel.send(dcBuffer);
-            
-            System.out.printf("[P2P] ✅ Message sent to %s via DataChannel%n", targetUsername);
-            return CompletableFuture.completedFuture(true);
+            // Send via reliable messaging protocol (with chunking, ACK, NACK, CRC)
+            System.out.printf("[P2P] 📤 Sending reliable message to %s: %s%n", targetUsername, message);
+            return connection.reliableMessaging.sendMessage(targetUsername, message);
             
         } catch (Exception e) {
             System.err.printf("[P2P] ❌ Error sending message: %s%n", e.getMessage());
@@ -423,6 +422,7 @@ public class P2PConnectionManager {
         
         RTCPeerConnection peerConnection;
         RTCDataChannel dataChannel;
+        DataChannelReliableMessaging reliableMessaging;  // Reliable messaging protocol
         
         volatile boolean active = false;
         
@@ -529,6 +529,9 @@ public class P2PConnectionManager {
                                 System.out.printf("[P2P] ✅ DataChannel OPEN with %s (incoming)%n", remoteUsername);
                                 active = true;
                                 activeConnections.put(remoteUsername, P2PConnection.this);
+                                
+                                // Initialize reliable messaging
+                                P2PConnection.this.initializeReliableMessaging();
                             }
                         }
                         
@@ -570,6 +573,9 @@ public class P2PConnectionManager {
                         active = true;
                         activeConnections.put(remoteUsername, P2PConnection.this);
                         
+                        // Initialize reliable messaging
+                        P2PConnection.this.initializeReliableMessaging();
+                        
                         CompletableFuture<Boolean> future = pendingConnections.remove(remoteUsername);
                         if (future != null) {
                             future.complete(true);
@@ -590,42 +596,64 @@ public class P2PConnectionManager {
             System.out.printf("[P2P] ✅ DataChannel created for %s%n", remoteUsername);
         }
         
+        /**
+         * Initialize reliable messaging protocol over DataChannel
+         */
+        void initializeReliableMessaging() {
+            if (dataChannel == null || dataChannel.getState() != RTCDataChannelState.OPEN) {
+                System.err.println("[P2P] Cannot initialize reliable messaging - DataChannel not open");
+                return;
+            }
+            
+            reliableMessaging = new DataChannelReliableMessaging(myUsername, dataChannel);
+            
+            // Set callback for completed messages
+            reliableMessaging.setCompletionCallback((sender, messageId, messageBytes) -> {
+                try {
+                    String messageText = new String(messageBytes, "UTF-8");
+                    System.out.printf("[P2P] 📨 Reliable message complete from %s: %s%n", 
+                        remoteUsername, messageText);
+                    
+                    // Forward to ChatService
+                    javafx.application.Platform.runLater(() -> {
+                        try {
+                            com.saferoom.gui.service.ChatService chatService = 
+                                com.saferoom.gui.service.ChatService.getInstance();
+                            
+                            chatService.getMessagesForChannel(remoteUsername).add(
+                                new com.saferoom.gui.model.Message(
+                                    messageText,
+                                    remoteUsername,
+                                    remoteUsername.substring(0, 1)
+                                )
+                            );
+                            
+                            com.saferoom.gui.service.ContactService.getInstance()
+                                .updateLastMessage(remoteUsername, messageText, false);
+                                
+                            System.out.printf("[P2P] ✅ Message added to chat for %s%n", remoteUsername);
+                            
+                        } catch (Exception e) {
+                            System.err.println("[P2P] Error forwarding message: " + e.getMessage());
+                        }
+                    });
+                    
+                } catch (Exception e) {
+                    System.err.printf("[P2P] Error processing completed message: %s%n", e.getMessage());
+                }
+            });
+            
+            System.out.printf("[P2P] ✅ Reliable messaging initialized for %s%n", remoteUsername);
+        }
+        
         void handleDataChannelMessage(RTCDataChannelBuffer buffer) {
             try {
-                // Simple message receiving (decode text)
-                // TODO: Implement LLS protocol for reliable messaging
-                ByteBuffer data = buffer.data.duplicate();
-                byte[] bytes = new byte[data.remaining()];
-                data.get(bytes);
-                
-                String message = new String(bytes, "UTF-8");
-                System.out.printf("[P2P] 📨 Received message from %s: %s%n", remoteUsername, message);
-                
-                // Forward to ChatService (add as incoming message)
-                javafx.application.Platform.runLater(() -> {
-                    try {
-                        com.saferoom.gui.service.ChatService chatService = 
-                            com.saferoom.gui.service.ChatService.getInstance();
-                        
-                        // Add message to chat (from remote user)
-                        chatService.getMessagesForChannel(remoteUsername).add(
-                            new com.saferoom.gui.model.Message(
-                                message,                           // text
-                                remoteUsername,                    // senderId
-                                remoteUsername.substring(0, 1)    // senderAvatarChar
-                            )
-                        );
-                        
-                        // Update contact's last message
-                        com.saferoom.gui.service.ContactService.getInstance()
-                            .updateLastMessage(remoteUsername, message, false);
-                            
-                        System.out.printf("[P2P] ✅ Message added to chat for %s%n", remoteUsername);
-                        
-                    } catch (Exception e) {
-                        System.err.println("[P2P] Error forwarding message: " + e.getMessage());
-                    }
-                });
+                // Route to reliable messaging protocol
+                if (reliableMessaging != null) {
+                    reliableMessaging.handleIncomingMessage(buffer);
+                } else {
+                    System.err.println("[P2P] ⚠️ Received message but reliable messaging not initialized");
+                }
                 
             } catch (Exception e) {
                 System.err.println("[P2P] Error handling DataChannel message: " + e.getMessage());

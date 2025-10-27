@@ -79,26 +79,30 @@ public class ChatService {
         ObservableList<Message> messages = getMessagesForChannel(channelId);
         messages.add(newMessage);
 
-        // Try P2P messaging first (check if specific peer connection exists)
+        // Try WebRTC DataChannel P2P messaging first
         boolean sentViaP2P = false;
         
-        // Check if we have active P2P connection with this specific user
-        if (ClientMenu.isP2PMessagingAvailable(channelId)) {
-            // Use reliable messaging protocol (with chunking, ACK, retransmission)
+        // Check if we have active WebRTC DataChannel connection
+        com.saferoom.p2p.P2PConnectionManager p2pManager = 
+            com.saferoom.p2p.P2PConnectionManager.getInstance();
+        
+        if (p2pManager.hasActiveConnection(channelId)) {
             try {
+                System.out.printf("[Chat] 📡 Sending via WebRTC DataChannel to %s%n", channelId);
+                
                 java.util.concurrent.CompletableFuture<Boolean> future = 
-                    com.saferoom.natghost.NatAnalyzer.sendReliableMessage(channelId, text);
+                    p2pManager.sendMessage(channelId, text);
                 
                 // Wait for send completion (with timeout)
-                sentViaP2P = future.get(5, java.util.concurrent.TimeUnit.SECONDS);
+                sentViaP2P = future.get(2, java.util.concurrent.TimeUnit.SECONDS);
                 
                 if (sentViaP2P) {
-                    System.out.println("[Chat] ✅ Message sent via Reliable P2P to " + channelId);
+                    System.out.printf("[Chat] ✅ Message sent via WebRTC DataChannel to %s%n", channelId);
                 } else {
-                    System.out.println("[Chat] ⚠️ Reliable P2P send failed to " + channelId);
+                    System.out.printf("[Chat] ⚠️ WebRTC DataChannel send failed to %s%n", channelId);
                 }
             } catch (Exception e) {
-                System.err.println("[Chat] ❌ Reliable P2P error: " + e.getMessage());
+                System.err.printf("[Chat] ❌ WebRTC DataChannel error: %s%n", e.getMessage());
                 sentViaP2P = false;
             }
         }
