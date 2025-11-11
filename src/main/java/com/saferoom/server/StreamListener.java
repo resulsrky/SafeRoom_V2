@@ -25,7 +25,7 @@ public class StreamListener extends Thread {
 					.build()
 					.start();
 			
-			System.out.println("✅ gRPC Server Started on port " + grpcPort + " (SO_REUSEADDR enabled)");
+			System.out.println("gRPC Server Started on port " + grpcPort + " (SO_REUSEADDR enabled)");
 			
 			// Graceful shutdown hook
 			Runtime.getRuntime().addShutdownHook(new Thread(() -> {

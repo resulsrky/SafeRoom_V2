@@ -17,14 +17,15 @@ public class ClientMenu{
 	public static int Port = SafeRoomServer.grpcPort;
 	public static int UDP_Port = SafeRoomServer.udpPort1;
 
+	public static ManagedChannel channel;
+	static{
+		channel = ManagedChannelBuilder.forAddress(Server, Port)
+					.usePlaintext()
+					.build();
+	}
 		public static String Login(String username, String Password)
 		{
-		ManagedChannel channel = null;
 		try {
-			channel = ManagedChannelBuilder.forAddress(Server, Port)
-				.usePlaintext()
-				.build();
-
 			UDPHoleGrpc.UDPHoleBlockingStub client = UDPHoleGrpc.newBlockingStub(channel)
 				.withDeadlineAfter(10, java.util.concurrent.TimeUnit.SECONDS);
 			SafeRoomProto.Menu main_menu = SafeRoomProto.Menu.newBuilder()
@@ -38,7 +39,7 @@ public class ClientMenu{
 			switch(code){
 				case 0:
 					System.out.println("Success!");
-					System.out.printf("✅ Logged in as: %s%n", username);
+					System.out.printf("Logged in as: %s%n", username);
 					return message; // Server'dan gelen eksik bilgiyi döndür (email veya username)
 				case 1:
 					if(message.equals("N_REGISTER")){
@@ -55,20 +56,14 @@ public class ClientMenu{
 					System.out.println("Message has broken");
 					return "ERROR";					
 				}
-		} finally {
-			if (channel != null) {
-				channel.shutdown();
+			}catch(Exception e){
+				return e.toString();
 			}
 		}
-		}
+
 	public static int register_client(String username, String password, String mail)
 	{
-		ManagedChannel channel = null;
 		try {
-			channel = ManagedChannelBuilder.forAddress(Server, Port)
-				.usePlaintext()
-				.build();
-
 			UDPHoleGrpc.UDPHoleBlockingStub stub = UDPHoleGrpc.newBlockingStub(channel)
 				.withDeadlineAfter(10, TimeUnit.SECONDS);
 			
@@ -99,19 +94,14 @@ public class ClientMenu{
 					System.out.println("Message has broken");
 					return 3;					
 			}
-		} finally {
-			if (channel != null) {
-				channel.shutdown();
-			}
+		} catch(Exception e){
+			System.err.println("Register Error: " + e);
+			return -5;
+
 		}
 	}
 	public static int verify_user(String username, String verify_code) {
-		ManagedChannel channel = null;
 		try {
-			channel = ManagedChannelBuilder.forAddress(Server, Port)
-					.usePlaintext()
-					.build();
-			
 			UDPHoleGrpc.UDPHoleBlockingStub stub = UDPHoleGrpc.newBlockingStub(channel)
 					.withDeadlineAfter(10, TimeUnit.SECONDS);
 			
@@ -136,20 +126,14 @@ public class ClientMenu{
 				System.out.println("Connection is not safe");
 				return 2;
 			}
-		} finally {
-			if (channel != null) {
-				channel.shutdown();
-			}
+		}catch(Exception e){
+			System.err.println("Verificate Client Error: " + e);
+			return -7;
 		}
 	}
 
 	public static boolean verify_email(String mail){
-		ManagedChannel channel = null;
 		try{
-			channel = ManagedChannelBuilder.forAddress(Server, Port)
-				.usePlaintext()
-				.build();
-
 			UDPHoleGrpc.UDPHoleBlockingStub client = UDPHoleGrpc.newBlockingStub(channel)
 				.withDeadlineAfter(10, java.util.concurrent.TimeUnit.SECONDS);
 			
@@ -167,24 +151,13 @@ public class ClientMenu{
 			
 		}catch(Exception e){
 			System.err.println("Verify Channel Error: " + e);
-		}finally{
-			if(channel != null){
-				channel.shutdown();
-			}
 		}
-
 		return false;
 	}
 
 	public static int changePassword(String email, String newPassword) {
-		ManagedChannel channel = null;
 		try {
-			channel = ManagedChannelBuilder.forAddress(Server, Port)
-				.usePlaintext()
-				.build();
-			
 			UDPHoleGrpc.UDPHoleBlockingStub stub = UDPHoleGrpc.newBlockingStub(channel);
-			
 			// Format: "email:newpassword"
 			String requestData = email + ":" + newPassword;
 			Request_Client request = Request_Client.newBuilder()
@@ -202,21 +175,12 @@ public class ClientMenu{
 		} catch (Exception e) {
 			System.err.println("Change Password Channel Error: " + e);
 			return 2; // Error code
-		} finally {
-			if (channel != null) {
-				channel.shutdown();
-			}
 		}
 	}
 
 	public static java.util.List<java.util.Map<String, Object>> searchUsers(String searchTerm, String currentUser) throws Exception {
-		ManagedChannel channel = null;
 		try {
-			channel = ManagedChannelBuilder.forAddress(Server, Port)
-				.usePlaintext()
-				.build();
-			
-			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
+				UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
 				.withDeadlineAfter(10, TimeUnit.SECONDS);
 			
 			SafeRoomProto.SearchRequest request = SafeRoomProto.SearchRequest.newBuilder()
@@ -238,7 +202,7 @@ public class ClientMenu{
 					userMap.put("has_pending_request", user.getHasPendingRequest());
 					
 					// Debug log
-					System.out.println("🔍 Search Result for " + user.getUsername() + ":");
+					System.out.println("Search Result for " + user.getUsername() + ":");
 					System.out.println("  - is_friend: " + user.getIsFriend());
 					System.out.println("  - has_pending_request: " + user.getHasPendingRequest());
 					
@@ -246,20 +210,14 @@ public class ClientMenu{
 				}
 			}
 			return results;
-		} finally {
-			if (channel != null) {
-				channel.shutdown();
-			}
+		}catch(Exception e){
+			System.err.println("Search User Client Error: " + e);
+			return null;
 		}
 	}
 
 	public static SafeRoomProto.ProfileResponse getProfile(String targetUsername, String currentUser) throws Exception {
-		ManagedChannel channel = null;
 		try {
-			channel = ManagedChannelBuilder.forAddress(Server, Port)
-				.usePlaintext()
-				.build();
-			
 			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
 				.withDeadlineAfter(10, TimeUnit.SECONDS);
 			
@@ -270,20 +228,14 @@ public class ClientMenu{
 				
 			SafeRoomProto.ProfileResponse response = blockingStub.getProfile(request);
 			return response;
-		} finally {
-			if (channel != null) {
-				channel.shutdown();
-			}
+		}catch(Exception e){
+			System.err.println("Get Profile Error: " + e);
+			return null;
 		}
-	}
+		}
 
 	public static SafeRoomProto.FriendResponse sendFriendRequest(String fromUser, String toUser) throws Exception {
-		ManagedChannel channel = null;
 		try {
-			channel = ManagedChannelBuilder.forAddress(Server, Port)
-				.usePlaintext()
-				.build();
-			
 			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
 				.withDeadlineAfter(10, TimeUnit.SECONDS);
 			
@@ -295,12 +247,11 @@ public class ClientMenu{
 				
 			SafeRoomProto.FriendResponse response = blockingStub.sendFriendRequest(request);
 			return response;
-		} finally {
-			if (channel != null) {
-				channel.shutdown();
-			}
+		}catch(Exception e){
+			System.err.println("Send Friend Request Error: " + e);
+			return null;
+		} 
 		}
-	}
 
 	// ===============================
 	// FRIEND SYSTEM CLIENT METHODS
@@ -310,12 +261,7 @@ public class ClientMenu{
 	 * Bekleyen arkadaşlık isteklerini getir (gelen istekler)
 	 */
 	public static SafeRoomProto.PendingRequestsResponse getPendingFriendRequests(String username) throws Exception {
-		ManagedChannel channel = null;
 		try {
-			channel = ManagedChannelBuilder.forAddress(Server, Port)
-				.usePlaintext()
-				.build();
-			
 			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
 				.withDeadlineAfter(10, TimeUnit.SECONDS);
 			
@@ -324,23 +270,17 @@ public class ClientMenu{
 				.build();
 				
 			return blockingStub.getPendingFriendRequests(request);
-		} finally {
-			if (channel != null) {
-				channel.shutdown();
-			}
+		}catch(Exception e ){
+			System.err.println("Get Pending Request Error: " + e);
+			return null;
 		}
-	}
+		}
 
 	/**
 	 * Gönderilen arkadaşlık isteklerini getir (giden istekler)
 	 */
 	public static SafeRoomProto.SentRequestsResponse getSentFriendRequests(String username) throws Exception {
-		ManagedChannel channel = null;
 		try {
-			channel = ManagedChannelBuilder.forAddress(Server, Port)
-				.usePlaintext()
-				.build();
-			
 			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
 				.withDeadlineAfter(10, TimeUnit.SECONDS);
 			
@@ -349,23 +289,17 @@ public class ClientMenu{
 				.build();
 				
 			return blockingStub.getSentFriendRequests(request);
-		} finally {
-			if (channel != null) {
-				channel.shutdown();
-			}
+		}catch(Exception e){
+			System.err.println("Get Friend Request Error: " + e);
+			return null;
+		} 
 		}
-	}
 
 	/**
 	 * Arkadaşlık isteğini kabul et
 	 */
 	public static SafeRoomProto.Status acceptFriendRequest(int requestId, String username) throws Exception {
-		ManagedChannel channel = null;
 		try {
-			channel = ManagedChannelBuilder.forAddress(Server, Port)
-				.usePlaintext()
-				.build();
-			
 			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
 				.withDeadlineAfter(10, TimeUnit.SECONDS);
 			
@@ -375,23 +309,17 @@ public class ClientMenu{
 				.build();
 				
 			return blockingStub.acceptFriendRequest(request);
-		} finally {
-			if (channel != null) {
-				channel.shutdown();
+		}catch(Exception e){
+			System.err.println("Accept Friend Error: " + e);
+			return null;
 			}
 		}
-	}
 
 	/**
 	 * Arkadaşlık isteğini reddet
 	 */
 	public static SafeRoomProto.Status rejectFriendRequest(int requestId, String username) throws Exception {
-		ManagedChannel channel = null;
 		try {
-			channel = ManagedChannelBuilder.forAddress(Server, Port)
-				.usePlaintext()
-				.build();
-			
 			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
 				.withDeadlineAfter(10, TimeUnit.SECONDS);
 			
@@ -401,23 +329,17 @@ public class ClientMenu{
 				.build();
 				
 			return blockingStub.rejectFriendRequest(request);
-		} finally {
-			if (channel != null) {
-				channel.shutdown();
-			}
-		}
+		}catch(Exception e){
+			System.err.println("Reject Frind Client Error: " + e);
+			return null;
+		}	
 	}
 
 	/**
 	 * Gönderilen arkadaşlık isteğini iptal et
 	 */
 	public static SafeRoomProto.Status cancelFriendRequest(int requestId, String username) throws Exception {
-		ManagedChannel channel = null;
 		try {
-			channel = ManagedChannelBuilder.forAddress(Server, Port)
-				.usePlaintext()
-				.build();
-			
 			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
 				.withDeadlineAfter(10, TimeUnit.SECONDS);
 			
@@ -427,23 +349,17 @@ public class ClientMenu{
 				.build();
 				
 			return blockingStub.cancelFriendRequest(request);
-		} finally {
-			if (channel != null) {
-				channel.shutdown();
-			}
+		}catch(Exception e){
+			System.err.println("Cancel Frind Client Error: " + e);
+			return null;
 		}
-	}
+		}
 
 	/**
 	 * Arkadaş listesini getir
 	 */
 	public static SafeRoomProto.FriendsListResponse getFriendsList(String username) throws Exception {
-		ManagedChannel channel = null;
 		try {
-			channel = ManagedChannelBuilder.forAddress(Server, Port)
-				.usePlaintext()
-				.build();
-			
 			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
 				.withDeadlineAfter(10, TimeUnit.SECONDS);
 			
@@ -452,23 +368,17 @@ public class ClientMenu{
 				.build();
 				
 			return blockingStub.getFriendsList(request);
-		} finally {
-			if (channel != null) {
-				channel.shutdown();
-			}
+		}catch(Exception e){
+			System.err.println("Get Friend List: " + e);
+			return null;
+		} 
 		}
-	}
 
 	/**
 	 * Arkadaşı kaldır
 	 */
 	public static SafeRoomProto.Status removeFriend(String user1, String user2) throws Exception {
-		ManagedChannel channel = null;
 		try {
-			channel = ManagedChannelBuilder.forAddress(Server, Port)
-				.usePlaintext()
-				.build();
-			
 			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
 				.withDeadlineAfter(10, TimeUnit.SECONDS);
 			
@@ -478,23 +388,17 @@ public class ClientMenu{
 				.build();
 				
 			return blockingStub.removeFriend(request);
-		} finally {
-			if (channel != null) {
-				channel.shutdown();
-			}
+		}catch(Exception e){
+			System.err.println("Remove Friend Client Error: " + e);
+			return null;
+			} 
 		}
-	}
 
 	/**
 	 * Arkadaşlık istatistiklerini getir
 	 */
 	public static SafeRoomProto.FriendshipStatsResponse getFriendshipStats(String username) throws Exception {
-		ManagedChannel channel = null;
 		try {
-			channel = ManagedChannelBuilder.forAddress(Server, Port)
-				.usePlaintext()
-				.build();
-			
 			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
 				.withDeadlineAfter(10, TimeUnit.SECONDS);
 			
@@ -503,23 +407,17 @@ public class ClientMenu{
 				.build();
 				
 			return blockingStub.getFriendshipStats(request);
-		} finally {
-			if (channel != null) {
-				channel.shutdown();
-			}
+		}catch(Exception e){
+			System.err.println("GetFriendShipStats Client Error: " + e);
+			return null;
+		} 
 		}
-	}
 
 	/**
 	 * Heartbeat gönder
 	 */
 	public static SafeRoomProto.HeartbeatResponse sendHeartbeat(String username, String sessionId) throws Exception {
-		ManagedChannel channel = null;
 		try {
-			channel = ManagedChannelBuilder.forAddress(Server, Port)
-				.usePlaintext()
-				.build();
-			
 			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
 				.withDeadlineAfter(5, TimeUnit.SECONDS);
 			
@@ -529,23 +427,17 @@ public class ClientMenu{
 				.build();
 				
 			return blockingStub.sendHeartbeat(request);
-		} finally {
-			if (channel != null) {
-				channel.shutdown();
-			}
+		}catch(Exception e){
+			System.err.println("Heartbeat Error Client: " + e);
+			return null;
+		} 
 		}
-	}
 
 	/**
 	 * User session'ını sonlandır
 	 */
 	public static SafeRoomProto.Status endUserSession(String username, String sessionId) throws Exception {
-		ManagedChannel channel = null;
 		try {
-			channel = ManagedChannelBuilder.forAddress(Server, Port)
-				.usePlaintext()
-				.build();
-			
 			UDPHoleGrpc.UDPHoleBlockingStub blockingStub = UDPHoleGrpc.newBlockingStub(channel)
 				.withDeadlineAfter(5, TimeUnit.SECONDS);
 			
@@ -555,12 +447,10 @@ public class ClientMenu{
 				.build();
 				
 			return blockingStub.endUserSession(request);
-		} finally {
-			if (channel != null) {
-				channel.shutdown();
-			}
-		}
-	}
+		}catch(Exception e){
+			System.err.println("End User Sessions Error: " + e);
+			return null;
+		}	}
 	
 	// ============================================
 	// P2P HOLE PUNCHING METHODS
@@ -578,15 +468,15 @@ public class ClientMenu{
 			// Set current username in ChatService for message rendering
 			com.saferoom.gui.service.ChatService.getInstance().setCurrentUsername(username);
 			
-			// ✅ WEBRTC P2P: Initialize P2PConnectionManager for messaging
-			System.out.println("[P2P] 🚀 Initializing WebRTC P2P messaging for: " + username);
+			// WEBRTC P2P: Initialize P2PConnectionManager for messaging
+			System.out.println("[P2P] Initializing WebRTC P2P messaging for: " + username);
 			
 			// Initialize P2PConnectionManager (shares WebRTCSignalingClient with CallManager)
 			com.saferoom.p2p.P2PConnectionManager.getInstance().initialize(username);
 			
-			System.out.println("[P2P] ✅ WebRTC P2P ready (connections will establish when friends come online)");
+			System.out.println("[P2P] WebRTC P2P ready (connections will establish when friends come online)");
 			
-			// ✅ WebRTC callbacks are registered in registerP2PUser() method
+			// WebRTC callbacks are registered in registerP2PUser() method
 			// (See setupWebRTCCallbacks in P2PConnectionManager)
 			
 			return true;
@@ -599,7 +489,7 @@ public class ClientMenu{
 	}
 	
 	/**
-	 * 🆕 ASYNC NON-BLOCKING P2P Connection Request
+	 * ASYNC NON-BLOCKING P2P Connection Request
 	 * Start hole punch asynchronously and return CompletableFuture
 	 * 
 	 * @param myUsername Current user's username
@@ -608,7 +498,7 @@ public class ClientMenu{
 	 */
 	public static java.util.concurrent.CompletableFuture<Boolean> startP2PHolePunchAsync(String myUsername, String targetUsername) {
 		try {
-			System.out.println("[P2P] 🚀 Initiating ASYNC P2P request: " + myUsername + " -> " + targetUsername);
+			System.out.println("[P2P]Initiating ASYNC P2P request: " + myUsername + " -> " + targetUsername);
 			
 			// Create signaling server address
 			InetSocketAddress signalingServer = new InetSocketAddress(Server, UDP_Port);
@@ -617,19 +507,19 @@ public class ClientMenu{
 			return NatAnalyzer.requestP2PConnectionAsync(myUsername, targetUsername, signalingServer)
 				.thenApply(success -> {
 					if (success) {
-						System.out.println("[P2P] ✅ Async P2P connection successful");
+						System.out.println("[P2P]Async P2P connection successful");
 					} else {
-						System.out.println("[P2P] ❌ Async P2P failed - will use server relay");
+						System.out.println("[P2P]Async P2P failed - will use server relay");
 					}
 					return success;
 				})
 				.exceptionally(e -> {
-					System.err.println("[P2P] ❌ Error during async P2P: " + e.getMessage());
+					System.err.println("[P2P]Error during async P2P: " + e.getMessage());
 					return false;
 				});
 			
 		} catch (Exception e) {
-			System.err.println("[P2P] ❌ Error initializing async P2P: " + e.getMessage());
+			System.err.println("[P2P]Error initializing async P2P: " + e.getMessage());
 			e.printStackTrace();
 			return java.util.concurrent.CompletableFuture.completedFuture(false);
 		}
@@ -656,10 +546,10 @@ public class ClientMenu{
 			boolean success = NatAnalyzer.requestP2PConnection(myUsername, targetUsername, signalingServer);
 			
 			if (success) {
-				System.out.println("[P2P] ✅ Unidirectional P2P connection successful");
+				System.out.println("[P2P] Unidirectional P2P connection successful");
 				return true;
 			} else {
-				System.out.println("[P2P] ❌ Unidirectional P2P failed - will use server relay");
+				System.out.println("[P2P] Unidirectional P2P failed - will use server relay");
 				return false;
 			}
 			
@@ -687,10 +577,10 @@ public class ClientMenu{
 			boolean success = NatAnalyzer.performHolePunch(myUsername, targetUsername, signalingServer);
 			
 			if (success) {
-				System.out.println("[P2P] ✅ Legacy hole punch successful - P2P connection established");
+				System.out.println("[P2P] Legacy hole punch successful - P2P connection established");
 				return true;
 			} else {
-				System.out.println("[P2P] ❌ Legacy hole punch failed - will use server relay");
+				System.out.println("[P2P] Legacy hole punch failed - will use server relay");
 				return false;
 			}
 			

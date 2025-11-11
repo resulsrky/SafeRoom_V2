@@ -195,19 +195,6 @@ public class UDPHoleImpl extends UDPHoleGrpc.UDPHoleImplBase {
 	}
 	
 	@Override
-	public void registerClient(Stun_Info request, StreamObserver<Status> responseObserver) {
-	    SessionManager.registerPeer(request.getUsername(), request); 
-
-	    Status response = Status.newBuilder()
-	        .setMessage("Client Registered")
-	        .setCode(0)
-	        .build();
-
-	    responseObserver.onNext(response);
-	    responseObserver.onCompleted();
-	}
-	
-	@Override
 	public void verifyEmail(Request_Client req, StreamObserver<Status> responseObserver){
 		String candicate_email = req.getUsername();
 		Status response = null;
@@ -304,36 +291,19 @@ public class UDPHoleImpl extends UDPHoleGrpc.UDPHoleImplBase {
 		responseObserver.onCompleted();
 	}
 	@Override
-	public void getStunInfo(Request_Client request, StreamObserver<Stun_Info> responseObserver) {
-	    String username = request.getUsername();
-	    Stun_Info peerInfo = SessionManager.getPeer(username); 
-
-	    if (peerInfo != null) {
-	        responseObserver.onNext(peerInfo);
-	    } else {
-	        responseObserver.onNext(Stun_Info.newBuilder()
-	            .setUsername(username)
-	            .setState(false)
-	            .build());
-	    }
-
-	    responseObserver.onCompleted();
-	}
-
-	@Override
 	public void searchUsers(SearchRequest request, StreamObserver<SearchResponse> responseObserver) {
 		try {
 			String searchTerm = request.getSearchTerm();
 			String currentUser = request.getCurrentUser();
 			
 			// Debug log
-			System.out.println("🔍 User Search Request:");
+			System.out.println(" User Search Request:");
 			System.out.println("  Search Term: '" + searchTerm + "'");
 			System.out.println("  Current User: '" + currentUser + "'");
 			
 			// Minimum 2 karakter kontrolü
 			if (searchTerm.length() < 2) {
-				System.out.println("❌ Search term too short (less than 2 characters)");
+				System.out.println("Search term too short (less than 2 characters)");
 				responseObserver.onNext(SearchResponse.newBuilder()
 					.setSuccess(false)
 					.setMessage("En az 2 karakter girin")
@@ -345,7 +315,7 @@ public class UDPHoleImpl extends UDPHoleGrpc.UDPHoleImplBase {
 			List<java.util.Map<String, Object>> results = DBManager.searchUsers(searchTerm, currentUser, 10);
 			
 			// Debug: Results log
-			System.out.println("📊 Search Results:");
+			System.out.println("Search Results:");
 			System.out.println("  Found " + results.size() + " users:");
 			for (java.util.Map<String, Object> user : results) {
 				System.out.println("    - " + user.get("username") + " (" + user.get("email") + ")");
@@ -367,18 +337,18 @@ public class UDPHoleImpl extends UDPHoleGrpc.UDPHoleImplBase {
 					.build());
 			}
 			
-			System.out.println("✅ Search completed successfully, sending response to client");
+			System.out.println("Search completed successfully, sending response to client");
 			responseObserver.onNext(responseBuilder.build());
 			responseObserver.onCompleted();
 			
 		} catch (Exception e) {
-			System.err.println("❌ Search Error: " + e.getMessage());
+			System.err.println("Search Error: " + e.getMessage());
 			e.printStackTrace();
 			responseObserver.onError(e);
 		}
 	}
 
-	// ===============================
+// ===============================
 // PROFILE SYSTEM METHODS
 // ===============================
 
@@ -388,11 +358,11 @@ public void getProfile(ProfileRequest request, StreamObserver<ProfileResponse> r
         String username = request.getUsername();
         String requestedBy = request.getRequestedBy();
         
-        System.out.println("📋 Profile request for '" + username + "' by '" + requestedBy + "'");
+        System.out.println("Profile request for '" + username + "' by '" + requestedBy + "'");
         
         // Kullanıcı var mı kontrol et
         if (!DBManager.userExists(username)) {
-            System.out.println("❌ User '" + username + "' not found");
+            System.out.println("User '" + username + "' not found");
             responseObserver.onNext(ProfileResponse.newBuilder()
                 .setSuccess(false)
                 .setMessage("User not found")
@@ -405,7 +375,7 @@ public void getProfile(ProfileRequest request, StreamObserver<ProfileResponse> r
         java.util.Map<String, Object> profileData = DBManager.getUserProfile(username, requestedBy);
         
         if (profileData == null) {
-            System.out.println("❌ Failed to load profile for '" + username + "'");
+            System.out.println("Failed to load profile for '" + username + "'");
             responseObserver.onNext(ProfileResponse.newBuilder()
                 .setSuccess(false)
                 .setMessage("Failed to load profile")
@@ -488,11 +458,11 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
         String receiver = request.getReceiver();
         String message = request.getMessage();
         
-        System.out.println("👥 Friend request: '" + sender + "' -> '" + receiver + "'");
+        System.out.println("Friend request: '" + sender + "' -> '" + receiver + "'");
         
         // Kullanıcılar var mı kontrol et
         if (!DBManager.userExists(sender) || !DBManager.userExists(receiver)) {
-            System.out.println("❌ One or both users not found");
+            System.out.println("One or both users not found");
             responseObserver.onNext(FriendResponse.newBuilder()
                 .setSuccess(false)
                 .setMessage("User not found")
@@ -506,14 +476,14 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
         boolean success = DBManager.sendFriendRequest(sender, receiver, message);
         
         if (success) {
-            System.out.println("✅ Friend request sent successfully");
+            System.out.println("Friend request sent successfully");
             responseObserver.onNext(FriendResponse.newBuilder()
                 .setSuccess(true)
                 .setMessage("Friend request sent successfully")
                 .setStatus("sent")
                 .build());
         } else {
-            System.out.println("❌ Friend request failed (already exists or blocked)");
+            System.out.println("Friend request failed (already exists or blocked)");
             responseObserver.onNext(FriendResponse.newBuilder()
                 .setSuccess(false)
                 .setMessage("Friend request already exists or users are blocked")
@@ -524,7 +494,7 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
         responseObserver.onCompleted();
         
     } catch (Exception e) {
-        System.err.println("❌ Friend request error: " + e.getMessage());
+        System.err.println("Friend request error: " + e.getMessage());
         e.printStackTrace();
         responseObserver.onNext(FriendResponse.newBuilder()
             .setSuccess(false)
@@ -534,108 +504,6 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
         responseObserver.onCompleted();
     }
 }
-
-	@Override
-	public void punchTest(FromTo request, StreamObserver<Status> responseObserver) {
-	    Stun_Info targetInfo = SessionManager.getPeer(request.getThem());
-
-	    Status.Builder responseBuilder = Status.newBuilder();
-	    if (targetInfo != null) {
-	        responseBuilder.setMessage("Target peer found. Ready to punch.");
-	        responseBuilder.setCode(0);
-	    } else {
-	        responseBuilder.setMessage("Target peer not found.");
-	        responseBuilder.setCode(1);
-	    }
-
-	    responseObserver.onNext(responseBuilder.build());
-	    responseObserver.onCompleted();
-	}
-
-	
-	@Override
-	public void handShake(SafeRoomProto.HandshakeConfirm request, StreamObserver<SafeRoomProto.Status> responseObserver) {
-	    String client = request.getClientId();
-	    String target = request.getTargetId();
-	    long time = request.getTimestamp();
-
-	    System.out.println("[HANDSHAKE] " + client + " ↔ " + target + " @ " + time);
-
-	    // (İleride buraya log database işlemleri eklenebilir)
-
-	    SafeRoomProto.Status response = SafeRoomProto.Status.newBuilder()
-	        .setMessage("Handshake logged successfully.")
-	        .setCode(0)
-	        .build();
-
-	    responseObserver.onNext(response);
-	    responseObserver.onCompleted();
-	}	    // (İleride buraya log database işlemleri eklenebilir)
-
-
-	@Override
-	public void heartBeat(Stun_Info request, StreamObserver<Status> responseObserver) {
-	    String username = request.getUsername();
-
-	    Status status;
-	    if (SessionManager.hasPeer(username)) {
-	        System.out.println("[HEARTBEAT] Aktif: " + username);
-	        status = Status.newBuilder()
-	                .setMessage("Peer is active.")
-	                .setCode(0)
-	                .build();
-	    } else {
-	        System.out.println("[HEARTBEAT] Peer not found: " + username);
-	        status = Status.newBuilder()
-	                .setMessage("Peer not found.")
-	                .setCode(1)
-	                .build();
-	    }
-
-	    responseObserver.onNext(status);
-	    responseObserver.onCompleted();
-	}
-
-
-
-	@Override
-	public void finish(Request_Client request, StreamObserver<Status> responseObserver) {
-	    String username = request.getUsername();
-	    Stun_Info removed = SessionManager.getPeer(username);
-	    SessionManager.removePeer(username);
-
-	    Status status;
-	    if (removed != null) {
-	        System.out.println("[FINISH] Peer removed: " + username);
-	        status = Status.newBuilder()
-	                .setMessage("Peer successfully removed.")
-	                .setCode(0)
-	                .build();
-	    } else {
-	        System.out.println("[FINISH] Peer not found for removal: " + username);
-	        status = Status.newBuilder()
-	                .setMessage("Peer not found.")
-	                .setCode(1)
-	                .build();
-	    }
-
-	    responseObserver.onNext(status);
-	    responseObserver.onCompleted();
-	}
-
-	@Override
-	public void getServerPublicKey(SafeRoomProto.Empty request, StreamObserver<SafeRoomProto.PublicKeyMessage> responseObserver) {
-	    byte[] rsa_pub = KeyExchange.publicKey.getEncoded();
-	    String publicKeyBase64 = Base64.getEncoder().encodeToString(rsa_pub);
-
-	    SafeRoomProto.PublicKeyMessage response = SafeRoomProto.PublicKeyMessage.newBuilder()
-	        .setBase64Key(publicKeyBase64)
-	        .build();
-
-	    responseObserver.onNext(response);
-	    responseObserver.onCompleted();
-	}
-	
 	// ===============================
 	// FRIEND SYSTEM - EKSIK METODLAR
 	// ===============================
@@ -645,7 +513,7 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
 		try {
 			String username = request.getUsername();
 			
-			System.out.println("👥 Getting pending friend requests for: " + username);
+			System.out.println("Getting pending friend requests for: " + username);
 			
 			List<Map<String, Object>> requests = DBManager.getPendingFriendRequests(username);
 			
@@ -671,12 +539,12 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
 				responseBuilder.addRequests(friendRequestInfo);
 			}
 			
-			System.out.println("✅ Found " + requests.size() + " pending requests");
+			System.out.println("Found " + requests.size() + " pending requests");
 			responseObserver.onNext(responseBuilder.build());
 			responseObserver.onCompleted();
 			
 		} catch (Exception e) {
-			System.err.println("❌ Error getting pending requests: " + e.getMessage());
+			System.err.println("Error getting pending requests: " + e.getMessage());
 			responseObserver.onNext(SafeRoomProto.PendingRequestsResponse.newBuilder()
 				.setSuccess(false)
 				.setMessage("Error: " + e.getMessage())
@@ -718,7 +586,7 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
 			responseObserver.onCompleted();
 			
 		} catch (Exception e) {
-			System.err.println("❌ Error getting sent requests: " + e.getMessage());
+			System.err.println("Error getting sent requests: " + e.getMessage());
 			responseObserver.onNext(SafeRoomProto.SentRequestsResponse.newBuilder()
 				.setSuccess(false)
 				.setMessage("Error: " + e.getMessage())
@@ -733,7 +601,7 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
 			int requestId = request.getRequestId();
 			String username = request.getUsername();
 			
-			System.out.println("✅ Accepting friend request: " + requestId + " by " + username);
+			System.out.println("Accepting friend request: " + requestId + " by " + username);
 			
 			boolean success = DBManager.acceptFriendRequest(requestId, username);
 			
@@ -754,7 +622,7 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
 			responseObserver.onCompleted();
 			
 		} catch (Exception e) {
-			System.err.println("❌ Error accepting friend request: " + e.getMessage());
+			System.err.println("Error accepting friend request: " + e.getMessage());
 			responseObserver.onNext(Status.newBuilder()
 				.setMessage("Error: " + e.getMessage())
 				.setCode(2)
@@ -769,7 +637,7 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
 			int requestId = request.getRequestId();
 			String username = request.getUsername();
 			
-			System.out.println("❌ Rejecting friend request: " + requestId + " by " + username);
+			System.out.println("Rejecting friend request: " + requestId + " by " + username);
 			
 			boolean success = DBManager.rejectFriendRequest(requestId, username);
 			
@@ -790,7 +658,7 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
 			responseObserver.onCompleted();
 			
 		} catch (Exception e) {
-			System.err.println("❌ Error rejecting friend request: " + e.getMessage());
+			System.err.println("Error rejecting friend request: " + e.getMessage());
 			responseObserver.onNext(Status.newBuilder()
 				.setMessage("Error: " + e.getMessage())
 				.setCode(2)
@@ -942,7 +810,7 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
 			String username = request.getUsername();
 			String sessionId = request.getSessionId();
 			
-			System.out.println("💓 Heartbeat from: " + username + " (session: " + sessionId + ")");
+			System.out.println("Heartbeat from: " + username + " (session: " + sessionId + ")");
 			
 			boolean success = DBManager.updateHeartbeat(username, sessionId);
 			
@@ -963,7 +831,7 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
 			responseObserver.onCompleted();
 			
 		} catch (Exception e) {
-			System.err.println("❌ Error processing heartbeat: " + e.getMessage());
+			System.err.println("Error processing heartbeat: " + e.getMessage());
 			responseObserver.onNext(SafeRoomProto.HeartbeatResponse.newBuilder()
 				.setSuccess(false)
 				.setMessage("Error: " + e.getMessage())
@@ -978,7 +846,7 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
 			String username = request.getUsername();
 			String sessionId = request.getSessionId();
 			
-			System.out.println("🗑️ Ending session for: " + username + " (session: " + sessionId + ")");
+			System.out.println("️Ending session for: " + username + " (session: " + sessionId + ")");
 			
 			boolean success = DBManager.endUserSession(username, sessionId);
 			
@@ -999,7 +867,7 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
 			responseObserver.onCompleted();
 			
 		} catch (Exception e) {
-			System.err.println("❌ Error ending session: " + e.getMessage());
+			System.err.println("Error ending session: " + e.getMessage());
 			responseObserver.onNext(Status.newBuilder()
 				.setMessage("Error: " + e.getMessage())
 				.setCode(2)
@@ -1023,7 +891,7 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
 			String to = request.getTo();
 			SafeRoomProto.WebRTCSignal.SignalType type = request.getType();
 			
-			System.out.printf("[WebRTC-RPC] 📨 Received signal: %s from %s to %s%n", type, from, to);
+			System.out.printf("[WebRTC-RPC] Received signal: %s from %s to %s%n", type, from, to);
 			
 			// Handle different signal types
 			switch (type) {
@@ -1060,7 +928,7 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
 			}
 			
 		} catch (Exception e) {
-			System.err.printf("[WebRTC-RPC] ❌ Error handling signal: %s%n", e.getMessage());
+			System.err.printf("[WebRTC-RPC] Error handling signal: %s%n", e.getMessage());
 			e.printStackTrace();
 			responseObserver.onNext(SafeRoomProto.WebRTCResponse.newBuilder()
 				.setSuccess(false)
@@ -1084,14 +952,14 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
 			@Override
 			public void onNext(SafeRoomProto.WebRTCSignal signal) {
 				try {
-					System.out.printf("[WebRTC-Stream] 📥 Received signal: type=%s, from=%s, to=%s%n",
+					System.out.printf("[WebRTC-Stream] Received signal: type=%s, from=%s, to=%s%n",
 						signal.getType(), signal.getFrom(), signal.getTo());
 					
 					// Handle REGISTRATION signal type
 					if (signal.getType() == SafeRoomProto.WebRTCSignal.SignalType.REGISTRATION) {
 						username = signal.getFrom();
 						WebRTCSessionManager.registerSignalingStream(username, responseObserver);
-						System.out.printf("[WebRTC-Stream] 🔌 User registered: %s%n", username);
+						System.out.printf("[WebRTC-Stream] User registered: %s%n", username);
 						return; // Don't forward registration
 					}
 					
@@ -1099,43 +967,43 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
 					if (username == null) {
 						username = signal.getFrom();
 						WebRTCSessionManager.registerSignalingStream(username, responseObserver);
-						System.out.printf("[WebRTC-Stream] 🔌 User connected (legacy): %s%n", username);
+						System.out.printf("[WebRTC-Stream] User connected (legacy): %s%n", username);
 						// Continue to forward this signal since it's not a registration
 					}
 					
 					// Forward signal to target user
 					String target = signal.getTo();
 					if (target == null || target.isEmpty()) {
-						System.err.printf("[WebRTC-Stream] ⚠️ Empty target from %s - ignoring signal type: %s%n", 
+						System.err.printf("[WebRTC-Stream] Empty target from %s - ignoring signal type: %s%n", 
 							username, signal.getType());
 						return; // Ignore signals with no target
 					}
 					
-					System.out.printf("[WebRTC-Stream] 🎯 Attempting to forward %s from %s to %s%n",
+					System.out.printf("[WebRTC-Stream] Attempting to forward %s from %s to %s%n",
 						signal.getType(), username, target);
 					
 					if (WebRTCSessionManager.hasSignalingStream(target)) {
 						boolean sent = WebRTCSessionManager.sendSignalToUser(target, signal);
 						if (sent) {
-							System.out.printf("[WebRTC-Stream] ✅ Successfully forwarded %s: %s -> %s%n", 
+							System.out.printf("[WebRTC-Stream] Successfully forwarded %s: %s -> %s%n", 
 								signal.getType(), username, target);
 						} else {
-							System.err.printf("[WebRTC-Stream] ❌ Failed to forward signal to %s%n", target);
+							System.err.printf("[WebRTC-Stream] Failed to forward signal to %s%n", target);
 						}
 					} else {
-						System.err.printf("[WebRTC-Stream] ❌ Target user not connected: %s (registered users: %s)%n", 
+						System.err.printf("[WebRTC-Stream] Target user not connected: %s (registered users: %s)%n", 
 							target, WebRTCSessionManager.getRegisteredUsers());
 					}
 					
 				} catch (Exception e) {
-					System.err.printf("[WebRTC-Stream] ❌ Error processing signal: %s%n", e.getMessage());
+					System.err.printf("[WebRTC-Stream] Error processing signal: %s%n", e.getMessage());
 					e.printStackTrace();
 				}
 			}
 			
 			@Override
 			public void onError(Throwable t) {
-				System.err.printf("[WebRTC-Stream] ❌ Stream error for %s: %s%n", username, t.getMessage());
+				System.err.printf("[WebRTC-Stream] Stream error for %s: %s%n", username, t.getMessage());
 				if (username != null) {
 					WebRTCSessionManager.unregisterSignalingStream(username);
 				}
@@ -1143,7 +1011,7 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
 			
 			@Override
 			public void onCompleted() {
-				System.out.printf("[WebRTC-Stream] 🔌 User disconnected: %s%n", username);
+				System.out.printf("[WebRTC-Stream] User disconnected: %s%n", username);
 				if (username != null) {
 					WebRTCSessionManager.unregisterSignalingStream(username);
 				}
@@ -1164,7 +1032,7 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
 		
 		// Check if callee is busy
 		if (WebRTCSessionManager.isUserInCall(callee)) {
-			System.out.printf("[WebRTC] 📵 User busy: %s%n", callee);
+			System.out.printf("[WebRTC] User busy: %s%n", callee);
 			responseObserver.onNext(SafeRoomProto.WebRTCResponse.newBuilder()
 				.setSuccess(false)
 				.setMessage("User is busy")
@@ -1294,6 +1162,4 @@ public void sendFriendRequest(FriendRequest request, StreamObserver<FriendRespon
 		}
 		responseObserver.onCompleted();
 	}
-
-
 }
