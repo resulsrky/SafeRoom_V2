@@ -53,19 +53,19 @@
             <children>
                 <VBox styleClass="stat-card-enhanced" HBox.hgrow="ALWAYS" alignment="CENTER" prefHeight="100">
                     <children>
-                        <Label fx:id="totalFriendsLabel" styleClass="stat-number-large" text="4" />
+                        <Label fx:id="totalFriendsLabel" styleClass="stat-number-large" text="..." />
                         <Label styleClass="stat-label-enhanced" text="Friends" />
                     </children>
                 </VBox>
                 <VBox styleClass="stat-card-enhanced" HBox.hgrow="ALWAYS" alignment="CENTER" prefHeight="100">
                     <children>
-                        <Label fx:id="onlineFriendsLabel" styleClass="stat-number-large" text="3" />
+                        <Label fx:id="onlineFriendsLabel" styleClass="stat-number-large" text="..." />
                         <Label styleClass="stat-label-enhanced" text="Online" />
                     </children>
                 </VBox>
                 <VBox styleClass="stat-card-enhanced" HBox.hgrow="ALWAYS" alignment="CENTER" prefHeight="100">
                     <children>
-                        <Label fx:id="pendingFriendsLabel" styleClass="stat-number-large" text="1" />
+                        <Label fx:id="pendingFriendsLabel" styleClass="stat-number-large" text="..." />
                         <Label styleClass="stat-label-enhanced" text="Pending" />
                     </children>
                 </VBox>

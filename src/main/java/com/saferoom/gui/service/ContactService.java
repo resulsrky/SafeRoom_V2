@@ -51,6 +51,54 @@ public class ContactService {
     }
     
     /**
+     * Load friends from backend and add them to contact list
+     * This should be called when MessagesController initializes
+     */
+    public void loadFriendsAsContacts(String username) {
+        System.out.printf("[ContactService] 📥 Loading friends for %s...%n", username);
+        
+        // Load friends asynchronously
+        javafx.concurrent.Task<java.util.List<com.saferoom.grpc.SafeRoomProto.FriendInfo>> task = 
+            new javafx.concurrent.Task<>() {
+                @Override
+                protected java.util.List<com.saferoom.grpc.SafeRoomProto.FriendInfo> call() throws Exception {
+                    com.saferoom.grpc.SafeRoomProto.FriendsListResponse response = 
+                        com.saferoom.client.ClientMenu.getFriendsList(username);
+                    
+                    if (response != null && response.getSuccess()) {
+                        return response.getFriendsList();
+                    }
+                    return java.util.Collections.emptyList();
+                }
+            };
+        
+        task.setOnSucceeded(event -> {
+            java.util.List<com.saferoom.grpc.SafeRoomProto.FriendInfo> friends = task.getValue();
+            
+            javafx.application.Platform.runLater(() -> {
+                for (com.saferoom.grpc.SafeRoomProto.FriendInfo friend : friends) {
+                    String friendUsername = friend.getUsername();
+                    String status = friend.getIsOnline() ? "Online" : "Offline";
+                    String lastMessage = "Click to start conversation";
+                    String time = ""; // Empty for now
+                    
+                    // Add friend as contact
+                    addOrUpdateContact(friendUsername, friendUsername, status, lastMessage, time, 0, false);
+                }
+                
+                System.out.printf("[ContactService] ✅ Loaded %d friends as contacts%n", friends.size());
+            });
+        });
+        
+        task.setOnFailed(event -> {
+            System.err.println("[ContactService] ❌ Failed to load friends: " + task.getException().getMessage());
+        });
+        
+        // Run task in background thread
+        new Thread(task).start();
+    }
+    
+    /**
      * Add or update a contact
      */
     public void addOrUpdateContact(String id, String name, String status, String lastMessage, 

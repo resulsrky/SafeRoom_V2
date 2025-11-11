@@ -42,9 +42,30 @@ public class MessagesController {
 
         setupModelAndListViews();
         setupContactSelectionListener();
+        
+        // Load friends as contacts automatically
+        loadFriendsAsContacts();
 
         if (!contactListView.getItems().isEmpty()) {
             contactListView.getSelectionModel().selectFirst();
+        }
+    }
+    
+    /**
+     * Load user's friends from backend and populate contact list
+     */
+    private void loadFriendsAsContacts() {
+        try {
+            String currentUser = com.saferoom.gui.utils.UserSession.getInstance().getDisplayName();
+            if (currentUser != null && !currentUser.isEmpty()) {
+                contactService.loadFriendsAsContacts(currentUser);
+                System.out.printf("[MessagesController] 📥 Loading friends for %s...%n", currentUser);
+            } else {
+                System.err.println("[MessagesController] ⚠️ Cannot load friends - no user session");
+            }
+        } catch (Exception e) {
+            System.err.println("[MessagesController] ❌ Error loading friends: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
