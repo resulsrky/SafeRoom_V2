@@ -2,7 +2,6 @@ package com.saferoom.gui.dialog;
 
 import dev.onvoid.webrtc.media.video.desktop.DesktopSource;
 import com.saferoom.webrtc.WebRTCClient;
-import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
@@ -16,7 +15,6 @@ import javafx.stage.Screen;
 import javafx.stage.Stage;
 
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * Improved Screen Share Picker Dialog with visual thumbnails
@@ -91,7 +89,7 @@ public class ImprovedScreenSharePickerDialog {
         screensGrid.getChildren().clear();
         windowsGrid.getChildren().clear();
         
-        // Create Robot for screen capture
+        // Create Robot for screen capture (MUST be on JavaFX Application Thread!)
         Robot robot = new Robot();
         
         // Create tiles for each screen with real thumbnails
@@ -100,69 +98,61 @@ public class ImprovedScreenSharePickerDialog {
             SourceTile tile = createSourceTile(screen, false, i + 1);
             screensGrid.getChildren().add(tile);
             
-            // Capture screen thumbnail asynchronously
+            // Capture screen thumbnail SYNCHRONOUSLY on JavaFX thread
             final int screenIndex = i;
-            CompletableFuture.runAsync(() -> {
-                try {
-                    // Get screen bounds
-                    List<Screen> javafxScreens = Screen.getScreens();
-                    if (screenIndex < javafxScreens.size()) {
-                        Screen targetScreen = javafxScreens.get(screenIndex);
-                        Rectangle2D bounds = targetScreen.getBounds();
-                        
-                        // Capture screenshot
-                        WritableImage screenshot = robot.getScreenCapture(null, bounds);
-                        
-                        // Update tile on JavaFX thread
-                        Platform.runLater(() -> {
-                            tile.setThumbnail(screenshot);
-                            System.out.printf("[ImprovedScreenPicker] ✅ Screen %d thumbnail captured%n", screenIndex + 1);
-                        });
-                    }
-                } catch (Exception e) {
-                    System.err.println("[ImprovedScreenPicker] Error capturing screen thumbnail: " + e.getMessage());
+            try {
+                // Get screen bounds
+                List<Screen> javafxScreens = Screen.getScreens();
+                if (screenIndex < javafxScreens.size()) {
+                    Screen targetScreen = javafxScreens.get(screenIndex);
+                    Rectangle2D bounds = targetScreen.getBounds();
+                    
+                    // Capture screenshot (Robot MUST be called on FX thread)
+                    WritableImage screenshot = robot.getScreenCapture(null, bounds);
+                    
+                    // Set thumbnail immediately
+                    tile.setThumbnail(screenshot);
+                    System.out.printf("[ImprovedScreenPicker] ✅ Screen %d thumbnail captured%n", screenIndex + 1);
                 }
-            });
+            } catch (Exception e) {
+                System.err.println("[ImprovedScreenPicker] Error capturing screen thumbnail: " + e.getMessage());
+                e.printStackTrace();
+            }
         }
         
         // Create tiles for each window
-        // Note: Window-specific capture is more complex, using screen capture as fallback
+        // For windows, capture the primary screen as a fallback
         for (DesktopSource window : windows) {
             SourceTile tile = createSourceTile(window, true, 0);
             windowsGrid.getChildren().add(tile);
             
-            // For windows, capture the primary screen as a fallback
-            // Real window-specific capture would require native APIs or AWT Robot with window positioning
-            CompletableFuture.runAsync(() -> {
-                try {
-                    // Capture primary screen
-                    Screen primaryScreen = Screen.getPrimary();
-                    Rectangle2D bounds = primaryScreen.getBounds();
-                    
-                    // Scale down to smaller region (simulating window capture)
-                    double x = bounds.getMinX() + bounds.getWidth() * 0.25;
-                    double y = bounds.getMinY() + bounds.getHeight() * 0.25;
-                    double w = bounds.getWidth() * 0.5;
-                    double h = bounds.getHeight() * 0.5;
-                    
-                    WritableImage screenshot = robot.getScreenCapture(null, 
-                        new Rectangle2D(x, y, w, h));
-                    
-                    // Update tile on JavaFX thread
-                    Platform.runLater(() -> {
-                        tile.setThumbnail(screenshot);
-                        System.out.printf("[ImprovedScreenPicker] ✅ Window thumbnail captured: %s%n", window.title);
-                    });
-                } catch (Exception e) {
-                    System.err.println("[ImprovedScreenPicker] Error capturing window thumbnail: " + e.getMessage());
-                }
-            });
+            try {
+                // Capture primary screen
+                Screen primaryScreen = Screen.getPrimary();
+                Rectangle2D bounds = primaryScreen.getBounds();
+                
+                // Scale down to smaller region (simulating window capture)
+                double x = bounds.getMinX() + bounds.getWidth() * 0.25;
+                double y = bounds.getMinY() + bounds.getHeight() * 0.25;
+                double w = bounds.getWidth() * 0.5;
+                double h = bounds.getHeight() * 0.5;
+                
+                WritableImage screenshot = robot.getScreenCapture(null, 
+                    new Rectangle2D(x, y, w, h));
+                
+                // Set thumbnail immediately
+                tile.setThumbnail(screenshot);
+                System.out.printf("[ImprovedScreenPicker] ✅ Window thumbnail captured: %s%n", window.title);
+            } catch (Exception e) {
+                System.err.println("[ImprovedScreenPicker] Error capturing window thumbnail: " + e.getMessage());
+                e.printStackTrace();
+            }
         }
         
         // Update status
         updateStatus();
         
-        System.out.println("[ImprovedScreenPicker] ℹ️ Thumbnails loading in background...");
+        System.out.println("[ImprovedScreenPicker] ✅ All thumbnails loaded!");
     }
     
     /**
