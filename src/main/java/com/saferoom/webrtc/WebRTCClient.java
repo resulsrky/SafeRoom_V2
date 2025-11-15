@@ -720,12 +720,33 @@ public class WebRTCClient {
             
             System.out.printf("[WebRTC] ✅ Found %d windows%n", windows != null ? windows.size() : 0);
             if (windows != null) {
+                // Filter out potentially problematic windows
+                List<DesktopSource> safeWindows = new ArrayList<>();
                 for (DesktopSource window : windows) {
+                    // Skip windows without proper title (can cause crashes)
+                    if (window.title == null || window.title.trim().isEmpty()) {
+                        System.out.printf("  ⚠️ Skipping window with null/empty title (ID: %d)%n", window.id);
+                        continue;
+                    }
+                    
+                    // Skip system windows that might cause issues
+                    String lowerTitle = window.title.toLowerCase();
+                    if (lowerTitle.contains("notification") || 
+                        lowerTitle.contains("alert") ||
+                        lowerTitle.contains("problem reporter")) {
+                        System.out.printf("  ⚠️ Skipping system window: %s (ID: %d)%n", window.title, window.id);
+                        continue;
+                    }
+                    
                     System.out.printf("  - Window: %s (ID: %d)%n", window.title, window.id);
+                    safeWindows.add(window);
                 }
+                
+                System.out.printf("[WebRTC] ✅ Filtered to %d safe windows%n", safeWindows.size());
+                return safeWindows;
             }
             
-            return windows != null ? windows : new ArrayList<>();
+            return new ArrayList<>();
             
         } catch (Throwable t) {
             // Catch ALL throwables including native crashes that made it to Java
@@ -744,6 +765,46 @@ public class WebRTCClient {
                 } catch (Throwable t) {
                     System.err.println("[WebRTC] Error disposing WindowCapturer: " + t.getMessage());
                 }
+            }
+        }
+    }
+    
+    /**
+     * Test if a desktop source is safe to capture (won't crash)
+     * Returns true if source can be safely used
+     */
+    public boolean testSourceSafety(DesktopSource source, boolean isWindow) {
+        System.out.printf("[WebRTC] Testing source safety: %s (isWindow=%b)%n", source.title, isWindow);
+        
+        if (factory == null) {
+            return false;
+        }
+        
+        VideoDesktopSource testSource = null;
+        try {
+            // Try to create and start a temporary desktop source
+            testSource = new VideoDesktopSource();
+            testSource.setSourceId(source.id, isWindow);
+            testSource.setFrameRate(1); // Minimal framerate
+            testSource.setMaxFrameSize(160, 120); // Tiny size
+            
+            // Try to start (this is where crashes usually happen)
+            testSource.start();
+            
+            // If we got here, source is safe
+            System.out.printf("[WebRTC] ✅ Source is SAFE: %s%n", source.title);
+            return true;
+            
+        } catch (Throwable t) {
+            System.err.printf("[WebRTC] ❌ Source is UNSAFE: %s - %s%n", source.title, t.getMessage());
+            return false;
+            
+        } finally {
+            if (testSource != null) {
+                try {
+                    testSource.stop();
+                    testSource.dispose();
+                } catch (Throwable ignored) {}
             }
         }
     }
@@ -816,33 +877,59 @@ public class WebRTCClient {
         }
         
         try {
-            // Remove track from peer connection
+            // Remove track from peer connection first
             if (peerConnection != null && screenShareTrack != null) {
-                // Find and remove sender
-                for (RTCRtpSender sender : peerConnection.getSenders()) {
-                    if (sender.getTrack() == screenShareTrack) {
-                        peerConnection.removeTrack(sender);
-                        System.out.println("[WebRTC] Screen share track removed from peer connection");
-                        break;
+                try {
+                    // Find and remove sender
+                    for (RTCRtpSender sender : peerConnection.getSenders()) {
+                        if (sender.getTrack() == screenShareTrack) {
+                            peerConnection.removeTrack(sender);
+                            System.out.println("[WebRTC] Screen share track removed from peer connection");
+                            break;
+                        }
                     }
+                } catch (Exception e) {
+                    System.err.println("[WebRTC] Error removing track from peer connection: " + e.getMessage());
                 }
             }
             
-            // Stop and dispose desktop source
+            // Stop desktop source before disposing track
             if (screenShareSource != null) {
-                screenShareSource.stop();
-                screenShareSource.dispose();
-                screenShareSource = null;
-                System.out.println("[WebRTC] Desktop source stopped");
+                try {
+                    screenShareSource.stop();
+                    System.out.println("[WebRTC] Desktop source stopped");
+                } catch (Exception e) {
+                    System.err.println("[WebRTC] Error stopping desktop source: " + e.getMessage());
+                }
             }
             
-            // Dispose track
-            if (screenShareTrack != null) {
-                screenShareTrack.dispose();
-                screenShareTrack = null;
-            }
-            
+            // Set track to null BEFORE disposing to avoid "Native object was not deleted" error
+            MediaStreamTrack trackToDispose = screenShareTrack;
+            screenShareTrack = null;
             screenSharingEnabled = false;
+            
+            // Now dispose track (after clearing reference)
+            if (trackToDispose != null) {
+                try {
+                    trackToDispose.setEnabled(false);
+                    trackToDispose.dispose();
+                    System.out.println("[WebRTC] Screen share track disposed");
+                } catch (Exception e) {
+                    System.err.println("[WebRTC] Error disposing track: " + e.getMessage());
+                }
+            }
+            
+            // Finally dispose source
+            if (screenShareSource != null) {
+                try {
+                    screenShareSource.dispose();
+                    System.out.println("[WebRTC] Desktop source disposed");
+                } catch (Exception e) {
+                    System.err.println("[WebRTC] Error disposing desktop source: " + e.getMessage());
+                }
+                screenShareSource = null;
+            }
+            
             System.out.println("[WebRTC] Screen sharing stopped successfully");
             
         } catch (Exception e) {

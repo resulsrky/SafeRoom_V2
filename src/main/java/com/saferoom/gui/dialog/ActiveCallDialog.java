@@ -481,6 +481,19 @@ public class ActiveCallDialog {
                 System.out.println("[ActiveCallDialog] Attempting to enumerate screens...");
                 screens = callManager.getWebRTCClient().getAvailableScreens();
                 System.out.printf("[ActiveCallDialog] Found %d screens%n", screens != null ? screens.size() : 0);
+                
+                // Test safety of screens
+                if (screens != null && !screens.isEmpty()) {
+                    System.out.println("[ActiveCallDialog] Testing screen safety...");
+                    java.util.List<dev.onvoid.webrtc.media.video.desktop.DesktopSource> safeScreens = new java.util.ArrayList<>();
+                    for (dev.onvoid.webrtc.media.video.desktop.DesktopSource screen : screens) {
+                        if (callManager.getWebRTCClient().testSourceSafety(screen, false)) {
+                            safeScreens.add(screen);
+                        }
+                    }
+                    screens = safeScreens;
+                    System.out.printf("[ActiveCallDialog] ✅ %d safe screens found%n", screens.size());
+                }
             } catch (Throwable t) {
                 System.err.println("[ActiveCallDialog] ❌ Failed to enumerate screens (native error)");
                 System.err.println("[ActiveCallDialog] Error: " + t.getMessage());
@@ -490,7 +503,20 @@ public class ActiveCallDialog {
             try {
                 System.out.println("[ActiveCallDialog] Attempting to enumerate windows...");
                 windows = callManager.getWebRTCClient().getAvailableWindows();
-                System.out.printf("[ActiveCallDialog] Found %d windows%n", windows != null ? windows.size() : 0);
+                System.out.printf("[ActiveCallDialog] Found %d windows (after filtering)%n", windows != null ? windows.size() : 0);
+                
+                // Test safety of windows
+                if (windows != null && !windows.isEmpty()) {
+                    System.out.println("[ActiveCallDialog] Testing window safety...");
+                    java.util.List<dev.onvoid.webrtc.media.video.desktop.DesktopSource> safeWindows = new java.util.ArrayList<>();
+                    for (dev.onvoid.webrtc.media.video.desktop.DesktopSource window : windows) {
+                        if (callManager.getWebRTCClient().testSourceSafety(window, true)) {
+                            safeWindows.add(window);
+                        }
+                    }
+                    windows = safeWindows;
+                    System.out.printf("[ActiveCallDialog] ✅ %d safe windows found%n", windows.size());
+                }
             } catch (Throwable t) {
                 System.err.println("[ActiveCallDialog] ❌ Failed to enumerate windows (native error)");
                 System.err.println("[ActiveCallDialog] Error: " + t.getMessage());
@@ -499,7 +525,7 @@ public class ActiveCallDialog {
             
             // Check if we have any sources
             if ((screens == null || screens.isEmpty()) && (windows == null || windows.isEmpty())) {
-                System.err.println("[ActiveCallDialog] ❌ No screens or windows available for sharing");
+                System.err.println("[ActiveCallDialog] ❌ No safe screens or windows available for sharing");
                 
                 // Show error dialog to user
                 javafx.application.Platform.runLater(() -> {
@@ -507,12 +533,12 @@ public class ActiveCallDialog {
                         javafx.scene.control.Alert.AlertType.ERROR
                     );
                     alert.setTitle("Screen Share Error");
-                    alert.setHeaderText("Cannot Access Screen Sources");
+                    alert.setHeaderText("No Safe Screen Sources Available");
                     alert.setContentText(
-                        "Unable to enumerate screens or windows for sharing.\n\n" +
+                        "Unable to find screens or windows that can be safely shared.\n\n" +
                         "This may be due to:\n" +
                         "• Missing screen recording permissions\n" +
-                        "• X11/Wayland display server limitations\n" +
+                        "• System windows that cannot be captured\n" +
                         "• Native library compatibility issues\n\n" +
                         "Please check system permissions and try again."
                     );

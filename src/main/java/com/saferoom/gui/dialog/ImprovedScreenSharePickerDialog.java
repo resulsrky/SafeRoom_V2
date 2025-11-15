@@ -2,15 +2,21 @@ package com.saferoom.gui.dialog;
 
 import dev.onvoid.webrtc.media.video.desktop.DesktopSource;
 import com.saferoom.webrtc.WebRTCClient;
+import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.geometry.Pos;
+import javafx.geometry.Rectangle2D;
 import javafx.scene.control.*;
+import javafx.scene.image.ImageView;
+import javafx.scene.image.WritableImage;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
-import javafx.scene.shape.Rectangle;
+import javafx.scene.robot.Robot;
+import javafx.stage.Screen;
 import javafx.stage.Stage;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Improved Screen Share Picker Dialog with visual thumbnails
@@ -85,23 +91,78 @@ public class ImprovedScreenSharePickerDialog {
         screensGrid.getChildren().clear();
         windowsGrid.getChildren().clear();
         
-        // Create tiles for each screen
+        // Create Robot for screen capture
+        Robot robot = new Robot();
+        
+        // Create tiles for each screen with real thumbnails
         for (int i = 0; i < screens.size(); i++) {
             DesktopSource screen = screens.get(i);
             SourceTile tile = createSourceTile(screen, false, i + 1);
             screensGrid.getChildren().add(tile);
+            
+            // Capture screen thumbnail asynchronously
+            final int screenIndex = i;
+            CompletableFuture.runAsync(() -> {
+                try {
+                    // Get screen bounds
+                    List<Screen> javafxScreens = Screen.getScreens();
+                    if (screenIndex < javafxScreens.size()) {
+                        Screen targetScreen = javafxScreens.get(screenIndex);
+                        Rectangle2D bounds = targetScreen.getBounds();
+                        
+                        // Capture screenshot
+                        WritableImage screenshot = robot.getScreenCapture(null, bounds);
+                        
+                        // Update tile on JavaFX thread
+                        Platform.runLater(() -> {
+                            tile.setThumbnail(screenshot);
+                            System.out.printf("[ImprovedScreenPicker] ✅ Screen %d thumbnail captured%n", screenIndex + 1);
+                        });
+                    }
+                } catch (Exception e) {
+                    System.err.println("[ImprovedScreenPicker] Error capturing screen thumbnail: " + e.getMessage());
+                }
+            });
         }
         
         // Create tiles for each window
+        // Note: Window-specific capture is more complex, using screen capture as fallback
         for (DesktopSource window : windows) {
             SourceTile tile = createSourceTile(window, true, 0);
             windowsGrid.getChildren().add(tile);
+            
+            // For windows, capture the primary screen as a fallback
+            // Real window-specific capture would require native APIs or AWT Robot with window positioning
+            CompletableFuture.runAsync(() -> {
+                try {
+                    // Capture primary screen
+                    Screen primaryScreen = Screen.getPrimary();
+                    Rectangle2D bounds = primaryScreen.getBounds();
+                    
+                    // Scale down to smaller region (simulating window capture)
+                    double x = bounds.getMinX() + bounds.getWidth() * 0.25;
+                    double y = bounds.getMinY() + bounds.getHeight() * 0.25;
+                    double w = bounds.getWidth() * 0.5;
+                    double h = bounds.getHeight() * 0.5;
+                    
+                    WritableImage screenshot = robot.getScreenCapture(null, 
+                        new Rectangle2D(x, y, w, h));
+                    
+                    // Update tile on JavaFX thread
+                    Platform.runLater(() -> {
+                        tile.setThumbnail(screenshot);
+                        System.out.printf("[ImprovedScreenPicker] ✅ Window thumbnail captured: %s%n", window.title);
+                    });
+                } catch (Exception e) {
+                    System.err.println("[ImprovedScreenPicker] Error capturing window thumbnail: " + e.getMessage());
+                }
+            });
         }
         
         // Update status
         updateStatus();
         
-        System.out.println("[ImprovedScreenPicker] ℹ️ Hover over a source to see live preview");
+        System.out.println("[ImprovedScreenPicker] ℹ️ Thumbnails loading in background...");
     }
     
     /**
@@ -244,7 +305,7 @@ public class ImprovedScreenSharePickerDialog {
     
     /**
      * Inner class representing a visual tile for a screen/window
-     * Google Meet style with icon placeholder, title, and selection border
+     * Google Meet style with real thumbnail preview
      */
     private static class SourceTile extends VBox {
         private final DesktopSource source;
@@ -252,6 +313,8 @@ public class ImprovedScreenSharePickerDialog {
         private final StackPane thumbnailPane;
         private final Border selectedBorder;
         private final Border normalBorder;
+        private ImageView thumbnailView;
+        private Label loadingLabel;
         
         public SourceTile(DesktopSource source, boolean isWindow, int displayNumber) {
             this.source = source;
@@ -280,20 +343,18 @@ public class ImprovedScreenSharePickerDialog {
             
             setBorder(normalBorder);
             
-            // Thumbnail placeholder with dark background
-            Rectangle thumbnailRect = new Rectangle(230, 130);
-            thumbnailRect.setFill(Color.web("#1a1a1a"));
-            thumbnailRect.setArcWidth(5);
-            thumbnailRect.setArcHeight(5);
-            
-            // Icon overlay
-            Label icon = new Label(isWindow ? "🪟" : "🖥️");
-            icon.setStyle("-fx-font-size: 40px;");
-            
-            thumbnailPane = new StackPane(thumbnailRect, icon);
+            // Thumbnail pane with loading indicator
+            thumbnailPane = new StackPane();
             thumbnailPane.setAlignment(Pos.CENTER);
             thumbnailPane.setPrefSize(230, 130);
             thumbnailPane.setMaxSize(230, 130);
+            thumbnailPane.setMinSize(230, 130);
+            thumbnailPane.setStyle("-fx-background-color: #1a1a1a; -fx-background-radius: 5;");
+            
+            // Loading indicator
+            loadingLabel = new Label("Loading...");
+            loadingLabel.setStyle("-fx-text-fill: #888888; -fx-font-size: 12px;");
+            thumbnailPane.getChildren().add(loadingLabel);
             
             // Title label
             String displayText;
@@ -302,12 +363,12 @@ public class ImprovedScreenSharePickerDialog {
             } else {
                 displayText = source.title;
                 // Truncate if too long
-                if (displayText.length() > 30) {
+                if (displayText != null && displayText.length() > 30) {
                     displayText = displayText.substring(0, 27) + "...";
                 }
             }
             
-            Label titleLabel = new Label(displayText);
+            Label titleLabel = new Label(displayText != null ? displayText : "Unknown");
             titleLabel.setStyle("-fx-text-fill: white; -fx-font-size: 13px; -fx-font-weight: bold;");
             titleLabel.setWrapText(true);
             titleLabel.setMaxWidth(230);
@@ -332,6 +393,44 @@ public class ImprovedScreenSharePickerDialog {
                     setStyle("-fx-cursor: hand; -fx-padding: 10; -fx-background-color: #2d2d2d; -fx-background-radius: 8;");
                 }
             });
+        }
+        
+        /**
+         * Set thumbnail from captured screenshot
+         */
+        public void setThumbnail(WritableImage screenshot) {
+            if (screenshot == null) {
+                System.err.println("[SourceTile] Null screenshot provided");
+                return;
+            }
+            
+            try {
+                // Create ImageView with the screenshot
+                thumbnailView = new ImageView(screenshot);
+                thumbnailView.setFitWidth(230);
+                thumbnailView.setFitHeight(130);
+                thumbnailView.setPreserveRatio(false); // Fill the space
+                thumbnailView.setSmooth(true);
+                
+                // Add slight border effect
+                thumbnailView.setStyle("-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 5, 0, 0, 2);");
+                
+                // Replace loading indicator with thumbnail
+                thumbnailPane.getChildren().clear();
+                thumbnailPane.getChildren().add(thumbnailView);
+                
+                System.out.printf("[SourceTile] ✅ Thumbnail set for: %s%n", source.title);
+                
+            } catch (Exception e) {
+                System.err.println("[SourceTile] Error setting thumbnail: " + e.getMessage());
+                e.printStackTrace();
+                
+                // Show error icon
+                Label errorLabel = new Label("❌");
+                errorLabel.setStyle("-fx-font-size: 30px;");
+                thumbnailPane.getChildren().clear();
+                thumbnailPane.getChildren().add(errorLabel);
+            }
         }
         
         public void setSelected(boolean selected) {
