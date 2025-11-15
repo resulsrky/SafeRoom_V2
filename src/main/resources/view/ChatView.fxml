@@ -34,6 +34,11 @@
                         <FontIcon iconLiteral="fas-video" styleClass="header-icon" />
                     </graphic>
                 </Button>
+                <Button fx:id="screenShareButton" mnemonicParsing="false" styleClass="icon-button">
+                    <graphic>
+                        <FontIcon iconLiteral="fas-desktop" styleClass="header-icon" />
+                    </graphic>
+                </Button>
             </children>
         </HBox>
     </top>

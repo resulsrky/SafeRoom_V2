@@ -39,12 +39,17 @@ public class ActiveCallDialog {
     private Button muteButton;
     private Button cameraButton;
     private Button endCallButton;
+    private Button screenToggleButton;  // Toggle between camera and screen share
     private VideoPanel localVideoPanel;   // Local camera preview
-    private VideoPanel remoteVideoPanel;  // Remote user's video
+    private VideoPanel remoteVideoPanel;  // Remote user's video/camera
+    private VideoPanel remoteScreenPanel; // Remote user's screen share
+    private StackPane videoArea;          // Container for video panels
     
     // State
     private boolean isMuted = false;
     private boolean isCameraOn = true;
+    private boolean isShowingScreen = false; // Currently showing screen vs camera
+    private boolean hasRemoteScreen = false; // Remote peer is sharing screen
     private Instant callStartTime;
     private Timeline durationTimer;
     
@@ -100,7 +105,7 @@ public class ActiveCallDialog {
         mainContainer.setTop(topBar);
         
         // ========== CENTER (VIDEO AREA) ==========
-        StackPane videoArea = new StackPane();
+        videoArea = new StackPane();
         videoArea.setStyle("-fx-background-color: #1a1a1a;");
         
         // Remote video panel (full screen) - Canvas for actual video rendering
@@ -109,6 +114,14 @@ public class ActiveCallDialog {
         // Bind size to video area
         remoteVideoPanel.widthProperty().bind(videoArea.widthProperty());
         remoteVideoPanel.heightProperty().bind(videoArea.heightProperty());
+        
+        // Remote screen share panel (initially hidden)
+        remoteScreenPanel = new VideoPanel(640, 480);
+        remoteScreenPanel.setStyle("-fx-background-color: #1a1a1a;");
+        remoteScreenPanel.widthProperty().bind(videoArea.widthProperty());
+        remoteScreenPanel.heightProperty().bind(videoArea.heightProperty());
+        remoteScreenPanel.setVisible(false);
+        remoteScreenPanel.setManaged(false);
         
         // Local video preview (small, bottom-right corner) - Canvas for local camera
         if (videoEnabled) {
@@ -119,9 +132,9 @@ public class ActiveCallDialog {
             StackPane.setAlignment(localVideoPanel, Pos.BOTTOM_RIGHT);
             StackPane.setMargin(localVideoPanel, new Insets(15));
             
-            videoArea.getChildren().addAll(remoteVideoPanel, localVideoPanel);
+            videoArea.getChildren().addAll(remoteVideoPanel, remoteScreenPanel, localVideoPanel);
         } else {
-            videoArea.getChildren().add(remoteVideoPanel);
+            videoArea.getChildren().addAll(remoteVideoPanel, remoteScreenPanel);
         }
         
         mainContainer.setCenter(videoArea);
@@ -150,6 +163,16 @@ public class ActiveCallDialog {
         cameraButton.setVisible(videoEnabled);
         cameraButton.setManaged(videoEnabled);
         
+        // Screen share toggle button (initially hidden)
+        screenToggleButton = createControlButton(
+            FontAwesomeSolid.DESKTOP,
+            "#2ecc71",
+            "Switch to Screen"
+        );
+        screenToggleButton.setOnAction(e -> toggleScreenView());
+        screenToggleButton.setVisible(false);
+        screenToggleButton.setManaged(false);
+        
         // End call button
         endCallButton = createControlButton(
             FontAwesomeSolid.PHONE_SLASH,
@@ -158,7 +181,7 @@ public class ActiveCallDialog {
         );
         endCallButton.setOnAction(e -> endCall());
         
-        controlBar.getChildren().addAll(muteButton, cameraButton, endCallButton);
+        controlBar.getChildren().addAll(muteButton, cameraButton, screenToggleButton, endCallButton);
         mainContainer.setBottom(controlBar);
         
         // Create scene
@@ -359,11 +382,97 @@ public class ActiveCallDialog {
     
     /**
      * Attach remote video track for display
+     * Detects if it's a camera stream or screen share based on track ID
      */
     public void attachRemoteVideo(VideoTrack track) {
-        if (remoteVideoPanel != null && track != null) {
-            System.out.println("[ActiveCallDialog] Attaching remote video track");
-            remoteVideoPanel.attachVideoTrack(track);
+        if (track == null) return;
+        
+        String trackId = track.getId();
+        System.out.printf("[ActiveCallDialog] Attaching remote video track: %s%n", trackId);
+        
+        // Detect if this is a screen share track (ID contains "screen_share")
+        if (trackId.contains("screen_share")) {
+            System.out.println("[ActiveCallDialog] 🖥️ Detected screen share track");
+            
+            if (remoteScreenPanel != null) {
+                remoteScreenPanel.attachVideoTrack(track);
+                hasRemoteScreen = true;
+                
+                // Show screen toggle button
+                if (screenToggleButton != null) {
+                    screenToggleButton.setVisible(true);
+                    screenToggleButton.setManaged(true);
+                }
+                
+                // Auto-switch to screen view
+                switchToScreenView();
+            }
+        } else {
+            System.out.println("[ActiveCallDialog] 📹 Detected camera track");
+            
+            if (remoteVideoPanel != null) {
+                remoteVideoPanel.attachVideoTrack(track);
+            }
+        }
+    }
+    
+    /**
+     * Toggle between screen share and camera view
+     */
+    private void toggleScreenView() {
+        if (isShowingScreen) {
+            switchToCameraView();
+        } else {
+            switchToScreenView();
+        }
+    }
+    
+    /**
+     * Switch to screen share view
+     */
+    private void switchToScreenView() {
+        if (!hasRemoteScreen) {
+            System.out.println("[ActiveCallDialog] ⚠️ No screen share available");
+            return;
+        }
+        
+        System.out.println("[ActiveCallDialog] 🖥️ Switching to screen view");
+        
+        remoteVideoPanel.setVisible(false);
+        remoteVideoPanel.setManaged(false);
+        
+        remoteScreenPanel.setVisible(true);
+        remoteScreenPanel.setManaged(true);
+        
+        isShowingScreen = true;
+        
+        // Update button
+        if (screenToggleButton != null) {
+            FontIcon icon = new FontIcon(FontAwesomeSolid.VIDEO);
+            icon.setIconSize(24);
+            screenToggleButton.setGraphic(icon);
+        }
+    }
+    
+    /**
+     * Switch to camera view
+     */
+    private void switchToCameraView() {
+        System.out.println("[ActiveCallDialog] 📹 Switching to camera view");
+        
+        remoteScreenPanel.setVisible(false);
+        remoteScreenPanel.setManaged(false);
+        
+        remoteVideoPanel.setVisible(true);
+        remoteVideoPanel.setManaged(true);
+        
+        isShowingScreen = false;
+        
+        // Update button
+        if (screenToggleButton != null) {
+            FontIcon icon = new FontIcon(FontAwesomeSolid.DESKTOP);
+            icon.setIconSize(24);
+            screenToggleButton.setGraphic(icon);
         }
     }
     
@@ -377,6 +486,37 @@ public class ActiveCallDialog {
         if (remoteVideoPanel != null) {
             remoteVideoPanel.detachVideoTrack();
         }
+        if (remoteScreenPanel != null) {
+            remoteScreenPanel.detachVideoTrack();
+        }
+    }
+    
+    /**
+     * Handle remote screen share stop
+     * Called when remote peer stops sharing screen
+     */
+    public void onRemoteScreenShareStopped() {
+        System.out.println("[ActiveCallDialog] 🛑 Remote screen share stopped");
+        
+        javafx.application.Platform.runLater(() -> {
+            hasRemoteScreen = false;
+            
+            // Hide screen toggle button
+            if (screenToggleButton != null) {
+                screenToggleButton.setVisible(false);
+                screenToggleButton.setManaged(false);
+            }
+            
+            // If currently showing screen, switch back to camera
+            if (isShowingScreen) {
+                switchToCameraView();
+            }
+            
+            // Detach screen track
+            if (remoteScreenPanel != null) {
+                remoteScreenPanel.detachVideoTrack();
+            }
+        });
     }
     
     /**

@@ -7,12 +7,16 @@ import com.saferoom.gui.view.cell.MessageCell;
 import com.saferoom.gui.dialog.IncomingCallDialog;
 import com.saferoom.gui.dialog.OutgoingCallDialog;
 import com.saferoom.gui.dialog.ActiveCallDialog;
+import com.saferoom.gui.dialog.ScreenSharePickerDialog;
 import com.saferoom.webrtc.CallManager;
 import dev.onvoid.webrtc.media.MediaStreamTrack;
 import dev.onvoid.webrtc.media.video.VideoTrack;
+import dev.onvoid.webrtc.media.video.desktop.DesktopSource;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
+import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
@@ -26,10 +30,12 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import javafx.stage.Modality;
 
 import java.io.File;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.List;
 
 public class ChatViewController {
 
@@ -42,6 +48,7 @@ public class ChatViewController {
     @FXML private Button sendButton;
     @FXML private Button phoneButton;
     @FXML private Button videoButton;
+    @FXML private Button screenShareButton;
     @FXML private Button attachmentButton;
     @FXML private HBox chatHeader;
     @FXML private VBox emptyChatPlaceholder;
@@ -92,6 +99,10 @@ public class ChatViewController {
         
         if (videoButton != null) {
             videoButton.setOnAction(e -> handleVideoCall());
+        }
+        
+        if (screenShareButton != null) {
+            screenShareButton.setOnAction(e -> handleScreenShare());
         }
     }
 
@@ -449,6 +460,74 @@ public class ChatViewController {
     }
     
     /**
+     * Handle screen share button click
+     */
+    @FXML
+    private void handleScreenShare() {
+        System.out.println("[ChatView] 🖥️ Screen share button clicked");
+        
+        // Check if we're in an active call
+        CallManager callManager = CallManager.getInstance();
+        if (!callManager.isInCall()) {
+            showAlert("Not In Call", "You must be in an active call to share your screen.", Alert.AlertType.WARNING);
+            return;
+        }
+        
+        try {
+            // Load screen share picker dialog
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/view/ScreenSharePickerDialog.fxml"));
+            VBox dialogRoot = loader.load();
+            ScreenSharePickerDialog pickerController = loader.getController();
+            
+            // Create dialog stage
+            Stage dialogStage = new Stage();
+            dialogStage.setTitle("Ekran Paylaşımı");
+            dialogStage.initModality(Modality.APPLICATION_MODAL);
+            dialogStage.setScene(new Scene(dialogRoot));
+            pickerController.setDialogStage(dialogStage);
+            
+            // Get available sources
+            List<DesktopSource> screens = callManager.getWebRTCClient().getAvailableScreens();
+            List<DesktopSource> windows = callManager.getWebRTCClient().getAvailableWindows();
+            
+            if (screens.isEmpty() && windows.isEmpty()) {
+                showAlert("No Sources", "No screens or windows available for sharing.", Alert.AlertType.ERROR);
+                return;
+            }
+            
+            pickerController.setAvailableSources(screens, windows);
+            
+            // Show dialog and wait for user selection
+            dialogStage.showAndWait();
+            
+            // Check if user confirmed
+            if (pickerController.isConfirmed()) {
+                DesktopSource selectedSource = pickerController.getSelectedSource();
+                boolean isWindow = pickerController.isWindowSelected();
+                
+                System.out.printf("[ChatView] 🎬 Starting screen share: source=%s, isWindow=%b%n", 
+                    selectedSource.title, isWindow);
+                
+                // Start screen sharing with renegotiation
+                callManager.startScreenShare(selectedSource.id, isWindow);
+                
+                System.out.println("[ChatView] ✅ Screen share initiated with renegotiation");
+                
+                showAlert("Screen Sharing", 
+                    "Screen sharing started: " + selectedSource.title, 
+                    Alert.AlertType.INFORMATION);
+            } else {
+                System.out.println("[ChatView] ❌ Screen share cancelled by user");
+            }
+            
+        } catch (Exception e) {
+            System.err.printf("[ChatView] ❌ Error starting screen share: %s%n", e.getMessage());
+            e.printStackTrace();
+            showAlert("Error", "Failed to start screen sharing: " + e.getMessage(), Alert.AlertType.ERROR);
+        }
+    }
+    
+    /**
      * Setup CallManager callbacks
      */
     private void setupCallManagerCallbacks(CallManager callManager) {
@@ -603,6 +682,21 @@ public class ChatViewController {
                     System.out.println("[ChatView] 🎤 Remote audio track (handled by WebRTC)");
                 } else if (currentActiveCallDialog == null) {
                     System.err.println("[ChatView] ❌ ERROR: Remote video track received but dialog is NULL!");
+                }
+            });
+        });
+        
+        // Remote screen share stopped
+        callManager.setOnRemoteScreenShareStoppedCallback(() -> {
+            javafx.application.Platform.runLater(() -> {
+                System.out.println("[ChatView] 🖥️ Remote screen share stopped");
+                
+                // Notify ActiveCallDialog to handle UI updates
+                if (currentActiveCallDialog != null) {
+                    currentActiveCallDialog.onRemoteScreenShareStopped();
+                    System.out.println("[ChatView] ✅ ActiveCallDialog notified of screen share stop");
+                } else {
+                    System.err.println("[ChatView] ⚠️ Screen share stopped but no active dialog!");
                 }
             });
         });

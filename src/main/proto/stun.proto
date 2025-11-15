@@ -236,6 +236,8 @@ message WebRTCSignal {
         CALL_CANCEL = 9;        // Arayan iptal etti
         P2P_OFFER = 10;         // P2P messaging DataChannel offer (NOT for calls)
         P2P_ANSWER = 11;        // P2P messaging DataChannel answer (NOT for calls)
+        SCREEN_SHARE_OFFER = 12; // Screen sharing renegotiation offer
+        SCREEN_SHARE_STOP = 13;  // Screen sharing stopped
     }
     
     SignalType type = 1;        // Sinyal tipi

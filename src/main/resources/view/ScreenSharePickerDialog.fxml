@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.Font?>
+
+<VBox xmlns:fx="http://javafx.com/fxml" 
+      fx:controller="com.saferoom.gui.dialog.ScreenSharePickerDialog"
+      prefWidth="600" prefHeight="450"
+      spacing="15"
+      style="-fx-background-color: #1e1e1e;">
+    
+    <padding>
+        <Insets top="20" right="20" bottom="20" left="20"/>
+    </padding>
+    
+    <!-- Header -->
+    <HBox alignment="CENTER_LEFT" spacing="10">
+        <Label text="📺" style="-fx-font-size: 24px;"/>
+        <Label text="Ekran Paylaşımı" styleClass="header-title">
+            <font>
+                <Font name="System Bold" size="18"/>
+            </font>
+        </Label>
+    </HBox>
+    
+    <!-- Tab Panel for Screens vs Windows -->
+    <TabPane fx:id="sourceTabPane" VBox.vgrow="ALWAYS" 
+             style="-fx-background-color: #2d2d2d; -fx-border-color: #3d3d3d; -fx-border-radius: 5;">
+        
+        <!-- Screens Tab -->
+        <Tab text="🖥️ Ekranlar" closable="false">
+            <VBox spacing="10" style="-fx-padding: 10;">
+                <Label text="Paylaşmak istediğiniz ekranı seçin:" 
+                       style="-fx-text-fill: #ffffff; -fx-font-size: 12px;"/>
+                <ListView fx:id="screensListView" VBox.vgrow="ALWAYS"
+                          style="-fx-background-color: #1e1e1e; -fx-border-color: #3d3d3d;"/>
+            </VBox>
+        </Tab>
+        
+        <!-- Windows Tab -->
+        <Tab text="🪟 Pencereler" closable="false">
+            <VBox spacing="10" style="-fx-padding: 10;">
+                <Label text="Paylaşmak istediğiniz pencereyi seçin:" 
+                       style="-fx-text-fill: #ffffff; -fx-font-size: 12px;"/>
+                <ListView fx:id="windowsListView" VBox.vgrow="ALWAYS"
+                          style="-fx-background-color: #1e1e1e; -fx-border-color: #3d3d3d;"/>
+            </VBox>
+        </Tab>
+    </TabPane>
+    
+    <!-- Info Label -->
+    <Label fx:id="infoLabel" 
+           text="💡 İpucu: MacOS'ta ekran kaydı izni gerekebilir (Sistem Tercihleri → Güvenlik)"
+           wrapText="true"
+           style="-fx-text-fill: #888888; -fx-font-size: 11px; -fx-padding: 5;"/>
+    
+    <!-- Action Buttons -->
+    <HBox spacing="10" alignment="CENTER_RIGHT">
+        <Button fx:id="refreshButton" text="🔄 Yenile" 
+                onAction="#handleRefresh"
+                style="-fx-background-color: #3d3d3d; -fx-text-fill: white; -fx-padding: 8 15;"/>
+        <Region HBox.hgrow="ALWAYS"/>
+        <Button fx:id="cancelButton" text="İptal" 
+                onAction="#handleCancel"
+                style="-fx-background-color: #3d3d3d; -fx-text-fill: white; -fx-padding: 8 20;"/>
+        <Button fx:id="startButton" text="Paylaşımı Başlat" 
+                onAction="#handleStartSharing"
+                defaultButton="true"
+                style="-fx-background-color: #0078d4; -fx-text-fill: white; -fx-padding: 8 20; -fx-font-weight: bold;"/>
+    </HBox>
+    
+</VBox>

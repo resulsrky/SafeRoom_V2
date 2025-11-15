@@ -4,6 +4,7 @@ import dev.onvoid.webrtc.*;
 import dev.onvoid.webrtc.media.*;
 import dev.onvoid.webrtc.media.audio.*;
 import dev.onvoid.webrtc.media.video.*;
+import dev.onvoid.webrtc.media.video.desktop.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.List;
@@ -27,6 +28,11 @@ public class WebRTCClient {
     private MediaStreamTrack localAudioTrack;
     private MediaStreamTrack localVideoTrack;
     private dev.onvoid.webrtc.media.video.VideoDeviceSource videoSource; // Keep reference to stop camera
+    
+    // Screen sharing
+    private MediaStreamTrack screenShareTrack;
+    private VideoDesktopSource screenShareSource;
+    private boolean screenSharingEnabled = false;
     
     // Callbacks
     private Consumer<RTCIceCandidate> onIceCandidateCallback;
@@ -636,6 +642,185 @@ public class WebRTCClient {
             localVideoTrack.setEnabled(enabled);
         }
         System.out.printf("[WebRTC] Video %s%n", enabled ? "enabled" : "disabled");
+    }
+    
+    // ===============================
+    // Screen Sharing API
+    // ===============================
+    
+    /**
+     * Get available screens for sharing
+     */
+    public List<DesktopSource> getAvailableScreens() {
+        System.out.println("[WebRTC] Enumerating available screens...");
+        
+        if (factory == null) {
+            System.err.println("[WebRTC] Factory not initialized - screen sharing not available");
+            return new ArrayList<>();
+        }
+        
+        try {
+            ScreenCapturer screenCapturer = new ScreenCapturer();
+            List<DesktopSource> screens = screenCapturer.getDesktopSources();
+            screenCapturer.dispose();
+            
+            System.out.printf("[WebRTC] Found %d screens%n", screens.size());
+            for (DesktopSource screen : screens) {
+                System.out.printf("  - Screen: %s (ID: %d)%n", screen.title, screen.id);
+            }
+            
+            return screens;
+        } catch (Exception e) {
+            System.err.printf("[WebRTC] Failed to enumerate screens: %s%n", e.getMessage());
+            e.printStackTrace();
+            return new ArrayList<>();
+        }
+    }
+    
+    /**
+     * Get available windows for sharing
+     */
+    public List<DesktopSource> getAvailableWindows() {
+        System.out.println("[WebRTC] Enumerating available windows...");
+        
+        if (factory == null) {
+            System.err.println("[WebRTC] Factory not initialized - screen sharing not available");
+            return new ArrayList<>();
+        }
+        
+        try {
+            WindowCapturer windowCapturer = new WindowCapturer();
+            List<DesktopSource> windows = windowCapturer.getDesktopSources();
+            windowCapturer.dispose();
+            
+            System.out.printf("[WebRTC] Found %d windows%n", windows.size());
+            for (DesktopSource window : windows) {
+                System.out.printf("  - Window: %s (ID: %d)%n", window.title, window.id);
+            }
+            
+            return windows;
+        } catch (Exception e) {
+            System.err.printf("[WebRTC] Failed to enumerate windows: %s%n", e.getMessage());
+            e.printStackTrace();
+            return new ArrayList<>();
+        }
+    }
+    
+    /**
+     * Start screen sharing with selected source
+     * @param sourceId Desktop source ID (from DesktopSource.id)
+     * @param isWindow true if sharing window, false if sharing screen
+     */
+    public void startScreenShare(long sourceId, boolean isWindow) {
+        System.out.printf("[WebRTC] Starting screen share: sourceId=%d, isWindow=%b%n", sourceId, isWindow);
+        
+        if (factory == null) {
+            System.err.println("[WebRTC] Factory not initialized - cannot start screen sharing");
+            return;
+        }
+        
+        if (screenSharingEnabled) {
+            System.out.println("[WebRTC] Screen sharing already active - stopping previous session");
+            stopScreenShare();
+        }
+        
+        try {
+            // Create VideoDesktopSource
+            screenShareSource = new VideoDesktopSource();
+            
+            // Configure capture settings
+            screenShareSource.setFrameRate(30);
+            screenShareSource.setMaxFrameSize(1920, 1080);
+            screenShareSource.setSourceId(sourceId, isWindow);
+            
+            // Start capturing
+            screenShareSource.start();
+            System.out.println("[WebRTC] Desktop capture started");
+            
+            // Create video track from desktop source
+            screenShareTrack = factory.createVideoTrack("screen_share", screenShareSource);
+            screenShareTrack.setEnabled(true);
+            
+            // Add track to peer connection if exists
+            if (peerConnection != null) {
+                List<String> streamIds = new ArrayList<>();
+                streamIds.add("screen_share_stream");
+                peerConnection.addTrack(screenShareTrack, streamIds);
+                System.out.println("[WebRTC] Screen share track added to peer connection");
+                
+                // Renegotiate (caller should call createOffer again)
+                System.out.println("[WebRTC] ⚠️ Renegotiation required - caller should create new offer");
+            }
+            
+            screenSharingEnabled = true;
+            System.out.println("[WebRTC] Screen sharing started successfully");
+            
+        } catch (Exception e) {
+            System.err.printf("[WebRTC] Failed to start screen sharing: %s%n", e.getMessage());
+            e.printStackTrace();
+            stopScreenShare(); // Cleanup on failure
+        }
+    }
+    
+    /**
+     * Stop screen sharing
+     */
+    public void stopScreenShare() {
+        System.out.println("[WebRTC] Stopping screen share...");
+        
+        if (!screenSharingEnabled) {
+            System.out.println("[WebRTC] Screen sharing not active");
+            return;
+        }
+        
+        try {
+            // Remove track from peer connection
+            if (peerConnection != null && screenShareTrack != null) {
+                // Find and remove sender
+                for (RTCRtpSender sender : peerConnection.getSenders()) {
+                    if (sender.getTrack() == screenShareTrack) {
+                        peerConnection.removeTrack(sender);
+                        System.out.println("[WebRTC] Screen share track removed from peer connection");
+                        break;
+                    }
+                }
+            }
+            
+            // Stop and dispose desktop source
+            if (screenShareSource != null) {
+                screenShareSource.stop();
+                screenShareSource.dispose();
+                screenShareSource = null;
+                System.out.println("[WebRTC] Desktop source stopped");
+            }
+            
+            // Dispose track
+            if (screenShareTrack != null) {
+                screenShareTrack.dispose();
+                screenShareTrack = null;
+            }
+            
+            screenSharingEnabled = false;
+            System.out.println("[WebRTC] Screen sharing stopped successfully");
+            
+        } catch (Exception e) {
+            System.err.printf("[WebRTC] Error stopping screen share: %s%n", e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Check if screen sharing is currently active
+     */
+    public boolean isScreenSharingEnabled() {
+        return screenSharingEnabled;
+    }
+    
+    /**
+     * Get screen share video track (for local preview)
+     */
+    public VideoTrack getScreenShareTrack() {
+        return (VideoTrack) screenShareTrack;
     }
     
     // ===============================

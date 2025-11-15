@@ -262,6 +262,71 @@ public class WebRTCSignalingClient {
     }
     
     /**
+     * Send SCREEN_SHARE_OFFER (renegotiation with screen share track)
+     */
+    public boolean sendScreenShareOffer(String callId, String targetUsername, String sdp) {
+        try {
+            System.out.printf("[SignalingClient] 🖥️ Sending screen share offer to %s%n", targetUsername);
+            
+            WebRTCSignal signal = WebRTCSignal.newBuilder()
+                .setType(SignalType.SCREEN_SHARE_OFFER)
+                .setFrom(myUsername)
+                .setTo(targetUsername)
+                .setCallId(callId)
+                .setSdp(sdp)
+                .setTimestamp(System.currentTimeMillis())
+                .build();
+            
+            if (streamActive && signalingStreamOut != null) {
+                System.out.println("[SignalingClient] 📤 Sending SCREEN_SHARE_OFFER via stream");
+                signalingStreamOut.onNext(signal);
+                return true;
+            } else {
+                System.err.println("[SignalingClient] ❌ Stream not active, falling back to unary RPC");
+                WebRTCResponse response = blockingStub.sendWebRTCSignal(signal);
+                return response.getSuccess();
+            }
+            
+        } catch (Exception e) {
+            System.err.printf("[SignalingClient] ❌ Error sending screen share offer: %s%n", e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+    
+    /**
+     * Send SCREEN_SHARE_STOP notification
+     */
+    public boolean sendScreenShareStop(String callId, String targetUsername) {
+        try {
+            System.out.printf("[SignalingClient] 🛑 Sending screen share stop to %s%n", targetUsername);
+            
+            WebRTCSignal signal = WebRTCSignal.newBuilder()
+                .setType(SignalType.SCREEN_SHARE_STOP)
+                .setFrom(myUsername)
+                .setTo(targetUsername)
+                .setCallId(callId)
+                .setTimestamp(System.currentTimeMillis())
+                .build();
+            
+            if (streamActive && signalingStreamOut != null) {
+                System.out.println("[SignalingClient] 📤 Sending SCREEN_SHARE_STOP via stream");
+                signalingStreamOut.onNext(signal);
+                return true;
+            } else {
+                System.err.println("[SignalingClient] ❌ Stream not active, falling back to unary RPC");
+                WebRTCResponse response = blockingStub.sendWebRTCSignal(signal);
+                return response.getSuccess();
+            }
+            
+        } catch (Exception e) {
+            System.err.printf("[SignalingClient] ❌ Error sending screen share stop: %s%n", e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+    
+    /**
      * Send SDP OFFER
      */
     public boolean sendOffer(String callId, String targetUsername, String sdp) {
