@@ -8,10 +8,13 @@ import javafx.scene.image.PixelWriter;
 import javafx.scene.image.WritableImage;
 import javafx.scene.paint.Color;
 import java.nio.ByteBuffer;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Video rendering panel for WebRTC video tracks.
  * Displays both local and remote video streams on JavaFX Canvas.
+ * 
+ * THREAD-SAFE: Uses atomic flags to prevent UI thread flooding.
  */
 public class VideoPanel extends Canvas {
     
@@ -20,6 +23,10 @@ public class VideoPanel extends Canvas {
     private VideoTrack videoTrack;
     private VideoTrackSink videoSink;
     private boolean isActive = false;
+    
+    // ===== THREADING FIX: Prevent UI thread flooding =====
+    private final AtomicBoolean isRendering = new AtomicBoolean(false);
+    private volatile VideoFrame pendingFrame = null;
     
     /**
      * Constructor
@@ -87,9 +94,25 @@ public class VideoPanel extends Canvas {
     
     /**
      * Render a video frame to the canvas
+     * THREAD-SAFE: Queues frames and renders on JavaFX thread without blocking
      */
     private void renderFrame(VideoFrame frame) {
         if (!isActive) return;
+        
+        // ===== THREADING FIX =====
+        // If already rendering, store this frame as pending (drop old one)
+        if (isRendering.get()) {
+            // Release old pending frame if exists
+            if (pendingFrame != null) {
+                pendingFrame.release();
+            }
+            pendingFrame = frame;
+            pendingFrame.retain(); // Keep reference
+            return; // Don't queue another Platform.runLater
+        }
+        
+        // Mark as rendering
+        isRendering.set(true);
         
         try {
             VideoFrameBuffer buffer = frame.buffer;
@@ -99,6 +122,7 @@ public class VideoPanel extends Canvas {
             // Convert to I420 format (YUV)
             I420Buffer i420 = buffer.toI420();
             
+            // Queue rendering on JavaFX thread
             Platform.runLater(() -> {
                 try {
                     // Create or resize image if needed
@@ -116,11 +140,23 @@ public class VideoPanel extends Canvas {
                     
                 } catch (Exception e) {
                     System.err.println("[VideoPanel] Error rendering frame: " + e.getMessage());
+                } finally {
+                    // Mark rendering complete
+                    isRendering.set(false);
+                    
+                    // If there's a pending frame, render it now
+                    VideoFrame pending = pendingFrame;
+                    if (pending != null) {
+                        pendingFrame = null;
+                        renderFrame(pending);
+                        pending.release();
+                    }
                 }
             });
             
         } catch (Exception e) {
             System.err.println("[VideoPanel] Error processing frame: " + e.getMessage());
+            isRendering.set(false);
         }
     }
     
