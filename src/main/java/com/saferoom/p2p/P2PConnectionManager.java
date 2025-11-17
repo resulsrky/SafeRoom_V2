@@ -76,10 +76,8 @@ public class P2PConnectionManager {
             com.saferoom.webrtc.CallManager callManager = 
                 com.saferoom.webrtc.CallManager.getInstance();
             
-            java.lang.reflect.Field signalingField = 
-                com.saferoom.webrtc.CallManager.class.getDeclaredField("signalingClient");
-            signalingField.setAccessible(true);
-            this.signalingClient = (WebRTCSignalingClient) signalingField.get(callManager);
+            // FIX: Use public getter instead of reflection
+            this.signalingClient = callManager.getSignalingClient();
             
             if (this.signalingClient == null) {
                 System.err.println("[P2P] CallManager signaling client is null, creating new one");
@@ -90,11 +88,11 @@ public class P2PConnectionManager {
             System.out.println("[P2P] Using shared signaling client from CallManager");
             
             // Register our handler for P2P signals
-            // Note: We'll need to modify CallManager to route P2P signals to us
             registerP2PSignalHandler();
             
         } catch (Exception e) {
             System.err.println("[P2P] Failed to get CallManager signaling client: " + e.getMessage());
+            e.printStackTrace();
             // Fallback: create our own (not recommended - callback conflict)
             this.signalingClient = new WebRTCSignalingClient(username);
             this.signalingClient.startSignalingStream();
@@ -112,16 +110,24 @@ public class P2PConnectionManager {
         // so CallManager can forward P2P signals to us
         try {
             com.saferoom.webrtc.CallManager callManager = 
-                com.saferoom.webrtc.CallManager.class.getDeclaredField("instance").get(null) != null ?
-                com.saferoom.webrtc.CallManager.getInstance() : null;
+                com.saferoom.webrtc.CallManager.getInstance();
             
             if (callManager != null) {
-                // Add field to CallManager to store P2P handler
-                // This will be done via reflection or we need to modify CallManager
-                System.out.println("[P2P] P2P signal handler registered with CallManager");
+                // Add P2P signal handler to the shared signaling client
+                // P2P signals have types: P2P_OFFER, P2P_ANSWER
+                if (signalingClient != null) {
+                    // Add handlers for P2P signal types
+                    signalingClient.addSignalHandler(SignalType.P2P_OFFER, this::handleP2POffer);
+                    signalingClient.addSignalHandler(SignalType.P2P_ANSWER, this::handleP2PAnswer);
+                    // Note: ICE candidates use MESH_ICE_CANDIDATE type
+                    signalingClient.addSignalHandler(SignalType.MESH_ICE_CANDIDATE, this::handleIceCandidate);
+                    
+                    System.out.println("[P2P] ✅ P2P signal handlers registered successfully");
+                }
             }
         } catch (Exception e) {
             System.err.println("[P2P] Could not register P2P handler: " + e.getMessage());
+            e.printStackTrace();
         }
     }
     

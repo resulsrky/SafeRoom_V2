@@ -838,6 +838,20 @@ public class CallManager {
         return webrtcClient;
     }
     
+    /**
+     * Get signaling client (for P2P integration)
+     */
+    public WebRTCSignalingClient getSignalingClient() {
+        return signalingClient;
+    }
+    
+    /**
+     * Get username
+     */
+    public String getUsername() {
+        return myUsername;
+    }
+    
     // ===============================
     // Shutdown
     // ===============================

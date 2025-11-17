@@ -48,15 +48,8 @@
                     </padding>
                     <children>
                         <!-- Sol Taraf: Kamera Önizleme -->
-                        <StackPane styleClass="camera-view" HBox.hgrow="ALWAYS">
-                            <children>
-                                <VBox alignment="CENTER" spacing="10.0">
-                                    <children>
-                                        <FontIcon iconLiteral="fas-video-slash" styleClass="camera-disabled-icon" />
-                                        <Label text="Camera is disabled" styleClass="subtitle-label" />
-                                    </children>
-                                </VBox>
-                            </children>
+                        <StackPane fx:id="cameraView" styleClass="camera-view" HBox.hgrow="ALWAYS">
+                            <!-- Camera preview will be dynamically added by controller -->
                         </StackPane>
 
                         <!-- Sağ Taraf: Ayarlar -->

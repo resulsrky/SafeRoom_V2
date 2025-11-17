@@ -12,6 +12,7 @@ import com.saferoom.gui.model.UserRole;
 import com.saferoom.gui.utils.WindowStateManager;
 import com.saferoom.webrtc.WebRTCClient;
 import dev.onvoid.webrtc.media.video.*;
+import dev.onvoid.webrtc.media.MediaDevices;
 import javafx.animation.Animation;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
@@ -88,6 +89,14 @@ public class SecureRoomController {
 
         startMicTestAnimation();
         
+        // Initialize camera preview
+        initializeCameraPreview();
+        
+        // Camera toggle listener
+        cameraToggle.selectedProperty().addListener((obs, oldVal, newVal) -> {
+            toggleCameraPreview(newVal);
+        });
+        
         // Scene yüklendiğinde root pane'i bul ve sürükleme ekle
         backButton.sceneProperty().addListener((obs, oldScene, newScene) -> {
             if (newScene != null && newScene.getRoot() instanceof javafx.scene.layout.Pane) {
@@ -95,9 +104,208 @@ public class SecureRoomController {
             }
         });
     }
+    
+    /**
+     * Initialize camera preview in SecureRoom
+     */
+    private void initializeCameraPreview() {
+        try {
+            System.out.println("[SecureRoom] Initializing camera preview...");
+            
+            // Check if cameraView is injected
+            if (cameraView == null) {
+                System.err.println("[SecureRoom] cameraView is null - check FXML fx:id");
+                return;
+            }
+            
+            // Initialize WebRTC if not already done
+            if (!WebRTCClient.isInitialized()) {
+                WebRTCClient.initialize();
+            }
+            
+            // Create VideoPanel with initial size
+            cameraPreview = new VideoPanel(640, 480);
+            
+            // CRITICAL FIX: Wrap Canvas in custom Pane that controls Canvas size
+            // Pane's layoutChildren prevents Canvas resize from affecting parent
+            javafx.scene.layout.Pane canvasWrapper = new javafx.scene.layout.Pane() {
+                @Override
+                protected void layoutChildren() {
+                    super.layoutChildren();
+                    // Resize Canvas to match Pane size (Pane size is controlled by StackPane)
+                    double w = getWidth();
+                    double h = getHeight();
+                    if (w > 0 && h > 0 && cameraPreview != null) {
+                        cameraPreview.setWidth(w);
+                        cameraPreview.setHeight(h);
+                    }
+                }
+            };
+            
+            // Add Canvas to wrapper
+            canvasWrapper.getChildren().add(cameraPreview);
+            
+            // Make wrapper fill StackPane (managed by parent)
+            canvasWrapper.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+            
+            // Add wrapper to cameraView
+            cameraView.getChildren().clear();
+            cameraView.getChildren().add(canvasWrapper);
+            
+            System.out.println("[SecureRoom] Camera preview wrapped in Pane (feedback-proof)");
+            
+            // Start camera if toggle is ON
+            if (cameraToggle.isSelected()) {
+                startCameraPreview();
+            } else {
+                // Show placeholder when camera is OFF
+                showCameraPlaceholder();
+            }
+            
+        } catch (Exception e) {
+            System.err.println("[SecureRoom] Failed to initialize camera preview: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Show placeholder when camera is disabled
+     */
+    private void showCameraPlaceholder() {
+        javafx.scene.layout.VBox placeholder = new javafx.scene.layout.VBox(10);
+        placeholder.setAlignment(javafx.geometry.Pos.CENTER);
+        
+        org.kordamp.ikonli.javafx.FontIcon icon = new org.kordamp.ikonli.javafx.FontIcon("fas-video-slash");
+        icon.setIconSize(64);
+        icon.setStyle("-fx-icon-color: #6b7280;");
+        
+        javafx.scene.control.Label label = new javafx.scene.control.Label("Camera is disabled");
+        label.setStyle("-fx-text-fill: #9ca3af; -fx-font-size: 14px;");
+        
+        placeholder.getChildren().addAll(icon, label);
+        
+        // Add on top of VideoPanel
+        if (!cameraView.getChildren().contains(placeholder)) {
+            cameraView.getChildren().add(placeholder);
+        }
+    }
+    
+    /**
+     * Hide placeholder
+     */
+    private void hideCameraPlaceholder() {
+        // Remove any VBox (placeholder) from cameraView, keep only VideoPanel
+        cameraView.getChildren().removeIf(node -> node instanceof javafx.scene.layout.VBox);
+    }
+    
+    /**
+     * Start camera preview
+     */
+    private void startCameraPreview() {
+        try {
+            System.out.println("[SecureRoom] Starting camera preview...");
+            
+            var factory = WebRTCClient.getFactory();
+            if (factory == null) {
+                System.err.println("[SecureRoom] Factory not available");
+                return;
+            }
+            
+            // Get available cameras
+            List<VideoDevice> cameras = MediaDevices.getVideoCaptureDevices();
+            if (cameras.isEmpty()) {
+                System.err.println("[SecureRoom] No cameras found!");
+                return;
+            }
+            
+            // Use first camera
+            VideoDevice camera = cameras.get(0);
+            System.out.println("[SecureRoom] Using camera: " + camera.getName());
+            
+            // Create video source
+            videoSource = new VideoDeviceSource();
+            videoSource.setVideoCaptureDevice(camera);
+            
+            // Set capability
+            VideoCaptureCapability capability = new VideoCaptureCapability(640, 480, 30);
+            videoSource.setVideoCaptureCapability(capability);
+            
+            // Create video track
+            videoTrack = factory.createVideoTrack("preview_video", videoSource);
+            videoTrack.setEnabled(true); // CRITICAL: Enable track
+            
+            // Start capturing
+            videoSource.start();
+            
+            // Attach to VideoPanel
+            if (cameraPreview != null) {
+                cameraPreview.attachVideoTrack(videoTrack);
+            }
+            
+            // Hide placeholder
+            hideCameraPlaceholder();
+            
+            System.out.println("[SecureRoom] ✅ Camera preview started");
+            
+        } catch (Exception e) {
+            System.err.println("[SecureRoom] Failed to start camera: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Stop camera preview
+     */
+    private void stopCameraPreview() {
+        try {
+            System.out.println("[SecureRoom] Stopping camera preview...");
+            
+            // Detach from VideoPanel
+            if (cameraPreview != null) {
+                cameraPreview.detachVideoTrack();
+            }
+            
+            // Stop and dispose video source
+            if (videoSource != null) {
+                videoSource.stop();
+                videoSource.dispose();
+                videoSource = null;
+            }
+            
+            // Dispose video track
+            if (videoTrack != null) {
+                videoTrack.setEnabled(false);
+                videoTrack.dispose();
+                videoTrack = null;
+            }
+            
+            // Show placeholder
+            showCameraPlaceholder();
+            
+            System.out.println("[SecureRoom] Camera preview stopped");
+            
+        } catch (Exception e) {
+            System.err.println("[SecureRoom] Error stopping camera: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Toggle camera preview on/off
+     */
+    private void toggleCameraPreview(boolean enabled) {
+        if (enabled) {
+            startCameraPreview();
+        } else {
+            stopCameraPreview();
+        }
+    }
 
     private void handleInitiate() {
         if (micAnimation != null) micAnimation.stop();
+        
+        // CRITICAL: Stop camera preview before leaving (prevent camera conflict)
+        stopCameraPreview();
 
         // Ana controller üzerinden meeting panel'i yükle (content değiştirme)
         if (mainController != null) {
@@ -151,6 +359,9 @@ public class SecureRoomController {
 
     private void handleBack() {
         if (micAnimation != null) micAnimation.stop();
+        
+        // CRITICAL: Stop camera preview before leaving
+        stopCameraPreview();
 
         // Ana controller üzerinden ana görünüme geri dön
         if (mainController != null) {
