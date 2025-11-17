@@ -29,10 +29,10 @@
                 <Pane HBox.hgrow="ALWAYS" />
                 <HBox alignment="CENTER" spacing="8.0" styleClass="layout-button-container">
                     <children>
-                        <JFXButton fx:id="gridViewButton" onAction="#showGridView" styleClass="layout-button">
+                        <JFXButton fx:id="gridViewButton" styleClass="layout-button">
                             <graphic><FontIcon iconLiteral="fas-th-large" styleClass="layout-icon" /></graphic>
                         </JFXButton>
-                        <JFXButton fx:id="speakerViewButton" onAction="#showSpeakerView" styleClass="layout-button">
+                        <JFXButton fx:id="speakerViewButton" styleClass="layout-button">
                             <graphic><FontIcon iconLiteral="fas-user" styleClass="layout-icon" /></graphic>
                         </JFXButton>
                     </children>

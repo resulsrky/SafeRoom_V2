@@ -174,7 +174,14 @@ public class MeetingPanelController {
         speakerViewPane.setVisible(false);
         speakerViewPane.setManaged(false);
         
-        // Note: Grid/Speaker view buttons use FXML onAction
+        // Button handlers (override FXML onAction)
+        gridViewButton.setOnAction(e -> showGridView());
+        speakerViewButton.setOnAction(e -> showSpeakerView());
+        
+        // TODO: Disable speaker view until implemented
+        speakerViewButton.setDisable(true);
+        speakerViewButton.setOpacity(0.5);
+        
         participantsToggle.setOnAction(e -> showParticipantsView());
         chatToggle.setOnAction(e -> showChatView());
     }
@@ -619,8 +626,7 @@ public class MeetingPanelController {
         meetingChatView.setVisible(true);
     }
     
-    @FXML
-    public void showGridView() {
+    private void showGridView() {
         System.out.println("[MeetingPanel] 🔘 Switching to GRID view");
         videoGrid.setVisible(true);
         videoGrid.setManaged(true);
@@ -630,8 +636,7 @@ public class MeetingPanelController {
         setActiveLayoutButton(gridViewButton);
     }
 
-    @FXML
-    public void showSpeakerView() {
+    private void showSpeakerView() {
         System.out.println("[MeetingPanel] 🔘 Switching to SPEAKER view");
         videoGrid.setVisible(false);
         videoGrid.setManaged(false);
