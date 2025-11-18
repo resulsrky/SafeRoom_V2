@@ -87,71 +87,9 @@ public class MeetingPanelController {
     private WebRTCSignalingClient signalingClient;
     private String currentUsername;
     
-    // Video tile management
-    private VideoTile localVideoTile;  // Persistent local video tile (self-preview)
-    private final Map<String, VideoTile> videoTiles = new java.util.concurrent.ConcurrentHashMap<>();  // Remote peer tiles
-    
-    /**
-     * Video tile container with VideoPanel
-     */
-    private static class VideoTile {
-        StackPane container;
-        VideoPanel videoPanel;
-        Label nameLabel;
-        FontIcon micIcon;
-        String peerUsername;
-        
-        VideoTile(String username) {
-            this.peerUsername = username;
-            this.container = new StackPane();
-            container.getStyleClass().add("video-tile");
-            
-            // Video panel for rendering
-            videoPanel = new VideoPanel(320, 240);
-            videoPanel.widthProperty().bind(container.widthProperty());
-            videoPanel.heightProperty().bind(container.heightProperty());
-            
-            // Name tag overlay
-            HBox nameTag = new HBox(6);
-            nameTag.setAlignment(Pos.CENTER_LEFT);
-            nameTag.getStyleClass().add("video-tile-nametag");
-            nameTag.setMaxWidth(HBox.USE_PREF_SIZE);  // Don't expand!
-            nameTag.setMaxHeight(HBox.USE_PREF_SIZE);  // Don't expand!
-            
-            micIcon = new FontIcon("fas-microphone");
-            micIcon.getStyleClass().add("video-tile-mic-icon");
-            
-            nameLabel = new Label(username);
-            nameLabel.getStyleClass().add("video-tile-name-label");
-            
-            nameTag.getChildren().addAll(micIcon, nameLabel);
-            StackPane.setAlignment(nameTag, Pos.BOTTOM_LEFT);
-            StackPane.setMargin(nameTag, new Insets(10));
-            
-            container.getChildren().addAll(videoPanel, nameTag);
-        }
-        
-        void attachVideoTrack(VideoTrack track) {
-            videoPanel.attachVideoTrack(track);
-        }
-        
-        void detachVideoTrack() {
-            videoPanel.detachVideoTrack();
-        }
-        
-        void setMuted(boolean muted) {
-            micIcon.setIconLiteral(muted ? "fas-microphone-slash" : "fas-microphone");
-            if (muted) {
-                micIcon.getStyleClass().add("icon-danger");
-            } else {
-                micIcon.getStyleClass().remove("icon-danger");
-            }
-        }
-        
-        void dispose() {
-            videoPanel.dispose();
-        }
-    }
+    // Video management: Participant → VideoPanel mapping (ESKİ TASARIM uyumlu)
+    private final Map<Participant, VideoPanel> videoPanelMap = new java.util.HashMap<>();
+    private final Map<String, VideoTrack> remoteVideoTracks = new java.util.concurrent.ConcurrentHashMap<>();  // username → VideoTrack
 
     @FXML
     public void initialize() {
@@ -208,13 +146,12 @@ public class MeetingPanelController {
             this.currentUser = new Participant("Standard User (You)", UserRole.USER, withCamera, !withMic);
         }
 
-        // Don't add dummy participants - we'll use real peers
+        // ESKİ TASARIM: Keep participants list (real peers will be added/removed dynamically)
         currentMeeting.getParticipants().clear();
         currentMeeting.getParticipants().add(0, this.currentUser);
         
         updateParticipantsList();
-        // NOTE: Don't call showGridView() here - no tiles exist yet!
-        // Grid will be populated after local tile is created in joinRoom callback
+        showGridView();  // ESKİ TASARIM: Immediately show grid (will show placeholder until video arrives)
 
         if (meetingChatViewController != null) {
             meetingChatViewController.initChannel(currentMeeting.getMeetingId());
@@ -267,15 +204,7 @@ public class MeetingPanelController {
             groupCallManager.joinRoom(roomId, audio, video, joinMode)
                 .thenAccept(v -> {
                     System.out.println("[MeetingPanel] Successfully joined room");
-                    
-                    // Create local video tile ONCE on UI thread
-                    javafx.application.Platform.runLater(() -> {
-                        System.out.println("[MeetingPanel] Creating local video tile");
-                        createLocalVideoTile();
-                        
-                        // NOW show grid view with the local tile
-                        showGridView();
-                    });
+                    // ESKİ TASARIM: Grid already showing, will update when tracks arrive
                 })
                 .exceptionally(ex -> {
                     System.err.printf("[MeetingPanel] Failed to join room: %s%n", ex.getMessage());
@@ -297,7 +226,7 @@ public class MeetingPanelController {
         groupCallManager.setOnRoomJoinedCallback(() -> {
             javafx.application.Platform.runLater(() -> {
                 System.out.println("[MeetingPanel] Room joined callback");
-                refreshGridLayout();
+                updateVideoGrid();  // ESKİ TASARIM
             });
         });
         
@@ -306,12 +235,12 @@ public class MeetingPanelController {
             javafx.application.Platform.runLater(() -> {
                 System.out.printf("[MeetingPanel] Peer joined: %s%n", peerUsername);
                 
-                // Add peer to participant list
+                // ESKİ TASARIM: Add peer to participant list (camera OFF initially, will turn ON when track arrives)
                 Participant peer = new Participant(peerUsername, UserRole.USER, false, true);
                 currentMeeting.getParticipants().add(peer);
                 
                 updateParticipantsList();
-                refreshGridLayout();
+                updateVideoGrid();  // ESKİ TASARIM: Refresh grid (will show avatar placeholder)
             });
         });
         
@@ -320,23 +249,30 @@ public class MeetingPanelController {
             javafx.application.Platform.runLater(() -> {
                 System.out.printf("[MeetingPanel] Peer left: %s%n", peerUsername);
                 
-                // Remove peer from participant list
-                currentMeeting.getParticipants().removeIf(p -> p.getName().equals(peerUsername));
+                // ESKİ TASARIM: Remove peer from participant list
+                Participant removedPeer = null;
+                for (Participant p : currentMeeting.getParticipants()) {
+                    if (p.getName().equals(peerUsername)) {
+                        removedPeer = p;
+                        break;
+                    }
+                }
                 
-                // Remove video tile
-                VideoTile tile = videoTiles.remove(peerUsername);
-                if (tile != null) {
-                    tile.dispose();
+                if (removedPeer != null) {
+                    currentMeeting.getParticipants().remove(removedPeer);
+                    
+                    // Cleanup video panel
+                    VideoPanel panel = videoPanelMap.remove(removedPeer);
+                    if (panel != null) {
+                        panel.dispose();
+                    }
+                    
+                    // Remove video track
+                    remoteVideoTracks.remove(peerUsername);
                 }
                 
                 updateParticipantsList();
-                
-                // Update active view (grid or speaker)
-                if (videoGrid.isVisible()) {
-                    refreshGridLayout();
-                } else if (speakerViewPane.isVisible()) {
-                    updateSpeakerView();
-                }
+                updateVideoGrid();  // ESKİ TASARIM: Refresh grid
             });
         });
         
@@ -347,21 +283,14 @@ public class MeetingPanelController {
                     peerUsername, track.getKind());
                 
                 if ("video".equals(track.getKind())) {
-                    // Get or create video tile for this peer
-                    VideoTile tile = videoTiles.get(peerUsername);
-                    if (tile == null) {
-                        tile = new VideoTile(peerUsername);
-                        videoTiles.put(peerUsername, tile);
-                    }
+                    // ESKİ TASARIM: Store video track
+                    remoteVideoTracks.put(peerUsername, (VideoTrack) track);
                     
-                    // Attach video track
-                    tile.attachVideoTrack((VideoTrack) track);
-                    
-                    // Update active view (grid or speaker)
-                    if (videoGrid.isVisible()) {
-                        refreshGridLayout();
-                    } else if (speakerViewPane.isVisible()) {
-                        updateSpeakerView();
+                    // Find participant and enable camera
+                    Participant peer = findParticipantByUsername(peerUsername);
+                    if (peer != null) {
+                        peer.setCameraOn(true);
+                        updateVideoGrid();  // ESKİ TASARIM: Refresh grid (will show video now)
                     }
                 }
             });
@@ -410,6 +339,18 @@ public class MeetingPanelController {
             name = name.replace(" (You)", "").trim();
         }
         return name.isEmpty() ? "User-" + System.currentTimeMillis() : name;
+    }
+    
+    /**
+     * Helper: Find participant by username
+     */
+    private Participant findParticipantByUsername(String username) {
+        for (Participant p : currentMeeting.getParticipants()) {
+            if (p.getName().equals(username)) {
+                return p;
+            }
+        }
+        return null;
     }
 
     /**
@@ -522,19 +463,8 @@ public class MeetingPanelController {
         if (groupCallManager != null) {
             groupCallManager.toggleVideo(newCameraState);
             
-            // Recreate local video tile if camera toggled on, dispose if off
-            if (newCameraState) {
-                createLocalVideoTile();
-            } else {
-                disposeLocalVideoTile();
-            }
-            
-            // Update active view (grid or speaker)
-            if (videoGrid.isVisible()) {
-                refreshGridLayout();
-            } else if (speakerViewPane.isVisible()) {
-                updateSpeakerView();
-            }
+            // ESKİ TASARIM: Just refresh grid (createVideoTile will handle camera state)
+            updateVideoGrid();
         }
     }
 
@@ -644,7 +574,7 @@ public class MeetingPanelController {
         videoGrid.setManaged(true);
         speakerViewPane.setVisible(false);
         speakerViewPane.setManaged(false);
-        refreshGridLayout();
+        updateVideoGrid();  // ESKİ TASARIM
         setActiveLayoutButton(gridViewButton);
     }
 
@@ -665,173 +595,50 @@ public class MeetingPanelController {
     }
 
     private void updateSpeakerView() {
+        // ESKİ TASARIM: Speaker view with participant-based layout
         speakerViewPane.getChildren().clear();
+        if (currentMeeting.getParticipants().isEmpty()) return;
         
-        // Count total videos (local + remote)
-        int numVideos = (localVideoTile != null ? 1 : 0) + videoTiles.size();
+        Participant speaker = currentMeeting.getParticipants().get(0);
+        StackPane speakerTile = createVideoTile(speaker);  // ESKİ METOD!
+        speakerViewPane.setCenter(speakerTile);
         
-        if (numVideos == 0) {
-            System.out.println("[MeetingPanel] No videos for speaker view");
-            return;
+        // ESKİ TASARIM: Other participants in right side strip
+        VBox otherParticipantsVBox = new VBox(10);
+        otherParticipantsVBox.setPadding(new Insets(0, 0, 0, 16));
+        otherParticipantsVBox.setAlignment(Pos.TOP_CENTER);
+        
+        for (int i = 1; i < currentMeeting.getParticipants().size(); i++) {
+            Participant p = currentMeeting.getParticipants().get(i);
+            StackPane smallTile = createVideoTile(p);  // ESKİ METOD!
+            smallTile.setPrefSize(160, 90);
+            smallTile.setMaxSize(160, 90);
+            otherParticipantsVBox.getChildren().add(smallTile);
         }
         
-        System.out.printf("[MeetingPanel] Updating speaker view: %d videos%n", numVideos);
-        
-        // For now, use the first available video as "active speaker"
-        // TODO: Implement voice activity detection to auto-switch
-        VideoTile activeSpeakerTile = null;
-        
-        // Priority: remote video first (more interesting), then local
-        if (!videoTiles.isEmpty()) {
-            activeSpeakerTile = videoTiles.values().iterator().next();
-        } else if (localVideoTile != null) {
-            activeSpeakerTile = localVideoTile;
-        }
-        
-        if (activeSpeakerTile == null) {
-            System.out.println("[MeetingPanel] No active speaker tile");
-            return;
-        }
-        
-        // CENTER: Large active speaker video (wrapped in StackPane for centering)
-        StackPane centerContainer = new StackPane(activeSpeakerTile.container);
-        centerContainer.setStyle("-fx-background-color: #0f172a;");
-        speakerViewPane.setCenter(centerContainer);
-        
-        // BOTTOM: Thumbnail strip of other participants (if any)
-        if (numVideos > 1) {
-            HBox thumbnailStrip = new HBox(12);
-            thumbnailStrip.setAlignment(Pos.CENTER);
-            thumbnailStrip.setPadding(new Insets(12));
-            thumbnailStrip.setStyle("-fx-background-color: rgba(15, 23, 42, 0.9);");
-            
-            // Add all tiles EXCEPT the active speaker as thumbnails
-            if (localVideoTile != null && localVideoTile != activeSpeakerTile) {
-                StackPane thumb = createThumbnailView(localVideoTile);
-                thumbnailStrip.getChildren().add(thumb);
-            }
-            
-            for (VideoTile tile : videoTiles.values()) {
-                if (tile != activeSpeakerTile) {
-                    StackPane thumb = createThumbnailView(tile);
-                    thumbnailStrip.getChildren().add(thumb);
-                }
-            }
-            
-            // Wrap in ScrollPane for many participants
-            ScrollPane scrollPane = new ScrollPane(thumbnailStrip);
-            scrollPane.setFitToHeight(true);
-            scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-            scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
-            scrollPane.setStyle("-fx-background: transparent; -fx-background-color: rgba(15, 23, 42, 0.9);");
-            scrollPane.setPrefHeight(160);
-            scrollPane.setMaxHeight(160);
-            
-            speakerViewPane.setBottom(scrollPane);
-        }
-    }
-    
-    /**
-     * Create a thumbnail view for speaker view bottom strip
-     * Creates a NEW container referencing the same VideoPanel
-     */
-    private StackPane createThumbnailView(VideoTile tile) {
-        // Create a small container showing the name and video preview
-        StackPane thumbnail = new StackPane();
-        thumbnail.setPrefSize(180, 120);
-        thumbnail.setMaxSize(180, 120);
-        thumbnail.setMinSize(180, 120);
-        thumbnail.setStyle("-fx-background-color: #1e293b; -fx-background-radius: 8;");
-        
-        // Add name label at bottom
-        Label nameLabel = new Label(tile.peerUsername);
-        nameLabel.setStyle("-fx-text-fill: white; -fx-font-size: 11px; -fx-background-color: rgba(0,0,0,0.6); -fx-padding: 4 8; -fx-background-radius: 4;");
-        StackPane.setAlignment(nameLabel, Pos.BOTTOM_CENTER);
-        StackPane.setMargin(nameLabel, new Insets(0, 0, 8, 0));
-        
-        // Note: We can't show the actual video here without duplicating the VideoPanel
-        // In a real implementation, we'd need to create a separate small VideoPanel
-        // For now, just show a placeholder with the name
-        VBox placeholder = new VBox(8);
-        placeholder.setAlignment(Pos.CENTER);
-        placeholder.setStyle("-fx-background-color: #334155;");
-        
-        FontIcon cameraIcon = new FontIcon("fas-video");
-        cameraIcon.setIconSize(24);
-        cameraIcon.setStyle("-fx-icon-color: #64748b;");
-        
-        placeholder.getChildren().addAll(cameraIcon, nameLabel);
-        thumbnail.getChildren().add(placeholder);
-        
-        // Click to make this the active speaker (cycle through speakers)
-        thumbnail.setOnMouseClicked(e -> {
-            updateSpeakerView();
-        });
-        thumbnail.setStyle(thumbnail.getStyle() + "; -fx-cursor: hand;");
-        
-        return thumbnail;
+        ScrollPane scrollPane = new ScrollPane(otherParticipantsVBox);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scrollPane.getStyleClass().add("sidebar-scroll-pane");
+        speakerViewPane.setRight(scrollPane);
     }
 
     /**
-     * Refresh grid layout - ONLY rearranges existing tiles, doesn't recreate them
-     * Call this when: participant joins/leaves, view switched to grid
+     * ESKİ TASARIM: Update video grid layout (participant-based)
+     * Her participant için tile oluşturur (camera on/off durumuna göre video veya avatar)
      */
-    private void refreshGridLayout() {
+    private void updateVideoGrid() {
         videoGrid.getChildren().clear();
         videoGrid.getColumnConstraints().clear();
         videoGrid.getRowConstraints().clear();
         
-        // Count total videos (local + remote)
-        int numVideos = (localVideoTile != null ? 1 : 0) + videoTiles.size();
+        int numParticipants = currentMeeting.getParticipants().size();
+        if (numParticipants == 0) return;
         
-        if (numVideos == 0) {
-            System.out.println("[MeetingPanel] No videos to display");
-            return;
-        }
+        // ESKİ TASARIM: Dynamic grid calculation
+        int numColumns = (int) Math.ceil(Math.sqrt(numParticipants));
+        int numRows = (int) Math.ceil((double) numParticipants / numColumns);
         
-        System.out.printf("[MeetingPanel] Refreshing grid layout: %d videos%n", numVideos);
-        
-        // ===== OPTIMIZED ADAPTIVE LAYOUT =====
-        int numColumns, numRows;
-        
-        switch (numVideos) {
-            case 1:
-                // Fullscreen
-                numColumns = 1;
-                numRows = 1;
-                break;
-            case 2:
-                // Side by side
-                numColumns = 2;
-                numRows = 1;
-                break;
-            case 3:
-            case 4:
-                // 2x2 grid
-                numColumns = 2;
-                numRows = 2;
-                break;
-            case 5:
-            case 6:
-                // 2x3 grid
-                numColumns = 3;
-                numRows = 2;
-                break;
-            case 7:
-            case 8:
-            case 9:
-                // 3x3 grid
-                numColumns = 3;
-                numRows = 3;
-                break;
-            default:
-                // 4x3 or larger, dynamic calculation
-                numColumns = 4;
-                numRows = (int) Math.ceil((double) numVideos / numColumns);
-                break;
-        }
-        
-        // Setup grid constraints
         for (int i = 0; i < numColumns; i++) {
             ColumnConstraints colConst = new ColumnConstraints();
             colConst.setPercentWidth(100.0 / numColumns);
@@ -848,11 +655,12 @@ public class MeetingPanelController {
         int col = 0;
         int row = 0;
         
-        // Add local video tile FIRST (self-preview)
-        if (localVideoTile != null) {
-            GridPane.setHgrow(localVideoTile.container, Priority.ALWAYS);
-            GridPane.setVgrow(localVideoTile.container, Priority.ALWAYS);
-            videoGrid.add(localVideoTile.container, col, row);
+        // ESKİ TASARIM: Participant-based layout
+        for (Participant p : currentMeeting.getParticipants()) {
+            StackPane tile = createVideoTile(p);  // ESKİ METOD!
+            GridPane.setHgrow(tile, Priority.ALWAYS);
+            GridPane.setVgrow(tile, Priority.ALWAYS);
+            videoGrid.add(tile, col, row);
             
             col++;
             if (col >= numColumns) {
@@ -860,105 +668,93 @@ public class MeetingPanelController {
                 row++;
             }
         }
-        
-        // Add remote peer video tiles
-        for (Map.Entry<String, VideoTile> entry : videoTiles.entrySet()) {
-            VideoTile tile = entry.getValue();
-            GridPane.setHgrow(tile.container, Priority.ALWAYS);
-            GridPane.setVgrow(tile.container, Priority.ALWAYS);
-            videoGrid.add(tile.container, col, row);
-            
-            col++;
-            if (col >= numColumns) {
-                col = 0;
-                row++;
-            }
-        }
-        
-        System.out.printf("[MeetingPanel] Grid layout: %dx%d for %d videos%n", 
-            numColumns, numRows, numVideos);
     }
     
     /**
-     * Create local video tile (self-preview) - CALL ONLY ONCE during initialization
+     * ESKİ TASARIM: Create video tile for participant
+     * YENİ: VideoPanel entegrasyonu eklendi
      */
-    private void createLocalVideoTile() {
-        if (localVideoTile != null) {
-            System.out.println("[MeetingPanel] Local video tile already exists, skipping creation");
-            return;
-        }
-        
-        localVideoTile = new VideoTile(currentUser.getName());
-        
-        // Attach local video track if available
-        if (groupCallManager != null) {
-            VideoTrack localTrack = groupCallManager.getLocalVideoTrack();
-            if (localTrack != null) {
-                System.out.println("[MeetingPanel] ✅ Attaching local video track to tile");
-                localVideoTile.attachVideoTrack(localTrack);
-            } else {
-                System.err.println("[MeetingPanel] ❌ Local video track is NULL - cannot display self-preview");
-                System.err.println("[MeetingPanel] Camera state: " + currentUser.isCameraOn());
-            }
-        } else {
-            System.err.println("[MeetingPanel] ❌ GroupCallManager is NULL");
-        }
-        
-        // Set mute state
-        localVideoTile.setMuted(currentUser.isMuted());
-        
-        System.out.println("[MeetingPanel] Local video tile created");
-    }
-    
-    /**
-     * Dispose local video tile - CALL ONLY when leaving meeting or toggling camera off
-     */
-    private void disposeLocalVideoTile() {
-        if (localVideoTile != null) {
-            localVideoTile.dispose();
-            localVideoTile = null;
-            System.out.println("[MeetingPanel] Local video tile disposed");
-        }
-    }
-
-    // OLD METHOD - kept for reference, not used in group calls
-    /*
     private StackPane createVideoTile(Participant participant) {
         StackPane tile = new StackPane();
         tile.getStyleClass().add("video-tile");
+        
+        // Camera OFF: Avatar göster (ESKİ TASARIM)
         if (!participant.isCameraOn()) {
             Label avatarLabel = new Label(participant.getName().substring(0, 1));
             avatarLabel.getStyleClass().add("video-tile-avatar-label");
             tile.getChildren().add(avatarLabel);
+        } else {
+            // Camera ON: VideoPanel ekle (YENİ)
+            VideoPanel videoPanel = new VideoPanel(320, 240);
+            videoPanel.widthProperty().bind(tile.widthProperty());
+            videoPanel.heightProperty().bind(tile.heightProperty());
+            
+            // Attach video track if available
+            VideoTrack track = getVideoTrackForParticipant(participant);
+            if (track != null) {
+                videoPanel.attachVideoTrack(track);
+            }
+            
+            tile.getChildren().add(videoPanel);
+            
+            // Store VideoPanel reference for cleanup
+            videoPanelMap.put(participant, videoPanel);
         }
+        
+        // ESKİ TASARIM: Name tag overlay (DEĞİŞMEDİ)
         HBox nameTag = new HBox(6);
         nameTag.setAlignment(Pos.CENTER_LEFT);
         nameTag.getStyleClass().add("video-tile-nametag");
+        
         FontIcon micIcon = new FontIcon(participant.isMuted() ? "fas-microphone-slash" : "fas-microphone");
         micIcon.getStyleClass().add("video-tile-mic-icon");
         if (participant.isMuted()) micIcon.getStyleClass().add("icon-danger");
+        
         Label nameLabel = new Label(participant.getName());
         nameLabel.getStyleClass().add("video-tile-name-label");
+        
         nameTag.getChildren().addAll(micIcon, nameLabel);
         StackPane.setAlignment(nameTag, Pos.BOTTOM_LEFT);
         StackPane.setMargin(nameTag, new Insets(10));
+        
         tile.getChildren().add(nameTag);
         return tile;
     }
-    */
+    
+    /**
+     * Get video track for participant (local or remote)
+     */
+    private VideoTrack getVideoTrackForParticipant(Participant participant) {
+        // Local user: get from GroupCallManager
+        if (participant == currentUser) {
+            if (groupCallManager != null) {
+                return groupCallManager.getLocalVideoTrack();
+            }
+            return null;
+        }
+        
+        // Remote peer: get from remoteVideoTracks map
+        return remoteVideoTracks.get(participant.getName());
+    }
+    
+    /**
+     * Dispose all video panels (cleanup)
+     */
+    private void disposeAllVideoPanels() {
+        for (VideoPanel panel : videoPanelMap.values()) {
+            if (panel != null) {
+                panel.dispose();
+            }
+        }
+        videoPanelMap.clear();
+    }
 
     @FXML
     private void leaveMeeting() {
         System.out.println("[MeetingPanel] Leaving meeting...");
         
-        // Dispose local video tile
-        disposeLocalVideoTile();
-        
-        // Dispose all remote video tiles
-        for (VideoTile tile : videoTiles.values()) {
-            tile.dispose();
-        }
-        videoTiles.clear();
+        // Dispose all video panels (ESKİ TASARIM uyumlu cleanup)
+        disposeAllVideoPanels();
         
         // Cleanup group call (this closes all peer connections and releases camera)
         if (groupCallManager != null) {
@@ -977,6 +773,9 @@ public class MeetingPanelController {
             signalingClient.stopSignalingStream();
             System.out.println("[MeetingPanel] Signaling stream stopped");
         }
+        
+        // Clear remote tracks
+        remoteVideoTracks.clear();
         
         // Ana pencereye geri dön (content değiştirme yaklaşımı)
         if (mainController != null) {
