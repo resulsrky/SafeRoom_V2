@@ -46,7 +46,7 @@ public class MeetingPanelController {
     @FXML private ToggleButton participantsToggle;
     @FXML private ToggleButton chatToggle;
     @FXML private ScrollPane participantsScrollPane;
-    @FXML private BorderPane meetingChatView;
+    @FXML private StackPane meetingChatView;
     @FXML private ChatViewController meetingChatViewController;
     @FXML private GridPane videoGrid;
     @FXML private BorderPane speakerViewPane;
