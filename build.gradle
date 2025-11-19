@@ -7,8 +7,12 @@ plugins {
 
 group = 'com.saferoom'
 version = '1.0'
-sourceCompatibility = '17'
-targetCompatibility = '17'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
 
 repositories {
     mavenCentral()
@@ -122,5 +126,19 @@ javafx {
 // Duplicate handling strategy
 processResources {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs += '--enable-preview'
+    options.release = 21
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+    jvmArgs += '--enable-preview'
+}
+
+tasks.withType(JavaExec).configureEach {
+    jvmArgs += '--enable-preview'
 }
 

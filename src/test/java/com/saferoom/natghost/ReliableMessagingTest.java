@@ -26,7 +26,7 @@ public class ReliableMessagingTest {
         );
         
         // Verify packet size
-        int expectedSize = 67 + data.length; // 67 header + payload
+        int expectedSize = 69 + data.length; // 69 header + payload
         assertEquals(expectedSize, packet.limit());
         
         // Parse packet
@@ -50,13 +50,13 @@ public class ReliableMessagingTest {
     
     @Test
     public void testDataChunkPacket_MaxPayload() {
-        // Test with maximum payload (1133 bytes)
+        // Test with maximum payload (1131 bytes)
         String sender = "alice";
         String receiver = "bob";
         long messageId = 99999L;
         int chunkId = 5;
         int totalChunks = 10;
-        byte[] data = new byte[1133];
+        byte[] data = new byte[1131];
         for (int i = 0; i < data.length; i++) {
             data[i] = (byte) (i % 256);
         }
@@ -201,7 +201,7 @@ public class ReliableMessagingTest {
             largeMessage[i] = (byte) (i % 256);
         }
         
-        int chunkSize = 1133; // Max payload per chunk
+        int chunkSize = 1131; // Max payload per chunk
         int totalChunks = (largeMessage.length + chunkSize - 1) / chunkSize;
         
         System.out.println("📦 Chunking 5000 bytes into " + totalChunks + " chunks:");
