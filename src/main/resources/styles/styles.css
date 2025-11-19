@@ -871,7 +871,50 @@
 
 
 
+/* =================================================================
+   CHAT CONTEXT MENU STYLES (FINAL OVERRIDE)
+   ================================================================= */
 
+/* 1. İKON RENGİNİN BEYAZ OLMASINI ZORLA */
+/* İkonu ezilmeyen en yüksek öncelikle hedefliyoruz */
+.chat-context-menu .menu-item .font-icon { 
+    -fx-icon-color: white !important; 
+    -fx-icon-size: 18px;
+}
+
+/* 2. HAREKET VE TİTREMEYİ SIFIRLA */
+.chat-context-menu .menu-item {
+    /* Genel item'lara sıfırlama uyguluyoruz */
+    -fx-scale-x: 1.0 !important;
+    -fx-scale-y: 1.0 !important;
+    -fx-translate-y: 0 !important;
+    
+    /* Çerçeve ve Arkaplanı düzenle */
+    -fx-background-color: transparent;
+    -fx-padding: 10px 12px !important;
+    -fx-background-radius: 8px;
+}
+
+/* 3. HOVER/FOCUSED STİLİ (Titremesiz Vurgu) */
+.chat-context-menu .menu-item:focused {
+    /* Vurgu Rengi: Kontrastı yüksek, temiz bir mavi kullanıyoruz */
+    -fx-background-color: #4A3B70 !important; 
+    
+    /* Vurgu anında bile boyutta/konumda değişiklik olmasın diye tekrar sıfırlıyoruz */
+    -fx-scale-x: 1.0 !important;
+    -fx-translate-x: 0 !important;
+    -fx-effect: none !important;
+    
+    /* Yazı ve İkonlar Beyaz Kalmalı */
+    -fx-text-fill: white !important;
+    -fx-icon-color: white !important;
+}
+
+/* 4. YAZI RENGİ (Normal Durum) */
+.chat-context-menu .menu-item .label {
+    -fx-text-fill: #e2e8f0 !important; 
+    -fx-font-weight: 600;
+}
 
 
 
