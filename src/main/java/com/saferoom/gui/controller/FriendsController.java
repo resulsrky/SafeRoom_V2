@@ -39,9 +39,6 @@ public class FriendsController {
 
     @FXML private VBox friendsContainer;
     @FXML private HBox filterBar;
-    @FXML private Label totalFriendsLabel;
-    @FXML private Label onlineFriendsLabel;
-    @FXML private Label pendingFriendsLabel;
     @FXML private TextField searchField;
     @FXML private ListView<Map<String, Object>> searchResultsList;
 
@@ -49,15 +46,16 @@ public class FriendsController {
     private final ObservableList<Friend> pendingFriends = FXCollections.observableArrayList();
     private Timeline searchDebouncer;
     private Timeline friendsRefresher;
+    private ListView<Friend> friendsListViewInstance;
 
     @FXML
     public void initialize() {
         // Search functionality setup
         setupSearchFunctionality();
-        
+
         // Load real data from backend
         loadFriendsData();
-        loadStats();
+
 
         // Setup filter buttons
         setupFilterButtons();
@@ -65,7 +63,7 @@ public class FriendsController {
         // Set "All" as the default active tab on initialization
         filterBar.getChildren().get(1).getStyleClass().add("active-tab");
         loadAllFriends();
-        
+
         // Setup auto-refresh for friends list every 30 seconds
         setupAutoRefresh();
     }
@@ -77,49 +75,49 @@ public class FriendsController {
         CompletableFuture.supplyAsync(() -> {
             try {
                 String currentUser = UserSession.getInstance().getDisplayName();
-                
+
                 // Arkadaş listesini getir
-                com.saferoom.grpc.SafeRoomProto.FriendsListResponse friendsResponse = 
-                    ClientMenu.getFriendsList(currentUser);
-                
+                com.saferoom.grpc.SafeRoomProto.FriendsListResponse friendsResponse =
+                        ClientMenu.getFriendsList(currentUser);
+
                 // Pending istekleri getir
-                com.saferoom.grpc.SafeRoomProto.PendingRequestsResponse pendingResponse = 
-                    ClientMenu.getPendingFriendRequests(currentUser);
-                
+                com.saferoom.grpc.SafeRoomProto.PendingRequestsResponse pendingResponse =
+                        ClientMenu.getPendingFriendRequests(currentUser);
+
                 if (friendsResponse.getSuccess()) {
                     // Friends listesini güncelle
                     allFriends.clear();
                     for (com.saferoom.grpc.SafeRoomProto.FriendInfo friendInfo : friendsResponse.getFriendsList()) {
-                        String status = friendInfo.getIsOnline() ? "Online" : 
-                                       (friendInfo.getIsVerified() ? "Offline" : "Not Verified");
+                        String status = friendInfo.getIsOnline() ? "Online" :
+                                (friendInfo.getIsVerified() ? "Offline" : "Not Verified");
                         String lastSeen = friendInfo.getLastSeen().isEmpty() ? "Never" : friendInfo.getLastSeen();
                         String activity = friendInfo.getIsOnline() ? "Active now" : "Last seen: " + lastSeen;
-                        
+
                         Friend friend = new Friend(
-                            friendInfo.getUsername(), 
-                            status,
-                            activity, 
-                            friendInfo.getIsOnline() ? "🟢" : "🔴"
+                                friendInfo.getUsername(),
+                                status,
+                                activity,
+                                friendInfo.getIsOnline() ? "🟢" : "🔴"
                         );
                         allFriends.add(friend);
                     }
                 }
-                
+
                 if (pendingResponse.getSuccess()) {
                     // Pending listesini güncelle
                     pendingFriends.clear();
                     for (com.saferoom.grpc.SafeRoomProto.FriendRequestInfo requestInfo : pendingResponse.getRequestsList()) {
                         Friend pendingFriend = new Friend(
-                            requestInfo.getSender(),
-                            "Friend Request",
-                            "Sent: " + requestInfo.getSentAt(),
-                            "Pending",
-                            requestInfo.getRequestId() // requestId'yi ekle
+                                requestInfo.getSender(),
+                                "Friend Request",
+                                "Sent: " + requestInfo.getSentAt(),
+                                "Pending",
+                                requestInfo.getRequestId()
                         );
                         pendingFriends.add(pendingFriend);
                     }
                 }
-                
+
                 return true;
             } catch (Exception e) {
                 System.err.println("❌ Error loading friends data: " + e.getMessage());
@@ -130,56 +128,14 @@ public class FriendsController {
             Platform.runLater(() -> {
                 if (success) {
                     System.out.println("✅ Friends data loaded successfully");
-                    updateStats();
+                    // --- ÇAĞRI KALDIRILDI ---
+                    // updateStats();
+                    // -----------------------
                 } else {
                     System.out.println("❌ Failed to load friends data");
                 }
             });
         });
-    }
-
-    /**
-     * İstatistikleri yükle
-     */
-    private void loadStats() {
-        CompletableFuture.supplyAsync(() -> {
-            try {
-                String currentUser = UserSession.getInstance().getDisplayName();
-                com.saferoom.grpc.SafeRoomProto.FriendshipStatsResponse statsResponse = 
-                    ClientMenu.getFriendshipStats(currentUser);
-                
-                if (statsResponse.getSuccess()) {
-                    return statsResponse.getStats();
-                }
-                return null;
-            } catch (Exception e) {
-                System.err.println("❌ Error loading stats: " + e.getMessage());
-                return null;
-            }
-        }).thenAcceptAsync(stats -> {
-            Platform.runLater(() -> {
-                if (stats != null) {
-                    totalFriendsLabel.setText(String.valueOf(stats.getTotalFriends()));
-                    pendingFriendsLabel.setText(String.valueOf(stats.getPendingRequests()));
-                    // Online friends için basit hesaplama (gerçek implementation'da online tracking gerekir)
-                    onlineFriendsLabel.setText("0"); // TODO: Implement online tracking
-                }
-            });
-        });
-    }
-
-    /**
-     * İstatistikleri güncelle
-     */
-    private void updateStats() {
-        totalFriendsLabel.setText(String.valueOf(allFriends.size()));
-        pendingFriendsLabel.setText(String.valueOf(pendingFriends.size()));
-        
-        // Online friends hesapla
-        long onlineCount = allFriends.stream()
-            .filter(Friend::isOnline)
-            .count();
-        onlineFriendsLabel.setText(String.valueOf(onlineCount));
     }
 
     /**
@@ -215,6 +171,7 @@ public class FriendsController {
         }
     }
 
+
     /**
      * Tüm arkadaşları göster
      */
@@ -226,6 +183,7 @@ public class FriendsController {
      * Online arkadaşları göster
      */
     private void loadOnlineFriends() {
+
         ObservableList<Friend> onlineFriends = allFriends.stream()
             .filter(Friend::isOnline)
             .collect(Collectors.toCollection(FXCollections::observableArrayList));
@@ -271,7 +229,7 @@ public class FriendsController {
     private void setupSearchFunctionality() {
         // Debouncing - 500ms bekle, sonra ara
         searchDebouncer = new Timeline(new KeyFrame(Duration.millis(500), e -> performSearch()));
-        
+
         searchField.textProperty().addListener((obs, oldText, newText) -> {
             searchDebouncer.stop();
             if (newText != null && newText.trim().length() >= 2) {
@@ -282,10 +240,10 @@ public class FriendsController {
                 searchResultsList.setVisible(false);
             }
         });
-        
+
         // Search results cell factory
         searchResultsList.setCellFactory(listView -> new SearchResultCell());
-        
+
         // Başka yere tıklayınca search results'ı gizle
         searchField.focusedProperty().addListener((obs, wasFocused, isNowFocused) -> {
             if (!isNowFocused) {
@@ -302,9 +260,9 @@ public class FriendsController {
     private void performSearch() {
         String searchTerm = searchField.getText().trim();
         if (searchTerm.length() < 2) return;
-        
+
         System.out.println("🔍 Searching for: '" + searchTerm + "'");
-        
+
         // Background thread'de arama yap
         CompletableFuture.supplyAsync(() -> {
             try {
@@ -327,15 +285,48 @@ public class FriendsController {
         });
     }
 
+    // FriendsController.java
+
     private void updateFriendsList(ObservableList<Friend> friends, String header) {
+        // VBox içindeki eski başlıkları/listeyi temizle
         friendsContainer.getChildren().clear();
-        if (friends != null && !friends.isEmpty()) {
-            ListView<Friend> listView = new ListView<>(friends);
-            listView.getStyleClass().add("friends-list-view");
-            listView.setCellFactory(param -> new FriendCell());
-            VBox.setVgrow(listView, Priority.ALWAYS);
-            friendsContainer.getChildren().add(listView);
+
+        // 1. BAŞLIK EKLE (Hücre sayısını gösteren Label)
+        Label listHeaderLabel = new Label(header + " - " + friends.size());
+        if (header.equals("Online Friends")) {
+            // Eğer başlık Online ise, yeşil stili uygula
+            listHeaderLabel.getStyleClass().add("friends-header-online");
+        } else {
+            // Diğer sekmeler için varsayılan stil
+            listHeaderLabel.getStyleClass().add("friends-list-header");
+        } // Yeni stil sınıfı ekleyebiliriz
+        friendsContainer.getChildren().add(listHeaderLabel);
+
+        // 2. LISTVIEW'I TEKRAR KULLAN VEYA YENİ OLUŞTUR
+        if (this.friendsListViewInstance == null) {
+            // İlk Çalıştırma: ListView'ı oluştur ve referansı kaydet
+            this.friendsListViewInstance = new ListView<>(friends);
+            this.friendsListViewInstance.getStyleClass().add("friends-list-view");
+
+            // İlk CellFactory ataması
+            this.friendsListViewInstance.setCellFactory(param -> header.contains("Pending")
+                    ? new PendingRequestCell()
+                    : new FriendCell());
+
+            VBox.setVgrow(this.friendsListViewInstance, Priority.ALWAYS);
+
+        } else {
+            // Tekrar Kullanım: Sadece veriyi güncelle
+            this.friendsListViewInstance.setItems(friends);
+
+            // Factory'yi güncelle (Sekmeler arası geçişte hücre tipini korumak için)
+            this.friendsListViewInstance.setCellFactory(param -> header.contains("Pending")
+                    ? new PendingRequestCell()
+                    : new FriendCell());
         }
+
+        // 3. VBox'a ekle (Tek bir ListView nesnesi kullanılıyor)
+        friendsContainer.getChildren().add(this.friendsListViewInstance);
     }
 
     // Search result cell for user search
@@ -354,7 +345,7 @@ public class FriendsController {
             nameLabel.getStyleClass().add("search-result-name");
             emailLabel.getStyleClass().add("search-result-email");
             addButton.getStyleClass().add("search-add-button");
-            
+
             userInfo.getChildren().addAll(nameLabel, emailLabel);
             HBox.setHgrow(spacer, Priority.ALWAYS);
             hbox.getChildren().addAll(avatar, userInfo, spacer, addButton);
@@ -373,10 +364,10 @@ public class FriendsController {
                 String email = (String) user.get("email");
                 Boolean isFriend = (Boolean) user.get("is_friend");
                 Boolean hasPending = (Boolean) user.get("has_pending_request");
-                
+
                 nameLabel.setText(username);
                 emailLabel.setText(email);
-                
+
                 // Avatar letter
                 if (username != null && !username.isEmpty()) {
                     // Create a label for avatar text instead of circle
@@ -385,16 +376,16 @@ public class FriendsController {
                     avatarText.setMinSize(30, 30);
                     avatarText.setMaxSize(30, 30);
                     avatarText.setAlignment(Pos.CENTER);
-                    
+
                     // Replace circle with label in hbox
                     hbox.getChildren().set(0, avatarText);
                 }
-                
+
                 // Update button based on friendship status
                 System.out.println("🔍 UpdateItem for " + username + ":");
                 System.out.println("  - is_friend: " + isFriend);
                 System.out.println("  - has_pending_request: " + hasPending);
-                
+
                 if (isFriend != null && isFriend) {
                     addButton.setText("Delete Friend");
                     addButton.getStyleClass().removeAll("search-add-button", "pending-button");
@@ -413,14 +404,14 @@ public class FriendsController {
                     addButton.setDisable(false);
                     addButton.setOnAction(e -> sendFriendRequest(username));
                 }
-                
+
                 // Add click handler for profile view
                 setOnMouseClicked(e -> {
                     if (e.getClickCount() == 1) { // Single click to view profile
                         openProfile(username);
                     }
                 });
-                
+
                 setGraphic(hbox);
             }
         }
@@ -431,7 +422,7 @@ public class FriendsController {
         CompletableFuture.supplyAsync(() -> {
             try {
                 String currentUser = UserSession.getInstance().getDisplayName();
-                com.saferoom.grpc.SafeRoomProto.FriendResponse response = 
+                com.saferoom.grpc.SafeRoomProto.FriendResponse response =
                     ClientMenu.sendFriendRequest(currentUser, username);
                 return response;
             } catch (Exception e) {
@@ -450,7 +441,7 @@ public class FriendsController {
             });
         });
     }
-    
+
     /**
      * Arkadaşlık isteğini kabul et
      */
@@ -459,7 +450,7 @@ public class FriendsController {
         CompletableFuture.supplyAsync(() -> {
             try {
                 String currentUser = UserSession.getInstance().getDisplayName();
-                com.saferoom.grpc.SafeRoomProto.Status response = 
+                com.saferoom.grpc.SafeRoomProto.Status response =
                     ClientMenu.acceptFriendRequest(requestId, currentUser);
                 return response;
             } catch (Exception e) {
@@ -483,7 +474,7 @@ public class FriendsController {
             });
         });
     }
-    
+
     /**
      * Arkadaşlık isteğini reddet
      */
@@ -492,7 +483,7 @@ public class FriendsController {
         CompletableFuture.supplyAsync(() -> {
             try {
                 String currentUser = UserSession.getInstance().getDisplayName();
-                com.saferoom.grpc.SafeRoomProto.Status response = 
+                com.saferoom.grpc.SafeRoomProto.Status response =
                     ClientMenu.rejectFriendRequest(requestId, currentUser);
                 return response;
             } catch (Exception e) {
@@ -516,13 +507,13 @@ public class FriendsController {
             });
         });
     }
-    
+
     private static FriendsController currentInstance;
-    
+
     public FriendsController() {
         currentInstance = this;
     }
-    
+
     private static FriendsController getCurrentInstance() {
         return currentInstance;
     }
@@ -564,7 +555,7 @@ public class FriendsController {
                     openMessagesWithUser(friendName);
                 }
             });
-            
+
             // Add hover effect for message icon
             messageIcon.setOnMouseEntered(e -> messageIcon.setStyle("-fx-cursor: hand;"));
             messageIcon.setOnMouseExited(e -> messageIcon.setStyle("-fx-cursor: default;"));
@@ -623,7 +614,7 @@ public class FriendsController {
             avatar.getStyleClass().add("friend-avatar");
             nameLabel.getStyleClass().add("friend-name");
             statusLabel.getStyleClass().add("friend-status");
-            
+
             acceptButton.getStyleClass().add("accept-button");
             rejectButton.getStyleClass().add("reject-button");
 
@@ -672,7 +663,7 @@ public class FriendsController {
             }
         }
     }
-    
+
     private static void openProfile(String username) {
         System.out.println("Opening profile for: " + username);
         try {
@@ -684,7 +675,7 @@ public class FriendsController {
             System.err.println("Error opening profile: " + e.getMessage());
         }
     }
-    
+
     /**
      * Auto-refresh setup for friends list
      */
@@ -697,19 +688,19 @@ public class FriendsController {
         friendsRefresher.setCycleCount(Timeline.INDEFINITE);
         friendsRefresher.play();
     }
-    
+
      /**
       * Message butonuna tıklandığında Messages sekmesine geç ve o kullanıcıyla sohbet başlat
       */
      private static void openMessagesWithUser(String username) {
          System.out.println("💬 Opening messages with: " + username);
-         
+
          try {
              MainController mainController = MainController.getInstance();
              if (mainController != null) {
                  // Messages sekmesine geç
                  mainController.handleMessages();
-                 
+
                  // MessagesController'da belirli kullanıcıyla sohbet başlat
                  MessagesController.openChatWithUser(username);
                  System.out.println("📱 Switched to Messages tab for user: " + username);
@@ -718,7 +709,7 @@ public class FriendsController {
              System.err.println("Error opening messages: " + e.getMessage());
          }
      }
-    
+
     /**
      * Arkadaşlığı sonlandır
      */
@@ -727,7 +718,7 @@ public class FriendsController {
         CompletableFuture.supplyAsync(() -> {
             try {
                 String currentUser = UserSession.getInstance().getDisplayName();
-                com.saferoom.grpc.SafeRoomProto.Status response = 
+                com.saferoom.grpc.SafeRoomProto.Status response =
                     ClientMenu.removeFriend(currentUser, username);
                 return response;
             } catch (Exception e) {
