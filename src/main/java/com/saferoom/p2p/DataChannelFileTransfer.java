@@ -92,27 +92,34 @@ public class DataChannelFileTransfer {
     
     public void startReceiver(Path downloadPath) {
         if (receiverStarted) {
-            System.out.printf("[DCFileTransfer] ⚠️  Receiver already started for %s%n", username);
+            System.out.printf("[DCFileTransfer] Receiver already started for %s%n", username);
             return;
         }
         
         receiverStarted = true;
+        
+        System.out.println("[FT-RECV] ═══════════════════════════════════════════════════");
+        System.out.printf("[FT-RECV] startReceiver() called at %d%n", System.currentTimeMillis());
+        System.out.printf("[FT-RECV] Thread: %s%n", Thread.currentThread().getName());
+        System.out.printf("[FT-RECV] Download path: %s%n", downloadPath);
+        System.out.println("[FT-RECV] ═══════════════════════════════════════════════════");
         
         executor.execute(() -> {
             try {
                 downloadPath.getParent().toFile().mkdirs();
                 receiver.filePath = downloadPath;
                 
-                System.out.printf("[DCFileTransfer] 📥 Receiver started: %s%n", downloadPath);
+                System.out.printf("[FT-RECV] Receiver thread started, calling ReceiveData()...%n");
                 receiver.ReceiveData();
                 
-                System.out.printf("[DCFileTransfer] ✅ Received: %s%n", downloadPath);
+                System.out.printf("[DCFileTransfer] Received: %s%n", downloadPath);
                 
                 if (transferCallback != null) {
                     transferCallback.onFileReceived(username, receiver.fileId, downloadPath, receiver.file_size);
                 }
             } catch (Exception e) {
-                System.err.printf("[DCFileTransfer] ❌ Receive error: %s%n", e.getMessage());
+                System.err.printf("[DCFileTransfer] Receive error: %s%n", e.getMessage());
+                e.printStackTrace();
             } finally {
                 receiverStarted = false;
             }
@@ -132,7 +139,7 @@ public class DataChannelFileTransfer {
                         fileId = dup.getLong();
                     }
                 }
-                System.out.printf("[DCFileTransfer] 🔔 SYN received without prepared receiver - starting fallback receiver (fileId=%d)%n",
+                System.out.printf("[DCFileTransfer] SYN received without prepared receiver - starting fallback receiver (fileId=%d)%n",
                     fileId);
                 startPreparedReceiver(fileId);
             }
@@ -155,7 +162,7 @@ public class DataChannelFileTransfer {
         String sanitized = sanitizeFileName(Optional.ofNullable(originalName).orElse("file.bin"));
         Path target = downloadsDir.resolve(fileId + "_" + sanitized);
         pendingDownloadPaths.put(fileId, target);
-        System.out.printf("[DCFileTransfer] 📦 Incoming file registered: %s%n", target);
+        System.out.printf("[DCFileTransfer] Incoming file registered: %s%n", target);
         return target;
     }
     
@@ -164,7 +171,15 @@ public class DataChannelFileTransfer {
         if (target == null) {
             target = createDefaultDownloadPath(fileId);
         }
-        System.out.printf("[DCFileTransfer] 📥 Prepared receiver for fileId=%d -> %s%n", fileId, target);
+        
+        System.out.println("[FT-RECV] ╔════════════════════════════════════════════════");
+        System.out.printf("[FT-RECV] ║ startPreparedReceiver() called%n");
+        System.out.printf("[FT-RECV] ║ fileId: %d%n", fileId);
+        System.out.printf("[FT-RECV] ║ target: %s%n", target);
+        System.out.printf("[FT-RECV] ║ thread: %s%n", Thread.currentThread().getName());
+        System.out.printf("[FT-RECV] ║ receiverStarted: %s%n", receiverStarted);
+        System.out.println("[FT-RECV] ╚════════════════════════════════════════════════");
+        
         startReceiver(target);
     }
     

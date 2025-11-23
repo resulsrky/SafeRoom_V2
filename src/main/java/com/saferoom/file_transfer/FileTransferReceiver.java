@@ -34,6 +34,14 @@ public class FileTransferReceiver {
 	
 	public  boolean handshake()
 	{
+		System.out.println("[RECEIVER-HANDSHAKE] ╔════════════════════════════════════════════════");
+		System.out.println("[RECEIVER-HANDSHAKE] ║ handshake() ENTERED");
+		System.out.printf("[RECEIVER-HANDSHAKE] ║ Thread: %s%n", Thread.currentThread().getName());
+		System.out.printf("[RECEIVER-HANDSHAKE] ║ Channel connected: %s%n", 
+			channel != null ? channel.isConnected() : "NULL");
+		System.out.println("[RECEIVER-HANDSHAKE] ║ Polling for SYN packet...");
+		System.out.println("[RECEIVER-HANDSHAKE] ╚════════════════════════════════════════════════");
+		
 		if(channel == null){
 			throw new IllegalStateException("Datagram Channel is null you must bind and connect first");
 		}
@@ -52,7 +60,7 @@ public class FileTransferReceiver {
 		try{
 			do{
 				if(System.nanoTime() > handshakeDeadline) {
-					System.err.println("❌ Handshake timeout after 30 seconds (attempts: " + receiveAttempts + ")");
+					System.err.println("Handshake timeout after 30 seconds (attempts: " + receiveAttempts + ")");
 					return false;
 				}
 				
@@ -62,9 +70,10 @@ public class FileTransferReceiver {
 				senderAddress = channel.receive(rcv_syn);
 				receiveAttempts++;
 				
-				// DEBUG: Log every 1000 attempts
-				if(receiveAttempts % 1000 == 0) {
-					System.out.println("⏳ Waiting for SYN... (attempts: " + receiveAttempts + ")");
+				// DEBUG: Log every 100 attempts
+				if(receiveAttempts % 100 == 0) {
+					System.out.printf("[RECEIVER-HANDSHAKE] Still waiting for SYN... (attempt %d)%n", 
+						receiveAttempts);
 				}
 				
 				if(senderAddress == null) {
@@ -72,7 +81,8 @@ public class FileTransferReceiver {
 					continue;
 				}
 				
-				System.out.println("📬 Received packet from: " + senderAddress + " (size: " + rcv_syn.position() + " bytes)");
+				System.out.printf("[RECEIVER-HANDSHAKE] Packet received from: %s (size: %d bytes)%n", 
+					senderAddress, rcv_syn.position());
 				
 				r = rcv_syn.position();
 				if( r == 0 || r != HandShake_Packet.HEADER_SIZE || HandShake_Packet.get_signal(rcv_syn) != HandShake_Packet.SYN) {
@@ -88,7 +98,7 @@ public class FileTransferReceiver {
 		file_size = HandShake_Packet.get_file_size(rcv_syn);
 		total_seq = HandShake_Packet.get_total_seq(rcv_syn);
 		
-		System.out.printf("[RECEIVER-HANDSHAKE] ✅ SYN received: fileId=%d, size=%d, chunks=%d%n", 
+		System.out.printf("[RECEIVER-HANDSHAKE] SYN received: fileId=%d, size=%d, chunks=%d%n", 
 			fileId, file_size, total_seq);
 		
 		if(fileId != 0 && file_size != 0 && total_seq != 0)
@@ -97,19 +107,19 @@ public class FileTransferReceiver {
 			 try {
 				 if(!channel.isConnected()) {
 					 channel.connect(senderAddress);
-					 System.out.println("🔗 Sender'a bağlandı: " + senderAddress);
+					 System.out.println("Sender'a bağlandı: " + senderAddress);
 				 } else {
-					 System.out.println("🔗 Already connected to: " + senderAddress);
+					 System.out.println("Already connected to: " + senderAddress);
 				 }
 			 } catch(IOException e) {
-				 System.err.println("❌ Sender'a bağlanma hatası: " + e);
+				 System.err.println("Sender'a bağlanma hatası: " + e);
 				 return false;
 			 }
 			 
 			 HandShake_Packet ack_pkt = new HandShake_Packet();
 			ack_pkt.make_ACK(fileId, file_size, total_seq);
 			
-			System.out.printf("[RECEIVER-HANDSHAKE] 📤 Sending ACK for fileId=%d%n", fileId);
+			System.out.printf("[RECEIVER-HANDSHAKE] Sending ACK for fileId=%d%n", fileId);
 			
 			try{
 			int bytesSent = 0;
@@ -118,9 +128,9 @@ public class FileTransferReceiver {
 				ack_pkt.resetForRetransmitter();
 				LockSupport.parkNanos(200_000);
 			}
-			System.out.printf("[RECEIVER-HANDSHAKE] ✅ ACK sent: %d bytes%n", bytesSent);
+			System.out.printf("[RECEIVER-HANDSHAKE] ACK sent: %d bytes%n", bytesSent);
 			}catch(IOException e){
-				System.err.println("[RECEIVER-HANDSHAKE] ❌ ACK send error: " + e);
+				System.err.println("[RECEIVER-HANDSHAKE] ACK send error: " + e);
 			}
 
 			int t;
@@ -162,7 +172,7 @@ public class FileTransferReceiver {
 				if (file_size <= MAX_FILE_SIZE) {
 					mem_buf = fc.map(FileChannel.MapMode.READ_WRITE, 0, file_size);
 				} else {
-					System.out.println("⚠️  Large file detected (" + (file_size >> 20) + " MB) - using chunked I/O");
+					System.out.println("Large file detected (" + (file_size >> 20) + " MB) - using chunked I/O");
 					mem_buf = null; // Signal to use ChunkManager
 				}
 
@@ -183,7 +193,7 @@ public class FileTransferReceiver {
 	
 	// Data transfer başlıyor - timing başlat
 	transferStartTime = System.currentTimeMillis();
-	System.out.println("📊 Data transfer başladı - timing başlatıldı");
+	System.out.println("Data transfer başladı - timing başlatıldı");
 	
 	// Enhanced NackSender with congestion control - RTT measurement aktif!
 	HybridCongestionController receiverCongestionControl = new HybridCongestionController();
@@ -237,7 +247,7 @@ public class FileTransferReceiver {
 			completionFrame.flip();
 			
 			channel.write(completionFrame);
-			System.out.println("✅ Transfer completion signal sent to sender");
+			System.out.println("Transfer completion signal sent to sender");
 			
 			// Signal'ın gönderilmesi için kısa bir bekleme
 			Thread.sleep(100);

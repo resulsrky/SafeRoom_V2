@@ -49,8 +49,17 @@ public class EnhancedFileTransferSender {
 	        this.stopRequested = true;
 	    }
 
-		public boolean handshake(long fileId, long file_size, int total_seq) throws IOException {
-		if(channel == null) throw new IllegalStateException("Datagram Channel is null you must bind and connect first");
+	public boolean handshake(long fileId, long file_size, int total_seq) throws IOException {
+	System.out.println("[SENDER-HANDSHAKE] ╔════════════════════════════════════════════════");
+	System.out.println("[SENDER-HANDSHAKE] ║ handshake() ENTERED");
+	System.out.printf("[SENDER-HANDSHAKE] ║ Thread: %s%n", Thread.currentThread().getName());
+	System.out.printf("[SENDER-HANDSHAKE] ║ fileId=%d, size=%d, chunks=%d%n", 
+		fileId, file_size, total_seq);
+	System.out.printf("[SENDER-HANDSHAKE] ║ Channel connected: %s%n", 
+		channel != null ? channel.isConnected() : "NULL");
+	System.out.println("[SENDER-HANDSHAKE] ╚════════════════════════════════════════════════");
+	
+	if(channel == null) throw new IllegalStateException("Datagram Channel is null you must bind and connect first");
 		long candidate_file_Id = -1;
 		HandShake_Packet pkt = new HandShake_Packet();
 		pkt.make_SYN(fileId, file_size, total_seq);

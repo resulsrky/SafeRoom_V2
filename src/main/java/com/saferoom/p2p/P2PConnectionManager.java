@@ -447,6 +447,11 @@ public class P2PConnectionManager {
             long fileSize = Files.size(filePath);
             long fileId = System.currentTimeMillis();
             
+            System.out.println("[FT-SENDER] ═══════════════════════════════════════════════");
+            System.out.printf("[FT-SENDER] sendFile() called: fileId=%d, file=%s, size=%d bytes%n", 
+                fileId, filePath.getFileName(), fileSize);
+            System.out.println("[FT-SENDER] ═══════════════════════════════════════════════");
+            
             CompletableFuture<Void> readyFuture = connection.fileTransfer.awaitReceiverReady(fileId);
             connection.sendControlMessage(connection.buildUrReceiverControl(
                 fileId, fileSize, filePath.getFileName().toString()));
@@ -752,15 +757,18 @@ public class P2PConnectionManager {
                 
                 byte signal = data.get(0);
                 
+                System.out.printf("[MSG-CH-RECV] Received signal 0x%02X (%d bytes) from %s%n",
+                    signal, data.remaining(), remoteUsername);
+                
                 // Messaging signals only (0x20-0x23)
                 if (signal >= 0x20 && signal <= 0x23) {
                     if (reliableMessaging != null) {
                         reliableMessaging.handleIncomingMessage(buffer);
                     } else {
-                        System.err.println("[P2P] Received message but reliable messaging not initialized");
+                        System.err.println("[MSG-CH-RECV] ERROR: Reliable messaging not initialized");
                     }
                 } else {
-                    System.err.printf("[P2P] Unexpected signal on messaging channel: 0x%02X%n", signal);
+                    System.err.printf("[MSG-CH-RECV] WARNING: Unexpected signal on messaging channel: 0x%02X%n", signal);
                 }
                 
             } catch (Exception e) {
@@ -773,33 +781,66 @@ public class P2PConnectionManager {
                 return false;
             }
             
+            System.out.printf("[FT-CTRL-RECV] Control message received: %s%n", 
+                messageText.length() > 100 ? messageText.substring(0, 100) + "..." : messageText);
+            
             String[] parts = messageText.split("\\|");
             if (parts.length < 3) {
+                System.err.println("[FT-CTRL-RECV] ERROR: Malformed control message (parts < 3)");
                 return true;
             }
             
             String type = parts[1];
+            System.out.printf("[FT-CTRL-RECV] Control type: %s%n", type);
+            
             if (CTRL_UR_RECEIVER.equals(type)) {
                 if (parts.length < 5) {
+                    System.err.println("[FT-CTRL-RECV] ERROR: UR_RECEIVER malformed (parts < 5)");
                     return true;
                 }
                 
                 long fileId = parseLongSafe(parts[2]);
                 String fileName = decodeFileName(parts[4]);
                 
+                System.out.println("[FT-CTRL-RECV] ╔════════════════════════════════════════════════");
+                System.out.printf("[FT-CTRL-RECV] ║ UR_RECEIVER: fileId=%d, fileName=%s%n", fileId, fileName);
+                System.out.println("[FT-CTRL-RECV] ╚════════════════════════════════════════════════");
+                
                 if (fileTransfer == null) {
+                    System.out.println("[FT-CTRL-RECV] Initializing file transfer (was null)...");
                     initializeFileTransfer();
                 }
                 
                 if (fileTransfer != null) {
                     fileTransfer.prepareIncomingFile(fileId, fileName);
-                    fileTransfer.startPreparedReceiver(fileId);
+                    
+                    // 🔥 CRITICAL FIX: Send OK_SNDFILE BEFORE starting receiver!
+                    System.out.println("[FT-CTRL-RECV] 🚀 Sending OK_SNDFILE to unblock sender...");
                     sendControlMessage(buildOkControl(fileId));
+                    
+                    // Small safety delay to ensure OK_SNDFILE is sent first
+                    try {
+                        Thread.sleep(10); // 10ms
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    
+                    System.out.println("[FT-CTRL-RECV] Starting receiver (will block in handshake)...");
+                    fileTransfer.startPreparedReceiver(fileId);
+                } else {
+                    System.err.println("[FT-CTRL-RECV] ERROR: File transfer still null after initialization!");
                 }
             } else if (CTRL_OK_SNDFILE.equals(type)) {
                 long fileId = parseLongSafe(parts[2]);
+                System.out.println("[FT-CTRL-RECV] ╔════════════════════════════════════════════════");
+                System.out.printf("[FT-CTRL-RECV] ║ OK_SNDFILE received: fileId=%d%n", fileId);
+                System.out.println("[FT-CTRL-RECV] ║ Unblocking sender readyFuture...");
+                System.out.println("[FT-CTRL-RECV] ╚════════════════════════════════════════════════");
+                
                 if (fileTransfer != null) {
                     fileTransfer.markReceiverReady(fileId);
+                } else {
+                    System.err.println("[FT-CTRL-RECV] ERROR: Cannot mark receiver ready, fileTransfer is null!");
                 }
             }
             
@@ -807,11 +848,18 @@ public class P2PConnectionManager {
         }
         
         private void sendControlMessage(String payload) {
+            System.out.printf("[FT-CTRL-SEND] Sending: %s%n", 
+                payload.length() > 100 ? payload.substring(0, 100) + "..." : payload);
+            System.out.printf("[FT-CTRL-SEND] Channel state: %s, Messaging ready: %s%n",
+                dataChannel != null ? dataChannel.getState() : "NULL",
+                reliableMessaging != null ? "YES" : "NO");
+            
             if (reliableMessaging == null) {
-                System.err.println("[P2P] Reliable messaging not ready for control message");
+                System.err.println("[FT-CTRL-SEND] ERROR: Reliable messaging not ready!");
                 return;
             }
             reliableMessaging.sendMessage(remoteUsername, payload);
+            System.out.println("[FT-CTRL-SEND] Control message dispatched successfully");
         }
         
         private String buildUrReceiverControl(long fileId, long fileSize, String fileName) {
