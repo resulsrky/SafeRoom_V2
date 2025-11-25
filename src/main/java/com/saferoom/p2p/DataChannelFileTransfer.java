@@ -26,6 +26,7 @@ import java.util.concurrent.*;
 public class DataChannelFileTransfer {
     
     private final String username;
+    private final String remoteUsername;
     private final DataChannelWrapper channelWrapper;
     private final TransportEndpoint transportEndpoint;
     private final FlowControlledEndpoint flowControlledEndpoint;
@@ -48,6 +49,7 @@ public class DataChannelFileTransfer {
     
     public DataChannelFileTransfer(String username, RTCDataChannel dataChannel, String remoteUsername) {
         this.username = username;
+        this.remoteUsername = remoteUsername;
         
         // Resolve transport via registry (currently WebRTC only)
         TransportContext context = new TransportContext(username, remoteUsername);
@@ -169,7 +171,7 @@ public class DataChannelFileTransfer {
                 System.out.printf("[DCFileTransfer] Received: %s%n", downloadPath);
                 
                 if (transferCallback != null) {
-                    transferCallback.onFileReceived(username, receiver.fileId, downloadPath, receiver.file_size);
+                    transferCallback.onFileReceived(remoteUsername, receiver.fileId, downloadPath, receiver.file_size);
                 }
             } catch (Exception e) {
                 System.err.printf("[DCFileTransfer] Receive error: %s%n", e.getMessage());

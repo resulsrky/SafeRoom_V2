@@ -751,6 +751,12 @@ public class P2PConnectionManager {
             try {
                 // Create DataChannelFileTransfer (handles wrapper + original classes)
                 fileTransfer = new DataChannelFileTransfer(myUsername, fileDataChannel, remoteUsername);
+                fileTransfer.setTransferCallback((sender, fileId, path, size) -> {
+                    javafx.application.Platform.runLater(() -> {
+                        com.saferoom.gui.service.ChatService.getInstance()
+                            .handleIncomingFile(sender, path, size);
+                    });
+                });
                 
                 // DON'T start receiver here! It will start LAZY on first SYN
                 System.out.printf("[P2P] File transfer initialized for %s (receiver will start on SYN)%n", 

@@ -79,10 +79,10 @@ public class EnhancedFileTransferSender {
 	public boolean handshake(long fileId, long file_size, int total_seq) throws IOException {
 	System.out.println("[SENDER-HANDSHAKE] ╔════════════════════════════════════════════════");
 	System.out.println("[SENDER-HANDSHAKE] ║ handshake() ENTERED");
-	System.out.printf("[SENDER-HANDSHAKE] ║ Thread: %s%n", Thread.currentThread().getName());
-	System.out.printf("[SENDER-HANDSHAKE] ║ fileId=%d, size=%d, chunks=%d%n", 
+	System.out.printf("[SENDER-HANDSHAKE]  ║ Thread: %s%n", Thread.currentThread().getName());
+	System.out.printf("[SENDER-HANDSHAKE]  ║ fileId=%d, size=%d, chunks=%d%n", 
 		fileId, file_size, total_seq);
-	System.out.printf("[SENDER-HANDSHAKE] ║ Channel connected: %s%n", 
+	System.out.printf("[SENDER-HANDSHAKE]  ║ Channel connected: %s%n", 
 		channel != null ? channel.isConnected() : "NULL");
 	System.out.println("[SENDER-HANDSHAKE] ╚════════════════════════════════════════════════");
 	

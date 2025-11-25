@@ -138,16 +138,13 @@ public class MessageCell extends ListCell<Message> {
         if (attachment.getTargetType() == MessageType.IMAGE && attachment.getThumbnail() != null) {
             Image image = attachment.getThumbnail();
             ImageView preview = new ImageView(image);
+            preview.setPreserveRatio(true);
             preview.setFitWidth(140);
             preview.setFitHeight(140);
-            preview.setPreserveRatio(false);
-            applyCenterCrop(preview, image);
-            if (message.getType() == MessageType.FILE_PLACEHOLDER) {
-                preview.setEffect(new GaussianBlur(8));
-            } else {
-                preview.setEffect(null);
+            preview.setEffect(message.getType() == MessageType.FILE_PLACEHOLDER ? new GaussianBlur(8) : null);
+            if (message.getType() != MessageType.FILE_PLACEHOLDER) {
                 preview.getStyleClass().add("interactive-thumb");
-                preview.setOnMouseClicked(e -> openPreviewModal(image));
+                preview.setOnMouseClicked(e -> openPreviewModal(attachment));
             }
             StackPane thumbWrapper = new StackPane(preview);
             thumbWrapper.getStyleClass().add("file-thumbnail");
@@ -204,8 +201,8 @@ public class MessageCell extends ListCell<Message> {
 
     private void attachTypeListener(Node bubble, Message message) {
         typeListener = (obs, oldType, newType) -> {
-            if (oldType == MessageType.FILE_PLACEHOLDER && newType != MessageType.FILE_PLACEHOLDER) {
-                Platform.runLater(() -> animateFadeIn(bubble));
+            if (newType != oldType && getListView() != null) {
+                Platform.runLater(() -> updateItem(message, false));
             }
         };
         message.typeProperty().addListener(typeListener);
@@ -239,10 +236,11 @@ public class MessageCell extends ListCell<Message> {
         };
     }
 
-    private void openPreviewModal(Image image) {
-        if (image == null) {
+    private void openPreviewModal(FileAttachment attachment) {
+        if (attachment == null || attachment.getLocalPath() == null) {
             return;
         }
+        Image image = new Image(attachment.getLocalPath().toUri().toString(), 0, 0, true, true, true);
         Stage stage = new Stage();
         stage.initModality(Modality.APPLICATION_MODAL);
         stage.setTitle("Preview");

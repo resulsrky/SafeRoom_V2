@@ -336,6 +336,41 @@ public class ChatService {
         }
     }
 
+    public void handleIncomingFile(String senderId, java.nio.file.Path filePath, long fileSize) {
+        Runnable task = () -> {
+            MessageType type = detectFileType(filePath);
+            Image thumbnail = type == MessageType.IMAGE ? generateThumbnail(filePath) : null;
+            FileAttachment attachment = new FileAttachment(
+                type,
+                filePath.getFileName().toString(),
+                fileSize,
+                filePath,
+                thumbnail
+            );
+            Message incoming = new Message("", senderId, senderId.isEmpty() ? "?" : senderId.substring(0, 1));
+            incoming.setAttachment(attachment);
+            incoming.setType(type);
+            incoming.setStatusText("Received");
+            incoming.setOutgoing(false);
+
+            ObservableList<Message> msgs = getMessagesForChannel(senderId);
+            msgs.add(incoming);
+
+            try {
+                com.saferoom.gui.service.ContactService.getInstance()
+                    .updateLastMessage(senderId, "📥 " + attachment.getFileName(), false);
+            } catch (Exception e) {
+                System.err.println("[Chat] Error updating contact for incoming file: " + e.getMessage());
+            }
+        };
+
+        if (Platform.isFxApplicationThread()) {
+            task.run();
+        } else {
+            Platform.runLater(task);
+        }
+    }
+
     private MessageType detectFileType(Path path) {
         String name = path.getFileName().toString().toLowerCase();
         if (name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".bmp") || name.endsWith(".gif")) {
@@ -352,7 +387,7 @@ public class ChatService {
 
     private Image generateThumbnail(Path path) {
         try {
-            return new Image(path.toUri().toString(), 120, 120, true, true, false);
+            return new Image(path.toUri().toString(), 160, 160, true, true, true);
         } catch (Exception e) {
             System.err.println("[Chat] Thumbnail generation failed: " + e.getMessage());
             return null;
