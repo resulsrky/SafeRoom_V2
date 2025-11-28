@@ -50,6 +50,9 @@ public final class ScreenShareManager implements AutoCloseable {
     private VideoTrack screenTrack;
     private LinuxScreenShareEngine linuxEngine;
     private RTCRtpSender screenSender;
+    private RTCRtpSender cameraSender;
+    private VideoTrack cameraTrack;
+    private boolean usingCameraSender;
 
     public ScreenShareManager(PeerConnectionFactory factory,
                               RTCPeerConnection peerConnection,
@@ -66,6 +69,11 @@ public final class ScreenShareManager implements AutoCloseable {
      * engine, otherwise it falls back to the native dev.onvoid desktop capturer.
      */
     public CompletableFuture<Void> startScreenShare() {
+        return startScreenShare(ScreenSourceOption.auto());
+    }
+
+    public CompletableFuture<Void> startScreenShare(ScreenSourceOption sourceOption) {
+        ScreenSourceOption effectiveOption = sourceOption != null ? sourceOption : ScreenSourceOption.auto();
         return CompletableFuture.supplyAsync(() -> {
             synchronized (stateLock) {
                 if (sharing) {
@@ -75,9 +83,9 @@ public final class ScreenShareManager implements AutoCloseable {
             }
             try {
                 if (PlatformDetector.isLinux()) {
-                    startLinuxCapture();
+                    startLinuxCapture(effectiveOption);
                 } else {
-                    startNativeCapture();
+                    startNativeCapture(effectiveOption);
                 }
             } catch (Exception ex) {
                 synchronized (stateLock) {
@@ -112,7 +120,11 @@ public final class ScreenShareManager implements AutoCloseable {
         return sharing;
     }
 
-    private void startLinuxCapture() throws Exception {
+    private void startLinuxCapture(ScreenSourceOption option) throws Exception {
+        ScreenSourceOption.Kind kind = option.kind();
+        if (!(kind == ScreenSourceOption.Kind.LINUX_ENTIRE_DESKTOP || kind == ScreenSourceOption.Kind.AUTO)) {
+            throw new IllegalArgumentException("Linux screen share only supports entire desktop selection");
+        }
         LOGGER.info("[ScreenShareManager] Starting Linux capture pipeline");
         customVideoSource = new CustomVideoSource();
         linuxEngine = new LinuxScreenShareEngine(customVideoSource);
@@ -122,16 +134,13 @@ public final class ScreenShareManager implements AutoCloseable {
         screenTrack.setEnabled(true);
 
         linuxEngine.start();
-        screenSender = peerConnection.addTrack(screenTrack, SCREEN_SHARE_STREAM_IDS);
-        if (screenSender == null) {
-            throw new IllegalStateException("PeerConnection rejected screen share track");
-        }
+        publishTrack(screenTrack);
         LOGGER.info("[ScreenShareManager] Linux screen share track attached");
     }
 
-    private void startNativeCapture() throws Exception {
+    private void startNativeCapture(ScreenSourceOption option) throws Exception {
         LOGGER.info("[ScreenShareManager] Starting native desktop capture");
-        DesktopSourceSelection selection = resolveDefaultDesktopSource();
+        DesktopSourceSelection selection = resolveDesktopSource(option);
 
         desktopSource = new VideoDesktopSource();
         desktopSource.setFrameRate(30);
@@ -143,10 +152,7 @@ public final class ScreenShareManager implements AutoCloseable {
         screenTrack = factory.createVideoTrack(trackId, desktopSource);
         screenTrack.setEnabled(true);
 
-        screenSender = peerConnection.addTrack(screenTrack, SCREEN_SHARE_STREAM_IDS);
-        if (screenSender == null) {
-            throw new IllegalStateException("PeerConnection rejected screen share track");
-        }
+        publishTrack(screenTrack);
         LOGGER.info("[ScreenShareManager] Native screen share track attached");
     }
 
@@ -188,7 +194,40 @@ public final class ScreenShareManager implements AutoCloseable {
         return future;
     }
 
+    public void registerCameraSource(RTCRtpSender sender, VideoTrack track) {
+        this.cameraSender = sender;
+        this.cameraTrack = track;
+    }
+
+    private void publishTrack(VideoTrack track) throws Exception {
+        if (cameraSender != null && cameraTrack != null) {
+            LOGGER.info("[ScreenShareManager] Replacing camera track with screen share");
+            cameraSender.replaceTrack(track);
+            usingCameraSender = true;
+            screenSender = cameraSender;
+            return;
+        }
+
+        screenSender = peerConnection.addTrack(track, SCREEN_SHARE_STREAM_IDS);
+        usingCameraSender = false;
+        if (screenSender == null) {
+            throw new IllegalStateException("PeerConnection rejected screen share track");
+        }
+    }
+
     private void detachTrack() {
+        if (usingCameraSender && cameraSender != null && cameraTrack != null) {
+            try {
+                cameraSender.replaceTrack(cameraTrack);
+            } catch (Exception ex) {
+                LOGGER.log(Level.WARNING, "[ScreenShareManager] Failed to restore camera track", ex);
+            } finally {
+                usingCameraSender = false;
+                screenSender = null;
+            }
+            return;
+        }
+
         if (screenSender != null) {
             try {
                 peerConnection.removeTrack(screenSender);
@@ -246,6 +285,17 @@ public final class ScreenShareManager implements AutoCloseable {
                 screenTrack = null;
             }
         }
+    }
+
+    private DesktopSourceSelection resolveDesktopSource(ScreenSourceOption option) throws Exception {
+        if (option.kind() == ScreenSourceOption.Kind.AUTO) {
+            return resolveDefaultDesktopSource();
+        }
+        DesktopSource desktopSource = option.desktopSource();
+        if (desktopSource == null) {
+            throw new IllegalArgumentException("Desktop source cannot be null for native capture");
+        }
+        return new DesktopSourceSelection(desktopSource, option.isWindow());
     }
 
     private DesktopSourceSelection resolveDefaultDesktopSource() throws Exception {

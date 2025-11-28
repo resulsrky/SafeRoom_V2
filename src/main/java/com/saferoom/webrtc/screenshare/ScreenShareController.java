@@ -1,5 +1,8 @@
 package com.saferoom.webrtc.screenshare;
 
+import dev.onvoid.webrtc.RTCRtpSender;
+import dev.onvoid.webrtc.media.video.VideoTrack;
+
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
@@ -19,6 +22,10 @@ public final class ScreenShareController implements AutoCloseable {
         return manager.startScreenShare();
     }
 
+    public CompletableFuture<Void> startScreenShare(ScreenSourceOption option) {
+        return manager.startScreenShare(option);
+    }
+
     public CompletableFuture<Void> stopScreenShare() {
         return manager.stopScreenShare();
     }
@@ -27,9 +34,12 @@ public final class ScreenShareController implements AutoCloseable {
         return manager.isScreenShareActive();
     }
 
+    public void registerCameraSource(RTCRtpSender sender, VideoTrack track) {
+        manager.registerCameraSource(sender, track);
+    }
+
     @Override
     public void close() {
         manager.close();
     }
 }
-

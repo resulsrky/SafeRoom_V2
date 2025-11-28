@@ -1,0 +1,115 @@
+.sharing-banner {
+    -fx-background-color: rgba(0, 215, 136, 0.15);
+    -fx-text-fill: #00c77d;
+    -fx-padding: 12 18 12 18;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+}
+
+.call-stage {
+    -fx-background-color: #11131a;
+}
+
+.call-stage-placeholder {
+    -fx-text-fill: #565b6a;
+    -fx-font-size: 16px;
+}
+
+.call-controls {
+    -fx-padding: 18;
+    -fx-background-color: #0d0f15;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.35), 8, 0, 0, -2);
+}
+
+.call-control-button {
+    -fx-background-color: #232634;
+    -fx-text-fill: #ffffff;
+    -fx-font-weight: bold;
+    -fx-padding: 10 24;
+    -fx-background-radius: 40;
+}
+
+.call-control-button:hover {
+    -fx-background-color: #2e3245;
+}
+
+.call-control-button.danger {
+    -fx-background-color: linear-gradient(to bottom, #ff5f6d, #ff3c52);
+}
+
+.share-button {
+    -fx-background-color: linear-gradient(to bottom, #00f5a0, #00d9f5);
+    -fx-text-fill: #06131c;
+}
+
+.share-button.active {
+    -fx-background-color: linear-gradient(to bottom, #ff8f70, #ff3d54);
+    -fx-text-fill: white;
+}
+
+.screen-picker-root {
+    -fx-background-color: #10121a;
+    -fx-text-fill: #f1f4ff;
+}
+
+.screen-picker-title {
+    -fx-font-size: 20px;
+    -fx-text-fill: #ffffff;
+    -fx-font-weight: bold;
+}
+
+.screen-picker-status {
+    -fx-text-fill: #9ca5c5;
+}
+
+.screen-picker-scroll {
+    -fx-background-color: transparent;
+}
+
+.screen-picker-button {
+    -fx-background-color: #282c3f;
+    -fx-text-fill: #ffffff;
+    -fx-padding: 8 22;
+    -fx-background-radius: 30;
+}
+
+.screen-picker-button.primary {
+    -fx-background-color: linear-gradient(to bottom, #00d7c0, #0097f5);
+    -fx-text-fill: #05121d;
+}
+
+.screen-source-item {
+    -fx-background-color: #1a1e2c;
+    -fx-padding: 12;
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+    -fx-border-color: rgba(255,255,255,0.08);
+    -fx-border-width: 1;
+}
+
+.screen-source-item:Hover {
+    -fx-border-color: #3d87ff;
+}
+
+.screen-source-item:selected {
+    -fx-border-color: #00f5a0;
+    -fx-border-width: 3;
+}
+
+.screen-source-preview {
+    -fx-background-color: #0b0d13;
+    -fx-padding: 4;
+    -fx-background-radius: 10;
+}
+
+.screen-source-title {
+    -fx-text-fill: #f1f4ff;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+.screen-source-subtitle {
+    -fx-text-fill: #8f96b3;
+    -fx-font-size: 11px;
+}
+
