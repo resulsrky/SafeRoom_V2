@@ -190,7 +190,7 @@
                                             <Label text="Video" styleClass="action-label"/>
                                         </VBox>
                                         <VBox alignment="CENTER" spacing="5.0" styleClass="action-item">
-                                            <Button fx:id="infoSearchButton" styleClass="action-circle-btn">
+                                            <Button fx:id="infoSearchButton" styleClass="action-circle-btn" onAction="#handleInfoSearch">
                                                 <graphic><FontIcon iconLiteral="fas-search" iconColor="white" iconSize="16"/></graphic>
                                             </Button>
                                             <Label text="Search" styleClass="action-label"/>

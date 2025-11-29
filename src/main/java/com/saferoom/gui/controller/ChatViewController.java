@@ -13,6 +13,8 @@ import com.saferoom.gui.model.Message;
 import com.saferoom.gui.model.User;
 import com.saferoom.gui.service.ChatService;
 import com.saferoom.gui.view.cell.MessageCell;
+import com.saferoom.storage.FTS5SearchService;
+import com.saferoom.storage.LocalDatabase;
 import com.saferoom.webrtc.CallManager;
 
 import dev.onvoid.webrtc.media.video.VideoTrack;
@@ -40,6 +42,8 @@ import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import javafx.util.Duration;
+
+import java.util.List;
 
 public class ChatViewController {
 
@@ -112,6 +116,11 @@ public class ChatViewController {
     private ActiveCallDialog currentActiveCallDialog;
     private boolean callbacksSetup = false;
     private boolean currentCallVideoEnabled = false;
+    
+    // Search variables
+    private FTS5SearchService searchService;
+    private List<String> searchResultMessageIds;
+    private int currentSearchIndex = -1;
 
     @FXML
     public void initialize() {
@@ -487,6 +496,192 @@ public class ChatViewController {
     @FXML
     private void handleInfoVideoCall() {
         handleVideoCall(); // Aynı mantığı kullan
+    }
+    
+    /**
+     * Contact Info Search Button Handler
+     * Opens in-conversation search dialog
+     */
+    @FXML
+    private void handleInfoSearch() {
+        if (currentChannelId == null || currentChannelId.isEmpty()) {
+            showAlert("Search", "No conversation selected.", Alert.AlertType.INFORMATION);
+            return;
+        }
+        
+        // Check if persistence is enabled
+        try {
+            if (LocalDatabase.getInstance() == null) {
+                showAlert("Search Unavailable", 
+                    "Search feature requires persistent storage to be enabled.\n" +
+                    "Messages are currently stored in RAM only.", 
+                    Alert.AlertType.INFORMATION);
+                return;
+            }
+            
+            // Initialize search service if not already
+            if (searchService == null) {
+                searchService = new FTS5SearchService(LocalDatabase.getInstance());
+            }
+            
+            // Show search dialog
+            showSearchDialog();
+            
+        } catch (IllegalStateException e) {
+            showAlert("Search Unavailable", 
+                "Persistent storage is not initialized.\n" +
+                "Search will be available after enabling message history.", 
+                Alert.AlertType.INFORMATION);
+        }
+    }
+    
+    /**
+     * Show search dialog with TextInputDialog
+     */
+    private void showSearchDialog() {
+        javafx.scene.control.TextInputDialog dialog = new javafx.scene.control.TextInputDialog();
+        dialog.setTitle("Search in Conversation");
+        dialog.setHeaderText("Search messages with " + chatPartnerName.getText());
+        dialog.setContentText("Enter search term:");
+        
+        // Add stylesheet
+        try {
+            dialog.getDialogPane().getStylesheets().add(
+                getClass().getResource("/styles/styles.css").toExternalForm());
+        } catch (Exception e) {
+            // Ignore stylesheet error
+        }
+        
+        Optional<String> result = dialog.showAndWait();
+        result.ifPresent(query -> {
+            if (!query.trim().isEmpty()) {
+                performSearch(query.trim());
+            }
+        });
+    }
+    
+    /**
+     * Perform search and navigate to results
+     */
+    private void performSearch(String query) {
+        // Get conversation ID
+        String conversationId = com.saferoom.storage.SqlCipherHelper.generateConversationId(
+            chatService.getCurrentUsername(), 
+            currentChannelId
+        );
+        
+        // Search in background
+        java.util.concurrent.CompletableFuture.runAsync(() -> {
+            searchResultMessageIds = searchService.getMatchingMessageIds(query, conversationId);
+            
+            Platform.runLater(() -> {
+                if (searchResultMessageIds.isEmpty()) {
+                    showAlert("No Results", 
+                        "No messages found containing \"" + query + "\"", 
+                        Alert.AlertType.INFORMATION);
+                } else {
+                    currentSearchIndex = 0;
+                    showSearchNavigationDialog(query, searchResultMessageIds.size());
+                    scrollToSearchResult(0);
+                }
+            });
+        });
+    }
+    
+    /**
+     * Show search navigation dialog with Up/Down buttons
+     */
+    private void showSearchNavigationDialog(String query, int totalResults) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle("Search Results");
+        alert.setHeaderText("Found " + totalResults + " results for \"" + query + "\"");
+        alert.setContentText("Result " + (currentSearchIndex + 1) + " of " + totalResults);
+        
+        // Custom buttons
+        ButtonType previousBtn = new ButtonType("⬆ Previous");
+        ButtonType nextBtn = new ButtonType("⬇ Next");
+        ButtonType closeBtn = new ButtonType("Close", javafx.scene.control.ButtonBar.ButtonData.CANCEL_CLOSE);
+        
+        alert.getButtonTypes().setAll(previousBtn, nextBtn, closeBtn);
+        
+        try {
+            alert.getDialogPane().getStylesheets().add(
+                getClass().getResource("/styles/styles.css").toExternalForm());
+        } catch (Exception e) {
+            // Ignore
+        }
+        
+        // Handle button clicks
+        alert.showAndWait().ifPresent(response -> {
+            if (response == previousBtn) {
+                navigateToPreviousResult(query, totalResults);
+            } else if (response == nextBtn) {
+                navigateToNextResult(query, totalResults);
+            }
+        });
+    }
+    
+    /**
+     * Navigate to next search result
+     */
+    private void navigateToNextResult(String query, int totalResults) {
+        if (currentSearchIndex < totalResults - 1) {
+            currentSearchIndex++;
+            scrollToSearchResult(currentSearchIndex);
+            showSearchNavigationDialog(query, totalResults);
+        } else {
+            showAlert("End of Results", "No more results", Alert.AlertType.INFORMATION);
+        }
+    }
+    
+    /**
+     * Navigate to previous search result
+     */
+    private void navigateToPreviousResult(String query, int totalResults) {
+        if (currentSearchIndex > 0) {
+            currentSearchIndex--;
+            scrollToSearchResult(currentSearchIndex);
+            showSearchNavigationDialog(query, totalResults);
+        } else {
+            showAlert("Start of Results", "Already at first result", Alert.AlertType.INFORMATION);
+        }
+    }
+    
+    /**
+     * Scroll to a specific search result
+     */
+    private void scrollToSearchResult(int index) {
+        String targetMessageId = searchResultMessageIds.get(index);
+        
+        // Find message in ObservableList
+        for (int i = 0; i < messages.size(); i++) {
+            if (messages.get(i).getId().equals(targetMessageId)) {
+                final int messageIndex = i;
+                Platform.runLater(() -> {
+                    messageListView.scrollTo(messageIndex);
+                    messageListView.getSelectionModel().select(messageIndex);
+                    
+                    // Highlight with animation
+                    highlightMessage(messageIndex);
+                });
+                break;
+            }
+        }
+    }
+    
+    /**
+     * Highlight a message cell with animation
+     */
+    private void highlightMessage(int index) {
+        Platform.runLater(() -> {
+            // Flash selection
+            messageListView.getSelectionModel().select(index);
+            
+            // Clear selection after delay
+            javafx.animation.PauseTransition pause = new javafx.animation.PauseTransition(Duration.seconds(2));
+            pause.setOnFinished(e -> messageListView.getSelectionModel().clearSelection());
+            pause.play();
+        });
     }
 
     private void showCallConfirmation(String title, String header, boolean isVideo) {
