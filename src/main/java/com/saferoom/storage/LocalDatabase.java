@@ -1,0 +1,289 @@
+package com.saferoom.storage;
+
+import java.io.File;
+import java.sql.*;
+import java.util.logging.Logger;
+
+/**
+ * SQLite Database with SQLCipher encryption
+ * 
+ * Architecture:
+ * - Single encrypted database file per user
+ * - AES-256 encryption via SQLCipher
+ * - Full-Text Search (FTS5) support
+ * - Auto-migration and schema versioning
+ * 
+ * Tables:
+ * - messages: Main message storage
+ * - messages_fts: Full-text search virtual table
+ * - conversations: Conversation metadata
+ */
+public class LocalDatabase {
+    
+    private static final Logger LOGGER = Logger.getLogger(LocalDatabase.class.getName());
+    private static final String DB_NAME = "saferoom.db";
+    private static final int DB_VERSION = 1;
+    
+    private static LocalDatabase instance;
+    private Connection connection;
+    private String encryptionKey;
+    private final String dbPath;
+    
+    private LocalDatabase(String userDataDir, String encryptionKey) {
+        this.dbPath = userDataDir + File.separator + DB_NAME;
+        this.encryptionKey = encryptionKey;
+    }
+    
+    /**
+     * Initialize database for a user
+     * 
+     * @param username User's username
+     * @param password User's master password
+     * @param userDataDir Directory to store database
+     * @return LocalDatabase instance
+     */
+    public static synchronized LocalDatabase initialize(String username, String password, String userDataDir) {
+        if (instance != null) {
+            LOGGER.warning("Database already initialized, closing existing connection");
+            instance.close();
+        }
+        
+        String key = SqlCipherHelper.deriveKey(username, password);
+        instance = new LocalDatabase(userDataDir, key);
+        instance.open();
+        return instance;
+    }
+    
+    /**
+     * Get the singleton instance
+     */
+    public static LocalDatabase getInstance() {
+        if (instance == null) {
+            throw new IllegalStateException("Database not initialized. Call initialize() first.");
+        }
+        return instance;
+    }
+    
+    /**
+     * Open database connection and initialize schema
+     */
+    private void open() {
+        try {
+            // Load SQLite JDBC driver
+            Class.forName("org.sqlite.JDBC");
+            
+            // Create connection
+            String url = "jdbc:sqlite:" + dbPath;
+            connection = DriverManager.getConnection(url);
+            
+            // Enable SQLCipher encryption
+            try (Statement stmt = connection.createStatement()) {
+                // Set encryption key
+                stmt.execute("PRAGMA key = \"x'" + encryptionKey + "'\"");
+                
+                // Verify encryption is working
+                stmt.execute("PRAGMA cipher_version");
+                
+                // Performance optimizations
+                stmt.execute("PRAGMA journal_mode = WAL");
+                stmt.execute("PRAGMA synchronous = NORMAL");
+                stmt.execute("PRAGMA temp_store = MEMORY");
+                stmt.execute("PRAGMA mmap_size = 30000000000");
+                
+                LOGGER.info("Database opened successfully with encryption");
+            }
+            
+            // Initialize schema
+            initializeSchema();
+            
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException("SQLite JDBC driver not found", e);
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to open database", e);
+        }
+    }
+    
+    /**
+     * Initialize or migrate database schema
+     */
+    private void initializeSchema() throws SQLException {
+        try (Statement stmt = connection.createStatement()) {
+            
+            // Messages table
+            stmt.execute("""
+                CREATE TABLE IF NOT EXISTS messages (
+                    id TEXT PRIMARY KEY,
+                    conversation_id TEXT NOT NULL,
+                    timestamp INTEGER NOT NULL,
+                    type TEXT NOT NULL,
+                    content TEXT,
+                    thumbnail BLOB,
+                    file_path TEXT,
+                    is_outgoing INTEGER NOT NULL,
+                    sender_id TEXT NOT NULL,
+                    sender_avatar_char TEXT
+                )
+                """);
+            
+            // Indexes for performance
+            stmt.execute("""
+                CREATE INDEX IF NOT EXISTS idx_conv_time 
+                ON messages(conversation_id, timestamp ASC)
+                """);
+            
+            stmt.execute("""
+                CREATE INDEX IF NOT EXISTS idx_timestamp 
+                ON messages(timestamp DESC)
+                """);
+            
+            // Full-Text Search virtual table
+            stmt.execute("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts 
+                USING fts5(
+                    message_id UNINDEXED,
+                    content,
+                    conversation_id UNINDEXED,
+                    tokenize = 'unicode61'
+                )
+                """);
+            
+            // Triggers to keep FTS in sync
+            stmt.execute("""
+                CREATE TRIGGER IF NOT EXISTS messages_ai 
+                AFTER INSERT ON messages 
+                BEGIN
+                    INSERT INTO messages_fts(rowid, message_id, content, conversation_id)
+                    VALUES (new.rowid, new.id, new.content, new.conversation_id);
+                END
+                """);
+            
+            stmt.execute("""
+                CREATE TRIGGER IF NOT EXISTS messages_ad 
+                AFTER DELETE ON messages 
+                BEGIN
+                    DELETE FROM messages_fts WHERE rowid = old.rowid;
+                END
+                """);
+            
+            stmt.execute("""
+                CREATE TRIGGER IF NOT EXISTS messages_au 
+                AFTER UPDATE ON messages 
+                BEGIN
+                    UPDATE messages_fts 
+                    SET content = new.content 
+                    WHERE rowid = new.rowid;
+                END
+                """);
+            
+            // Conversations metadata table
+            stmt.execute("""
+                CREATE TABLE IF NOT EXISTS conversations (
+                    conversation_id TEXT PRIMARY KEY,
+                    participant_username TEXT NOT NULL,
+                    last_message_time INTEGER,
+                    unread_count INTEGER DEFAULT 0,
+                    is_archived INTEGER DEFAULT 0
+                )
+                """);
+            
+            LOGGER.info("Database schema initialized (version " + DB_VERSION + ")");
+        }
+    }
+    
+    /**
+     * Get database connection
+     */
+    public Connection getConnection() {
+        if (connection == null) {
+            throw new IllegalStateException("Database not opened");
+        }
+        return connection;
+    }
+    
+    /**
+     * Execute a query and return ResultSet
+     */
+    public ResultSet executeQuery(String sql, Object... params) throws SQLException {
+        PreparedStatement stmt = connection.prepareStatement(sql);
+        setParameters(stmt, params);
+        return stmt.executeQuery();
+    }
+    
+    /**
+     * Execute an update/insert/delete
+     */
+    public int executeUpdate(String sql, Object... params) throws SQLException {
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            setParameters(stmt, params);
+            return stmt.executeUpdate();
+        }
+    }
+    
+    /**
+     * Set prepared statement parameters
+     */
+    private void setParameters(PreparedStatement stmt, Object... params) throws SQLException {
+        for (int i = 0; i < params.length; i++) {
+            Object param = params[i];
+            if (param instanceof String) {
+                stmt.setString(i + 1, (String) param);
+            } else if (param instanceof Integer) {
+                stmt.setInt(i + 1, (Integer) param);
+            } else if (param instanceof Long) {
+                stmt.setLong(i + 1, (Long) param);
+            } else if (param instanceof byte[]) {
+                stmt.setBytes(i + 1, (byte[]) param);
+            } else if (param == null) {
+                stmt.setNull(i + 1, Types.NULL);
+            } else {
+                stmt.setObject(i + 1, param);
+            }
+        }
+    }
+    
+    /**
+     * Begin transaction
+     */
+    public void beginTransaction() throws SQLException {
+        connection.setAutoCommit(false);
+    }
+    
+    /**
+     * Commit transaction
+     */
+    public void commit() throws SQLException {
+        connection.commit();
+        connection.setAutoCommit(true);
+    }
+    
+    /**
+     * Rollback transaction
+     */
+    public void rollback() throws SQLException {
+        connection.rollback();
+        connection.setAutoCommit(true);
+    }
+    
+    /**
+     * Close database connection
+     */
+    public void close() {
+        if (connection != null) {
+            try {
+                connection.close();
+                LOGGER.info("Database connection closed");
+            } catch (SQLException e) {
+                LOGGER.warning("Error closing database: " + e.getMessage());
+            }
+            connection = null;
+        }
+    }
+    
+    /**
+     * Get database file path
+     */
+    public String getDbPath() {
+        return dbPath;
+    }
+}
+

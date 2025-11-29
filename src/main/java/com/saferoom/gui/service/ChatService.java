@@ -1,6 +1,8 @@
 package com.saferoom.gui.service;
 
 
+import com.saferoom.chat.MessagePersister;
+import com.saferoom.chat.PersistentChatLoader;
 import com.saferoom.gui.model.FileAttachment;
 import com.saferoom.gui.model.Message;
 import com.saferoom.gui.model.MessageType;
@@ -28,6 +30,10 @@ import java.nio.file.Path;
  * Mesajları yöneten, gönderen ve alan servis.
  * Singleton deseni ile tasarlandı, yani uygulamanın her yerinden tek bir
  * nesnesine erişilebilir.
+ * 
+ * NEW: Persistent storage support via MessagePersister
+ * - Messages automatically saved to encrypted SQLite
+ * - History loaded on startup
  */
 public class ChatService {
 
@@ -44,6 +50,11 @@ public class ChatService {
     private final ObjectProperty<Message> newMessageProperty = new SimpleObjectProperty<>();
 
     private final Map<Long, Message> activeFileTransfers = new ConcurrentHashMap<>();
+    
+    // NEW: Persistence layer integration
+    private MessagePersister messagePersister;
+    private PersistentChatLoader chatLoader;
+    private boolean persistenceEnabled = false;
 
     private ChatService() {
         // Başlangıç için sahte verileri yükle
@@ -71,10 +82,42 @@ public class ChatService {
     public String getCurrentUsername() {
         return currentUsername;
     }
+    
+    /**
+     * Initialize persistent storage (NEW)
+     * Call this after user login with their password
+     * 
+     * @param persister MessagePersister instance
+     * @param loader PersistentChatLoader instance
+     */
+    public void initializePersistence(MessagePersister persister, PersistentChatLoader loader) {
+        this.messagePersister = persister;
+        this.chatLoader = loader;
+        this.persistenceEnabled = true;
+        System.out.printf("[ChatService] 💾 Persistence enabled for user: %s%n", currentUsername);
+    }
+    
+    /**
+     * Load conversation history from disk (NEW)
+     * Populates RAM ObservableList with persisted messages
+     * 
+     * @param remoteUsername Remote user to load history for
+     * @return java.util.concurrent.CompletableFuture<Integer> Number of messages loaded
+     */
+    public java.util.concurrent.CompletableFuture<Integer> loadConversationHistory(String remoteUsername) {
+        if (!persistenceEnabled || chatLoader == null) {
+            return java.util.concurrent.CompletableFuture.completedFuture(0);
+        }
+        
+        ObservableList<Message> messages = getMessagesForChannel(remoteUsername);
+        return chatLoader.loadConversationHistory(remoteUsername, currentUsername, messages);
+    }
 
     /**
      * Belirtilen kanala yeni bir mesaj gönderir.
      * P2P bağlantı varsa P2P kullanır, yoksa server relay kullanır.
+     * NEW: Automatically persists message to disk
+     * 
      * @param channelId Sohbet kanalının ID'si
      * @param text Gönderilecek mesaj metni
      * @param sender Mesajı gönderen kullanıcı
@@ -93,6 +136,15 @@ public class ChatService {
         // Mesajı ilgili kanalın listesine ekle
         ObservableList<Message> messages = getMessagesForChannel(channelId);
         messages.add(newMessage);
+        
+        // NEW: Persist to disk asynchronously
+        if (persistenceEnabled && messagePersister != null) {
+            messagePersister.persistMessageAsync(newMessage, channelId, currentUsername)
+                .exceptionally(error -> {
+                    System.err.println("[ChatService] Failed to persist message: " + error.getMessage());
+                    return null;
+                });
+        }
 
         // Try WebRTC DataChannel P2P messaging first
         boolean sentViaP2P = false;
@@ -155,6 +207,7 @@ public class ChatService {
     
     /**
      * P2P'den gelen mesajı al ve GUI'de göster
+     * NEW: Automatically persists incoming message to disk
      */
     public void receiveP2PMessage(String sender, String receiver, String messageText) {
         System.out.println("═══════════════════════════════════════════════════════════════");
@@ -175,10 +228,20 @@ public class ChatService {
             sender.isEmpty() ? "?" : sender.substring(0, 1).toUpperCase()
         );
         incomingMessage.setType(MessageType.TEXT);
+        incomingMessage.setOutgoing(false); // Incoming message
         
         // Mesajı doğru channel'a ekle
         ObservableList<Message> messages = getMessagesForChannel(sender);
         messages.add(incomingMessage);
+        
+        // NEW: Persist to disk asynchronously
+        if (persistenceEnabled && messagePersister != null) {
+            messagePersister.persistMessageAsync(incomingMessage, sender, currentUsername)
+                .exceptionally(error -> {
+                    System.err.println("[ChatService] Failed to persist incoming message: " + error.getMessage());
+                    return null;
+                });
+        }
         
         System.out.printf("[Chat] 📬 Updated contact last message for %s%n", sender);
         System.out.printf("[Chat] ✅ P2P message added to channel: %s%n", sender);
