@@ -529,30 +529,68 @@ public class ChatViewController {
         }
         
         MessageType type = attachment.getTargetType();
-        String fileName = attachment.getFileName().toLowerCase();
+        String fileName = attachment.getFileName();
+        
+        // Debug log
+        System.out.printf("[SharedMedia] Opening file: %s (type: %s)%n", fileName, type);
+        
+        // Null-safe filename check
+        if (fileName == null) {
+            fileName = filePath.getFileName().toString();
+            System.out.printf("[SharedMedia] Using path filename: %s%n", fileName);
+        }
+        
+        String fileNameLower = fileName.toLowerCase();
         
         // Image - open in preview modal
-        if (type == MessageType.IMAGE) {
+        if (type == MessageType.IMAGE || isImageFile(fileNameLower)) {
+            System.out.println("[SharedMedia] → Opening as IMAGE");
             openImagePreviewModal(attachment);
         }
         // PDF - open in PDF viewer modal
-        else if (fileName.endsWith(".pdf")) {
+        else if (fileNameLower.endsWith(".pdf")) {
+            System.out.println("[SharedMedia] → Opening as PDF");
             openPdfViewerModal(attachment);
         }
         // Text files - open in text viewer modal
-        else if (fileName.endsWith(".txt") || fileName.endsWith(".log") || 
-                 fileName.endsWith(".md") || fileName.endsWith(".json") ||
-                 fileName.endsWith(".xml") || fileName.endsWith(".csv")) {
+        else if (isTextFile(fileNameLower)) {
+            System.out.println("[SharedMedia] → Opening as TEXT");
             openTextViewerModal(attachment);
         }
         // Video - open with system player (in background thread)
-        else if (type == MessageType.VIDEO) {
+        else if (type == MessageType.VIDEO || isVideoFile(fileNameLower)) {
+            System.out.println("[SharedMedia] → Opening as VIDEO (system app)");
             openWithSystemApp(filePath);
         }
-        // Other files - open with system app (in background thread)
+        // Other files - open with xdg-open on Linux
         else {
-            openWithSystemApp(filePath);
+            System.out.println("[SharedMedia] → Opening with xdg-open");
+            openWithXdgOpen(filePath);
         }
+    }
+    
+    private boolean isImageFile(String fileName) {
+        return fileName.endsWith(".png") || fileName.endsWith(".jpg") || 
+               fileName.endsWith(".jpeg") || fileName.endsWith(".gif") ||
+               fileName.endsWith(".bmp") || fileName.endsWith(".webp");
+    }
+    
+    private boolean isTextFile(String fileName) {
+        return fileName.endsWith(".txt") || fileName.endsWith(".log") || 
+               fileName.endsWith(".md") || fileName.endsWith(".json") ||
+               fileName.endsWith(".xml") || fileName.endsWith(".csv") ||
+               fileName.endsWith(".yml") || fileName.endsWith(".yaml") ||
+               fileName.endsWith(".ini") || fileName.endsWith(".conf") ||
+               fileName.endsWith(".properties") || fileName.endsWith(".sh") ||
+               fileName.endsWith(".java") || fileName.endsWith(".py") ||
+               fileName.endsWith(".js") || fileName.endsWith(".html") ||
+               fileName.endsWith(".css");
+    }
+    
+    private boolean isVideoFile(String fileName) {
+        return fileName.endsWith(".mp4") || fileName.endsWith(".mov") ||
+               fileName.endsWith(".mkv") || fileName.endsWith(".avi") ||
+               fileName.endsWith(".webm");
     }
     
     /**
@@ -693,10 +731,37 @@ public class ChatViewController {
      * Open file with system default application (in background thread to prevent UI freeze)
      */
     private void openWithSystemApp(java.nio.file.Path filePath) {
-        // Run in background thread to prevent UI freeze
+        // On Linux, use xdg-open to avoid GDK warnings
+        openWithXdgOpen(filePath);
+    }
+    
+    /**
+     * Open file using xdg-open (Linux) or system default
+     * This avoids the "XSetErrorHandler() called with a GDK error trap pushed" warning
+     */
+    private void openWithXdgOpen(java.nio.file.Path filePath) {
         java.util.concurrent.CompletableFuture.runAsync(() -> {
             try {
-                java.awt.Desktop.getDesktop().open(filePath.toFile());
+                String os = System.getProperty("os.name").toLowerCase();
+                ProcessBuilder pb;
+                
+                if (os.contains("linux")) {
+                    // Use xdg-open on Linux
+                    pb = new ProcessBuilder("xdg-open", filePath.toAbsolutePath().toString());
+                } else if (os.contains("mac")) {
+                    // Use open on macOS
+                    pb = new ProcessBuilder("open", filePath.toAbsolutePath().toString());
+                } else {
+                    // Windows - use cmd /c start
+                    pb = new ProcessBuilder("cmd", "/c", "start", "", filePath.toAbsolutePath().toString());
+                }
+                
+                pb.inheritIO();
+                Process process = pb.start();
+                
+                // Don't wait for process to complete
+                System.out.printf("[SharedMedia] Opened with system app: %s%n", filePath.getFileName());
+                
             } catch (Exception e) {
                 Platform.runLater(() -> {
                     System.err.println("[ChatView] Failed to open file: " + e.getMessage());

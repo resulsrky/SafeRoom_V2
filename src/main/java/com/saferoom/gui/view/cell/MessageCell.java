@@ -420,11 +420,106 @@ public class MessageCell extends ListCell<Message> {
             return;
         }
         Path path = attachment.getLocalPath();
-        try {
-            Desktop.getDesktop().open(path.toFile());
-        } catch (Exception e) {
-            System.err.println("[MessageCell] Failed to open file: " + e.getMessage());
+        String fileName = attachment.getFileName();
+        if (fileName == null) {
+            fileName = path.getFileName().toString();
         }
+        String fileNameLower = fileName.toLowerCase();
+        
+        // Text files - open in text viewer modal
+        if (isTextFile(fileNameLower)) {
+            openTextViewerModal(attachment);
+        }
+        // Other files - use xdg-open on Linux
+        else {
+            openWithXdgOpen(path);
+        }
+    }
+    
+    /**
+     * Check if file is a text file
+     */
+    private boolean isTextFile(String fileName) {
+        return fileName.endsWith(".txt") || fileName.endsWith(".log") || 
+               fileName.endsWith(".md") || fileName.endsWith(".json") ||
+               fileName.endsWith(".xml") || fileName.endsWith(".csv") ||
+               fileName.endsWith(".yml") || fileName.endsWith(".yaml") ||
+               fileName.endsWith(".ini") || fileName.endsWith(".conf") ||
+               fileName.endsWith(".properties") || fileName.endsWith(".sh") ||
+               fileName.endsWith(".java") || fileName.endsWith(".py") ||
+               fileName.endsWith(".js") || fileName.endsWith(".html") ||
+               fileName.endsWith(".css");
+    }
+    
+    /**
+     * Open text file in a viewer modal
+     */
+    private void openTextViewerModal(FileAttachment attachment) {
+        try {
+            Path path = attachment.getLocalPath();
+            String content = java.nio.file.Files.readString(path);
+            
+            Stage stage = new Stage();
+            stage.initModality(Modality.APPLICATION_MODAL);
+            stage.setTitle(attachment.getFileName());
+            
+            javafx.scene.control.TextArea textArea = new javafx.scene.control.TextArea(content);
+            textArea.setEditable(false);
+            textArea.setWrapText(true);
+            textArea.setStyle(
+                "-fx-control-inner-background: #1a1d21; " +
+                "-fx-text-fill: #e5e5e5; " +
+                "-fx-font-family: 'JetBrains Mono', 'Consolas', monospace; " +
+                "-fx-font-size: 13px;"
+            );
+            
+            javafx.scene.layout.VBox root = new javafx.scene.layout.VBox(textArea);
+            root.setStyle("-fx-background-color: #0f111a; -fx-padding: 10;");
+            javafx.scene.layout.VBox.setVgrow(textArea, javafx.scene.layout.Priority.ALWAYS);
+            
+            Scene scene = new Scene(root, 700, 500);
+            scene.setOnKeyPressed(e -> {
+                if (e.getCode() == javafx.scene.input.KeyCode.ESCAPE) {
+                    stage.close();
+                }
+            });
+            
+            stage.setScene(scene);
+            stage.show();
+        } catch (Exception e) {
+            System.err.println("[MessageCell] Failed to open text viewer: " + e.getMessage());
+            // Fallback to xdg-open
+            openWithXdgOpen(attachment.getLocalPath());
+        }
+    }
+    
+    /**
+     * Open file using xdg-open (Linux) to avoid GDK warnings
+     */
+    private void openWithXdgOpen(Path filePath) {
+        java.util.concurrent.CompletableFuture.runAsync(() -> {
+            try {
+                String os = System.getProperty("os.name").toLowerCase();
+                ProcessBuilder pb;
+                
+                if (os.contains("linux")) {
+                    pb = new ProcessBuilder("xdg-open", filePath.toAbsolutePath().toString());
+                } else if (os.contains("mac")) {
+                    pb = new ProcessBuilder("open", filePath.toAbsolutePath().toString());
+                } else {
+                    pb = new ProcessBuilder("cmd", "/c", "start", "", filePath.toAbsolutePath().toString());
+                }
+                
+                pb.inheritIO();
+                pb.start();
+                System.out.printf("[MessageCell] Opened with system app: %s%n", filePath.getFileName());
+                
+            } catch (Exception e) {
+                javafx.application.Platform.runLater(() -> {
+                    System.err.println("[MessageCell] Failed to open file: " + e.getMessage());
+                });
+            }
+        });
     }
 
 }
