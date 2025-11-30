@@ -115,11 +115,9 @@ public class MessageCell extends ListCell<Message> {
             attachTypeListener(bubble, message);
             setGraphic(hbox);
             
-            // Check if this message should be highlighted (for search results)
-            if (isSelected()) {
-                // Apply highlight animation for selected items
-                applyHighlightAnimation(hbox);
-            }
+            // NOTE: Removed isSelected() check here - it was causing unnecessary 
+            // re-renders on every scroll. Highlighting is now handled externally
+            // via CSS classes set by the search functionality.
         }
     }
     
@@ -187,7 +185,9 @@ public class MessageCell extends ListCell<Message> {
             Label status = new Label(message.getStatusText().isEmpty() ? "Sent" : message.getStatusText());
             status.getStyleClass().add("file-status");
             container.getChildren().add(status);
-            animateFadeIn(container);
+            // NOTE: Removed animateFadeIn() here - it was causing performance issues
+            // during scroll as it creates new FadeTransition for every cell render.
+            // Animation should only be used for newly arrived messages, not on scroll.
         }
 
         return container;
@@ -287,8 +287,14 @@ public class MessageCell extends ListCell<Message> {
 
     private void attachTypeListener(Node bubble, Message message) {
         typeListener = (obs, oldType, newType) -> {
-            if (newType != oldType && getListView() != null) {
-                Platform.runLater(() -> updateItem(message, false));
+            // Only update if type actually changed AND this cell is still showing this message
+            if (newType != oldType && getListView() != null && boundMessage == message) {
+                // Use requestLayout instead of full updateItem for smoother updates
+                Platform.runLater(() -> {
+                    if (boundMessage == message) {  // Double-check after runLater
+                        updateItem(message, false);
+                    }
+                });
             }
         };
         message.typeProperty().addListener(typeListener);

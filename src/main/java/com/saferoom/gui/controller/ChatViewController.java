@@ -341,8 +341,7 @@ public class ChatViewController {
             loadConversationHistoryAsync(channelId);
         } else {
             System.out.println("[ChatView] Messages already loaded, skipping disk load");
-            // Force UI refresh
-            messageListView.refresh();
+            // Just scroll to bottom - no refresh needed since items are already bound
             messageListView.scrollTo(messages.size() - 1);
         }
         
@@ -1370,7 +1369,10 @@ public class ChatViewController {
         // Find the message and trigger highlight
         int index = findMessageIndexById(messageId);
         if (index >= 0) {
-            // Select the item to ensure it's visible
+            // Scroll to the message first
+            messageListView.scrollTo(index);
+            
+            // Select briefly for visual feedback (no refresh needed)
             messageListView.getSelectionModel().select(index);
             
             // Schedule highlight removal after 2 seconds
@@ -1382,8 +1384,9 @@ public class ChatViewController {
             );
             timeline.play();
             
-            // Refresh to apply highlight style
-            messageListView.refresh();
+            // NOTE: Removed messageListView.refresh() - it was causing 
+            // all visible cells to re-render, which is expensive and unnecessary.
+            // The selection change alone provides visual feedback.
         }
     }
     
