@@ -467,8 +467,8 @@ public class ChatViewController {
                     final FileAttachment finalAttachment = attachment;
                     placeholder.setOnMouseClicked(e -> openSharedMediaFile(finalAttachment));
                 } else {
-                    // Show file type icon instead
-                    FontIcon icon = getFileTypeIcon(attachment.getTargetType());
+                    // Show file type icon instead (with filename for accurate icon)
+                    FontIcon icon = getFileTypeIcon(attachment.getTargetType(), attachment.getFileName());
                     placeholder.getChildren().add(icon);
                     placeholder.setStyle("-fx-background-color: #2a2d31; -fx-background-radius: 8; -fx-cursor: hand;");
                     
@@ -492,10 +492,73 @@ public class ChatViewController {
      * Get appropriate icon for file type
      */
     private FontIcon getFileTypeIcon(MessageType type) {
+        return getFileTypeIcon(type, null);
+    }
+    
+    /**
+     * Get appropriate icon for file type with filename for better detection
+     */
+    private FontIcon getFileTypeIcon(MessageType type, String fileName) {
         FontIcon icon = new FontIcon();
         icon.setIconSize(24);
         icon.setIconColor(javafx.scene.paint.Color.web("#94a1b2"));
         
+        // First check by filename extension for more accurate icons
+        if (fileName != null) {
+            String lower = fileName.toLowerCase();
+            
+            // Text files
+            if (lower.endsWith(".txt") || lower.endsWith(".log")) {
+                icon.setIconLiteral("fas-file-alt");
+                return icon;
+            }
+            // Code files
+            if (lower.endsWith(".java") || lower.endsWith(".py") || lower.endsWith(".js") ||
+                lower.endsWith(".html") || lower.endsWith(".css") || lower.endsWith(".sh")) {
+                icon.setIconLiteral("fas-file-code");
+                return icon;
+            }
+            // JSON/XML/Config files
+            if (lower.endsWith(".json") || lower.endsWith(".xml") || lower.endsWith(".yml") ||
+                lower.endsWith(".yaml") || lower.endsWith(".ini") || lower.endsWith(".conf")) {
+                icon.setIconLiteral("fas-file-code");
+                return icon;
+            }
+            // Markdown
+            if (lower.endsWith(".md")) {
+                icon.setIconLiteral("fas-file-alt");
+                return icon;
+            }
+            // CSV/Excel
+            if (lower.endsWith(".csv") || lower.endsWith(".xlsx") || lower.endsWith(".xls")) {
+                icon.setIconLiteral("fas-file-excel");
+                return icon;
+            }
+            // Word documents
+            if (lower.endsWith(".doc") || lower.endsWith(".docx")) {
+                icon.setIconLiteral("fas-file-word");
+                return icon;
+            }
+            // PDF
+            if (lower.endsWith(".pdf")) {
+                icon.setIconLiteral("fas-file-pdf");
+                return icon;
+            }
+            // Archive files
+            if (lower.endsWith(".zip") || lower.endsWith(".rar") || lower.endsWith(".7z") ||
+                lower.endsWith(".tar") || lower.endsWith(".gz")) {
+                icon.setIconLiteral("fas-file-archive");
+                return icon;
+            }
+            // Audio files
+            if (lower.endsWith(".mp3") || lower.endsWith(".wav") || lower.endsWith(".flac") ||
+                lower.endsWith(".ogg") || lower.endsWith(".m4a")) {
+                icon.setIconLiteral("fas-file-audio");
+                return icon;
+            }
+        }
+        
+        // Fallback to type-based icons
         if (type == null) {
             icon.setIconLiteral("fas-file");
             return icon;
@@ -509,7 +572,7 @@ public class ChatViewController {
                 icon.setIconLiteral("fas-video");
                 break;
             case DOCUMENT:
-                icon.setIconLiteral("fas-file-pdf");
+                icon.setIconLiteral("fas-file-alt");  // Generic document icon
                 break;
             default:
                 icon.setIconLiteral("fas-file");
@@ -698,8 +761,8 @@ public class ChatViewController {
             imageView.setPreserveRatio(true);
             item.getChildren().add(imageView);
         } else {
-            // Show file type icon
-            FontIcon icon = getFileTypeIcon(attachment.getTargetType());
+            // Show file type icon (with filename for accurate icon)
+            FontIcon icon = getFileTypeIcon(attachment.getTargetType(), attachment.getFileName());
             icon.setIconSize(36);
             
             Label nameLabel = new Label(truncateFileName(attachment.getFileName(), 15));
