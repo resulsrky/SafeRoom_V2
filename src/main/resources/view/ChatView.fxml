@@ -200,12 +200,19 @@
                                     <Region styleClass="separator-line" />
 
                                     <VBox spacing="10.0">
-                                        <Label text="Shared Media" styleClass="section-header-label" />
-                                        <HBox spacing="10.0">
-                                            <StackPane styleClass="media-placeholder" />
-                                            <StackPane styleClass="media-placeholder" />
-                                            <StackPane styleClass="media-placeholder" />
+                                        <HBox alignment="CENTER_LEFT">
+                                            <Label text="Shared Media" styleClass="section-header-label" />
+                                            <Pane HBox.hgrow="ALWAYS" />
+                                            <Label fx:id="sharedMediaCount" styleClass="media-count-label" text="" />
                                         </HBox>
+                                        <HBox fx:id="sharedMediaContainer" spacing="8.0" alignment="CENTER_LEFT">
+                                            <!-- Media thumbnails will be loaded dynamically -->
+                                            <StackPane fx:id="mediaPlaceholder1" styleClass="media-placeholder" />
+                                            <StackPane fx:id="mediaPlaceholder2" styleClass="media-placeholder" />
+                                            <StackPane fx:id="mediaPlaceholder3" styleClass="media-placeholder" />
+                                        </HBox>
+                                        <Button fx:id="viewAllMediaBtn" text="View All" styleClass="view-all-btn" 
+                                                visible="false" managed="false" maxWidth="Infinity" />
                                     </VBox>
 
                                     <Region styleClass="separator-line" />

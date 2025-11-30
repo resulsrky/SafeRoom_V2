@@ -377,6 +377,17 @@ public class ChatService {
                         placeholder.setProgress(1.0);
                         placeholder.setType(attachment.getTargetType());
                         placeholder.setStatusText("Sent");
+                        
+                        // ✅ PERSIST outgoing file message after successful transfer
+                        if (persistenceEnabled && messagePersister != null) {
+                            messagePersister.persistMessageAsync(placeholder, targetUser, currentUsername)
+                                .exceptionally(error -> {
+                                    System.err.println("[ChatService] Failed to persist outgoing file: " + error.getMessage());
+                                    return null;
+                                });
+                            System.out.printf("[ChatService] 📁 Outgoing file persisted: %s to %s%n", 
+                                attachment.getFileName(), targetUser);
+                        }
                     });
                 }
 
@@ -446,6 +457,17 @@ public class ChatService {
 
             ObservableList<Message> msgs = getMessagesForChannel(senderId);
             msgs.add(incoming);
+            
+            // ✅ PERSIST incoming file message to database
+            if (persistenceEnabled && messagePersister != null) {
+                messagePersister.persistMessageAsync(incoming, senderId, currentUsername)
+                    .exceptionally(error -> {
+                        System.err.println("[ChatService] Failed to persist incoming file: " + error.getMessage());
+                        return null;
+                    });
+                System.out.printf("[ChatService] 📁 Incoming file persisted: %s from %s%n", 
+                    attachment.getFileName(), senderId);
+            }
 
             try {
                 com.saferoom.gui.service.ContactService.getInstance()

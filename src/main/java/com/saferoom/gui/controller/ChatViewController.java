@@ -49,9 +49,14 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import javafx.util.Duration;
+import com.saferoom.gui.model.FileAttachment;
+import com.saferoom.gui.model.MessageType;
+import com.saferoom.storage.LocalMessageRepository;
 
 public class ChatViewController {
 
@@ -99,6 +104,20 @@ public class ChatViewController {
     private Button infoVideoButton;
     @FXML
     private Button infoSearchButton;
+    
+    // Shared Media UI
+    @FXML
+    private HBox sharedMediaContainer;
+    @FXML
+    private Label sharedMediaCount;
+    @FXML
+    private StackPane mediaPlaceholder1;
+    @FXML
+    private StackPane mediaPlaceholder2;
+    @FXML
+    private StackPane mediaPlaceholder3;
+    @FXML
+    private Button viewAllMediaBtn;
 
     // UI Areas
     @FXML
@@ -325,6 +344,182 @@ public class ChatViewController {
             // Force UI refresh
             messageListView.refresh();
             messageListView.scrollTo(messages.size() - 1);
+        }
+        
+        // Load shared media thumbnails for Contact Info sidebar
+        loadSharedMedia(channelId);
+    }
+    
+    /**
+     * Load shared media (images, videos, documents) for the Contact Info sidebar
+     * Shows up to 3 thumbnails with a count indicator
+     */
+    private void loadSharedMedia(String channelId) {
+        if (!LocalDatabase.isInitialized()) {
+            System.out.println("[ChatView] Database not initialized, skipping shared media load");
+            return;
+        }
+        
+        try {
+            LocalMessageRepository repository = LocalMessageRepository.getInstance();
+            String conversationId = SqlCipherHelper.generateConversationId(
+                chatService.getCurrentUsername(), channelId);
+            
+            repository.loadMediaMessagesAsync(conversationId)
+                .thenAccept(mediaMessages -> {
+                    Platform.runLater(() -> {
+                        updateSharedMediaUI(mediaMessages);
+                    });
+                })
+                .exceptionally(error -> {
+                    System.err.println("[ChatView] Failed to load shared media: " + error.getMessage());
+                    return null;
+                });
+        } catch (Exception e) {
+            System.err.println("[ChatView] Error loading shared media: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Update Shared Media UI with loaded media messages
+     */
+    private void updateSharedMediaUI(List<Message> mediaMessages) {
+        // Clear existing thumbnails
+        StackPane[] placeholders = {mediaPlaceholder1, mediaPlaceholder2, mediaPlaceholder3};
+        
+        for (StackPane placeholder : placeholders) {
+            if (placeholder != null) {
+                placeholder.getChildren().clear();
+                placeholder.setStyle("-fx-background-color: #2a2d31; -fx-background-radius: 8;");
+            }
+        }
+        
+        // Update count label
+        int totalMedia = mediaMessages.size();
+        if (sharedMediaCount != null) {
+            if (totalMedia > 0) {
+                sharedMediaCount.setText(totalMedia + " items");
+                sharedMediaCount.setVisible(true);
+            } else {
+                sharedMediaCount.setText("");
+                sharedMediaCount.setVisible(false);
+            }
+        }
+        
+        // Show "View All" button if more than 3 items
+        if (viewAllMediaBtn != null) {
+            viewAllMediaBtn.setVisible(totalMedia > 3);
+            viewAllMediaBtn.setManaged(totalMedia > 3);
+        }
+        
+        // Fill placeholders with thumbnails (up to 3)
+        for (int i = 0; i < Math.min(3, mediaMessages.size()); i++) {
+            Message mediaMsg = mediaMessages.get(i);
+            FileAttachment attachment = mediaMsg.getAttachment();
+            
+            if (attachment != null && placeholders[i] != null) {
+                StackPane placeholder = placeholders[i];
+                
+                // Try to load thumbnail
+                Image thumbnail = attachment.getThumbnail();
+                
+                if (thumbnail == null && attachment.getLocalPath() != null) {
+                    // Try to load from file path for images
+                    try {
+                        java.nio.file.Path filePath = attachment.getLocalPath();
+                        if (java.nio.file.Files.exists(filePath)) {
+                            String fileName = filePath.getFileName().toString().toLowerCase();
+                            if (fileName.endsWith(".png") || fileName.endsWith(".jpg") || 
+                                fileName.endsWith(".jpeg") || fileName.endsWith(".gif")) {
+                                thumbnail = new Image(filePath.toUri().toString(), 80, 80, true, true, true);
+                            }
+                        }
+                    } catch (Exception e) {
+                        System.err.println("[ChatView] Failed to load thumbnail from path: " + e.getMessage());
+                    }
+                }
+                
+                if (thumbnail != null) {
+                    ImageView imageView = new ImageView(thumbnail);
+                    imageView.setFitWidth(80);
+                    imageView.setFitHeight(80);
+                    imageView.setPreserveRatio(true);
+                    imageView.setStyle("-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 5, 0, 0, 2);");
+                    
+                    placeholder.getChildren().add(imageView);
+                    placeholder.setStyle("-fx-background-color: transparent; -fx-background-radius: 8; -fx-cursor: hand;");
+                    
+                    // Click to open file
+                    final java.nio.file.Path filePath = attachment.getLocalPath();
+                    placeholder.setOnMouseClicked(e -> {
+                        if (filePath != null && java.nio.file.Files.exists(filePath)) {
+                            openFile(filePath);
+                        }
+                    });
+                } else {
+                    // Show file type icon instead
+                    FontIcon icon = getFileTypeIcon(attachment.getTargetType());
+                    placeholder.getChildren().add(icon);
+                    placeholder.setStyle("-fx-background-color: #2a2d31; -fx-background-radius: 8; -fx-cursor: hand;");
+                    
+                    final java.nio.file.Path filePath = attachment.getLocalPath();
+                    placeholder.setOnMouseClicked(e -> {
+                        if (filePath != null && java.nio.file.Files.exists(filePath)) {
+                            openFile(filePath);
+                        }
+                    });
+                }
+            }
+        }
+        
+        // If no media, show empty state
+        if (mediaMessages.isEmpty()) {
+            if (mediaPlaceholder1 != null) {
+                Label emptyLabel = new Label("No media");
+                emptyLabel.setStyle("-fx-text-fill: #666; -fx-font-size: 11px;");
+                mediaPlaceholder1.getChildren().add(emptyLabel);
+            }
+        }
+    }
+    
+    /**
+     * Get appropriate icon for file type
+     */
+    private FontIcon getFileTypeIcon(MessageType type) {
+        FontIcon icon = new FontIcon();
+        icon.setIconSize(24);
+        icon.setIconColor(javafx.scene.paint.Color.web("#94a1b2"));
+        
+        if (type == null) {
+            icon.setIconLiteral("fas-file");
+            return icon;
+        }
+        
+        switch (type) {
+            case IMAGE:
+                icon.setIconLiteral("fas-image");
+                break;
+            case VIDEO:
+                icon.setIconLiteral("fas-video");
+                break;
+            case DOCUMENT:
+                icon.setIconLiteral("fas-file-pdf");
+                break;
+            default:
+                icon.setIconLiteral("fas-file");
+        }
+        return icon;
+    }
+    
+    /**
+     * Open file with system default application
+     */
+    private void openFile(java.nio.file.Path filePath) {
+        try {
+            java.awt.Desktop.getDesktop().open(filePath.toFile());
+        } catch (Exception e) {
+            System.err.println("[ChatView] Failed to open file: " + e.getMessage());
+            showAlert("Error", "Could not open file: " + e.getMessage(), Alert.AlertType.ERROR);
         }
     }
     

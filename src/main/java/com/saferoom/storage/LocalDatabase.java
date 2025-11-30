@@ -75,6 +75,13 @@ public class LocalDatabase {
     }
     
     /**
+     * Check if database is initialized
+     */
+    public static boolean isInitialized() {
+        return instance != null;
+    }
+    
+    /**
      * Get encryption key for content encryption
      */
     public String getEncryptionKey() {

@@ -1449,12 +1449,37 @@
   -fx-background-radius: 12px;
   -fx-pref-width: 80px;
   -fx-pref-height: 80px;
+  -fx-min-width: 80px;
+  -fx-min-height: 80px;
   -fx-border-color: #334155;
   -fx-border-radius: 12px;
   -fx-cursor: hand;
+  -fx-alignment: center;
 }
 .media-placeholder:hover {
   -fx-border-color: #7F5AF0;
+  -fx-effect: dropshadow(gaussian, rgba(127, 90, 240, 0.3), 8, 0, 0, 0);
+}
+
+/* Media Count Label */
+.media-count-label {
+  -fx-text-fill: #94a1b2;
+  -fx-font-size: 12px;
+  -fx-font-weight: 500;
+}
+
+/* View All Media Button */
+.view-all-btn {
+  -fx-background-color: transparent;
+  -fx-text-fill: #7F5AF0;
+  -fx-font-size: 13px;
+  -fx-font-weight: 600;
+  -fx-cursor: hand;
+  -fx-padding: 8px 0;
+}
+.view-all-btn:hover {
+  -fx-text-fill: #9F7AEA;
+  -fx-underline: true;
 }
 
 /* Tehlikeli Butonlar (Engelle / Sil) */
