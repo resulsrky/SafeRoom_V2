@@ -63,12 +63,15 @@ public class FriendsController {
     private static FriendsController currentInstance;
 
     public FriendsController() {
+        // Stop previous instance's timer before replacing
+        if (currentInstance != null) {
+            currentInstance.stopAutoRefresh();
+        }
         currentInstance = this;
     }
 
     @FXML
     public void initialize() {
-
         setupListView();
         setupSearchFunctionality();
         setupFilterButtons();
@@ -76,6 +79,15 @@ public class FriendsController {
 
         // Load data
         loadFriendsData();
+        
+        // Cleanup when scene is removed (navigating away)
+        if (friendsListView != null) {
+            friendsListView.sceneProperty().addListener((obs, oldScene, newScene) -> {
+                if (newScene == null) {
+                    stopAutoRefresh();
+                }
+            });
+        }
     }
 
 
@@ -686,13 +698,43 @@ public class FriendsController {
         }
     }
 
+    /**
+     * Setup auto-refresh for friends list
+     * OPTIMIZED: 
+     * - Stops existing timer before creating new one (prevents memory leak)
+     * - Increased interval to 60 seconds (was 30)
+     * - Only refreshes if view is visible
+     */
     private void setupAutoRefresh() {
-        friendsRefresher = new Timeline(new KeyFrame(Duration.seconds(30), e -> {
-            System.out.println("🔄 Auto-refreshing friends list...");
-            loadFriendsData();
+        // CRITICAL: Stop existing timer to prevent multiple timers running
+        if (friendsRefresher != null) {
+            friendsRefresher.stop();
+            friendsRefresher = null;
+        }
+        
+        // Use 60 seconds interval (reduced CPU overhead)
+        friendsRefresher = new Timeline(new KeyFrame(Duration.seconds(60), e -> {
+            // Only refresh if ListView is visible and in scene
+            if (friendsListView != null && friendsListView.isVisible() && 
+                friendsListView.getScene() != null) {
+                System.out.println("🔄 Auto-refreshing friends list...");
+                loadFriendsData();
+            }
         }));
         friendsRefresher.setCycleCount(Timeline.INDEFINITE);
         friendsRefresher.play();
+    }
+    
+    /**
+     * Stop auto-refresh when controller is no longer needed
+     * Call this when navigating away from Friends view
+     */
+    public void stopAutoRefresh() {
+        if (friendsRefresher != null) {
+            friendsRefresher.stop();
+            friendsRefresher = null;
+            System.out.println("⏹️ Friends auto-refresh stopped");
+        }
     }
 
     private static FriendsController getCurrentInstance() {
