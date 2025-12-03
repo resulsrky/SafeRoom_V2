@@ -2379,6 +2379,335 @@
   -fx-text-fill: white;
 }
 
+/* Source Badge - DM/Meeting/Local */
+.source-badge {
+  -fx-font-size: 9px;
+  -fx-padding: 2 6;
+  -fx-background-radius: 3;
+  -fx-font-weight: bold;
+}
+
+.source-dm {
+  -fx-background-color: #3b82f6;
+  -fx-text-fill: white;
+}
+
+.source-meeting {
+  -fx-background-color: #8b5cf6;
+  -fx-text-fill: white;
+}
+
+.source-local {
+  -fx-background-color: #10b981;
+  -fx-text-fill: white;
+}
+
+/* Lock icon for encrypted files */
+.lock-icon {
+  -fx-icon-color: #fbbf24;
+  -fx-icon-size: 12px;
+}
+
+/* Empty state */
+.empty-icon {
+  -fx-icon-color: #475569;
+}
+
+.empty-label {
+  -fx-text-fill: #64748b;
+  -fx-font-size: 13px;
+}
+
+/* Drop zone hover effect */
+.drop-zone.drag-over {
+  -fx-border-color: #22d3ee;
+  -fx-background-color: rgba(34, 211, 238, 0.05);
+}
+
+/* Secure Files - Filter Buttons */
+.filter-button {
+  -fx-background-color: #1e293b;
+  -fx-text-fill: #94a3b8;
+  -fx-font-size: 12px;
+  -fx-padding: 6 14;
+  -fx-background-radius: 6;
+  -fx-cursor: hand;
+}
+
+.filter-button:hover {
+  -fx-background-color: #334155;
+}
+
+.filter-button.active {
+  -fx-background-color: #3b82f6;
+  -fx-text-fill: white;
+}
+
+/* Secure Files Root */
+.secure-files-root {
+  -fx-background-color: #0d1117;
+}
+
+/* Secure Files Header */
+.secure-files-header {
+  -fx-background-color: #161b22;
+  -fx-border-color: #30363d;
+  -fx-border-width: 0 0 1 0;
+}
+
+/* Secure Files Content */
+.secure-files-content {
+  -fx-background-color: #0d1117;
+}
+
+/* Vault Scroll Pane */
+.vault-scroll-pane {
+  -fx-background-color: transparent;
+  -fx-background: transparent;
+}
+
+.vault-scroll-pane > .viewport {
+  -fx-background-color: transparent;
+}
+
+.vault-scroll-pane .scroll-bar {
+  -fx-background-color: transparent;
+}
+
+.vault-scroll-pane .scroll-bar .thumb {
+  -fx-background-color: #30363d;
+  -fx-background-radius: 4;
+}
+
+.vault-scroll-pane .scroll-bar .thumb:hover {
+  -fx-background-color: #484f58;
+}
+
+/* Files Grid */
+.files-grid {
+  -fx-background-color: transparent;
+  -fx-padding: 10;
+}
+
+/* Empty State for Secure Files */
+.secure-files-content .empty-state {
+  -fx-background-color: transparent;
+  -fx-padding: 60 40;
+}
+
+.secure-files-content .empty-state-label {
+  -fx-text-fill: #8b949e;
+  -fx-font-size: 16px;
+  -fx-font-weight: bold;
+}
+
+.secure-files-content .empty-state-sublabel {
+  -fx-text-fill: #6e7681;
+  -fx-font-size: 13px;
+}
+
+/* Section Title */
+.section-title {
+  -fx-text-fill: #c9d1d9;
+  -fx-font-size: 16px;
+  -fx-font-weight: bold;
+}
+
+/* Vault Stats Label */
+.vault-stats {
+  -fx-text-fill: #8b949e;
+  -fx-font-size: 12px;
+}
+
+/* Drop Zone Label */
+.drop-zone-label {
+  -fx-text-fill: #c9d1d9;
+  -fx-font-size: 15px;
+  -fx-font-weight: 600;
+}
+
+.drop-zone-sublabel {
+  -fx-text-fill: #6e7681;
+  -fx-font-size: 12px;
+}
+
+/* Compress Checkbox */
+.compress-checkbox {
+  -fx-text-fill: #8b949e;
+  -fx-font-size: 12px;
+}
+
+.compress-checkbox .box {
+  -fx-background-color: #21262d;
+  -fx-border-color: #30363d;
+  -fx-border-radius: 4;
+  -fx-background-radius: 4;
+}
+
+.compress-checkbox:selected .box {
+  -fx-background-color: #238636;
+  -fx-border-color: #238636;
+}
+
+/* File Card Improvements */
+.file-card {
+  -fx-background-color: #161b22;
+  -fx-background-radius: 8;
+  -fx-border-color: #30363d;
+  -fx-border-radius: 8;
+  -fx-border-width: 1;
+  -fx-padding: 15;
+  -fx-effect: none;
+}
+
+.file-card:hover {
+  -fx-background-color: #1c2128;
+  -fx-border-color: #3b82f6;
+  -fx-translate-y: 0;
+  -fx-effect: none;
+}
+
+.file-card-name {
+  -fx-text-fill: #c9d1d9;
+  -fx-font-size: 13px;
+  -fx-font-weight: 600;
+}
+
+.file-card-size {
+  -fx-text-fill: #8b949e;
+  -fx-font-size: 11px;
+}
+
+.file-card-date {
+  -fx-text-fill: #6e7681;
+  -fx-font-size: 10px;
+}
+
+.file-card-action {
+  -fx-background-color: #21262d;
+  -fx-background-radius: 6;
+  -fx-padding: 6 10;
+  -fx-cursor: hand;
+}
+
+.file-card-action:hover {
+  -fx-background-color: #30363d;
+}
+
+.file-card-action .ikonli-font-icon {
+  -fx-icon-color: #8b949e;
+  -fx-icon-size: 12px;
+}
+
+.file-card-action:hover .ikonli-font-icon {
+  -fx-icon-color: #c9d1d9;
+}
+
+.file-card-action-danger {
+  -fx-background-color: #21262d;
+  -fx-background-radius: 6;
+  -fx-padding: 6 10;
+  -fx-cursor: hand;
+}
+
+.file-card-action-danger:hover {
+  -fx-background-color: #3d1f1f;
+}
+
+.file-card-action-danger .ikonli-font-icon {
+  -fx-icon-color: #8b949e;
+  -fx-icon-size: 12px;
+}
+
+.file-card-action-danger:hover .ikonli-font-icon {
+  -fx-icon-color: #f85149;
+}
+
+/* Filter Button Improvements */
+.filter-button {
+  -fx-background-color: #21262d;
+  -fx-text-fill: #8b949e;
+  -fx-font-size: 11px;
+  -fx-padding: 5 10;
+  -fx-background-radius: 6;
+  -fx-cursor: hand;
+  -fx-graphic-text-gap: 5;
+}
+
+.filter-button:hover {
+  -fx-background-color: #30363d;
+  -fx-text-fill: #c9d1d9;
+}
+
+.filter-button.active {
+  -fx-background-color: #238636;
+  -fx-text-fill: white;
+}
+
+.filter-button .ikonli-font-icon {
+  -fx-icon-color: #8b949e;
+  -fx-icon-size: 12px;
+}
+
+.filter-button:hover .ikonli-font-icon,
+.filter-button.active .ikonli-font-icon {
+  -fx-icon-color: white;
+}
+
+/* Search Field for Secure Files */
+.secure-files-content .search-field {
+  -fx-background-color: #21262d;
+  -fx-background-radius: 6;
+  -fx-text-fill: #c9d1d9;
+  -fx-prompt-text-fill: #6e7681;
+  -fx-border-color: #30363d;
+  -fx-border-radius: 6;
+  -fx-padding: 6 12;
+  -fx-font-size: 12px;
+}
+
+.secure-files-content .search-field:focused {
+  -fx-border-color: #3b82f6;
+}
+
+/* Icon Button for Refresh */
+.icon-button {
+  -fx-background-color: #21262d;
+  -fx-background-radius: 6;
+  -fx-padding: 6;
+  -fx-cursor: hand;
+}
+
+.icon-button:hover {
+  -fx-background-color: #30363d;
+}
+
+.icon-button .ikonli-font-icon {
+  -fx-icon-color: #8b949e;
+}
+
+.icon-button:hover .ikonli-font-icon {
+  -fx-icon-color: #c9d1d9;
+}
+
+/* Drop Zone Updates */
+.drop-zone {
+  -fx-background-color: #161b22;
+  -fx-border-color: #30363d;
+  -fx-border-style: dashed;
+  -fx-border-width: 2;
+  -fx-border-radius: 12;
+  -fx-background-radius: 12;
+  -fx-padding: 30;
+  -fx-min-height: 160;
+  -fx-max-height: 180;
+}
+
+.drop-zone:hover {
+  -fx-border-color: #3b82f6;
+  -fx-background-color: #1c2128;
+}
+
 /* =================================================================
    8. AYARLAR EKRANI
    ================================================================= */

@@ -249,7 +249,7 @@ public class MessageDao {
      * Deserialize message from database row
      */
     private Message deserializeMessage(ResultSet rs) throws SQLException {
-        String id = rs.getString("id");
+        // Note: id is loaded from DB but Message uses its own UUID - we trust the DB stored ID
         String senderId = rs.getString("sender_id");
         String senderAvatarChar = rs.getString("sender_avatar_char");
         MessageType type = MessageType.valueOf(rs.getString("type"));
@@ -342,6 +342,156 @@ public class MessageDao {
         if (fileName.endsWith(".txt")) return "text/plain";
         
         return "application/octet-stream";
+    }
+    
+    /**
+     * Get all file messages (non-text messages with attachments)
+     * Used by Secure Files to show DM/Meeting files
+     */
+    public List<DmFileRecord> getAllFileMessages() throws SQLException {
+        List<DmFileRecord> files = new ArrayList<>();
+        
+        // Correct column names from messages table schema
+        String sql = """
+            SELECT id, conversation_id, sender_id, type, content, file_path, 
+                   timestamp, is_outgoing, thumbnail
+            FROM messages 
+            WHERE type != 'TEXT' AND file_path IS NOT NULL AND file_path != ''
+            ORDER BY timestamp DESC
+            """;
+        
+        try (PreparedStatement stmt = database.getConnection().prepareStatement(sql);
+             ResultSet rs = stmt.executeQuery()) {
+            
+            while (rs.next()) {
+                DmFileRecord record = new DmFileRecord();
+                record.id = rs.getString("id");  // id is TEXT not LONG
+                record.conversationId = rs.getString("conversation_id");
+                record.senderId = rs.getString("sender_id");
+                record.messageType = rs.getString("type");  // column is 'type' not 'message_type'
+                record.filePath = rs.getString("file_path");
+                record.createdAt = rs.getLong("timestamp");  // column is 'timestamp' not 'created_at'
+                record.isOutgoing = rs.getInt("is_outgoing") == 1;
+                
+                // Parse content JSON for file name and size
+                String contentJson = rs.getString("content");  // column is 'content' not 'content_json'
+                if (contentJson != null && !contentJson.isEmpty()) {
+                    try {
+                        JsonObject json = gson.fromJson(contentJson, JsonObject.class);
+                        record.fileName = json.has("fileName") ? json.get("fileName").getAsString() : "File";
+                        record.fileSize = json.has("fileSize") ? json.get("fileSize").getAsLong() : 0;
+                        record.mimeType = json.has("mime") ? json.get("mime").getAsString() : getMimeFromFileName(record.fileName);
+                    } catch (Exception e) {
+                        record.fileName = extractFileNameFromPath(record.filePath);
+                        record.fileSize = 0;
+                        record.mimeType = getMimeFromFileName(record.fileName);
+                    }
+                } else {
+                    record.fileName = extractFileNameFromPath(record.filePath);
+                    record.mimeType = getMimeFromFileName(record.fileName);
+                }
+                
+                // Load thumbnail
+                byte[] thumbnailBytes = rs.getBytes("thumbnail");
+                if (thumbnailBytes != null) {
+                    try {
+                        BufferedImage buffered = ImageIO.read(new ByteArrayInputStream(thumbnailBytes));
+                        record.thumbnail = javafx.embed.swing.SwingFXUtils.toFXImage(buffered, null);
+                    } catch (Exception e) {
+                        // Ignore thumbnail errors
+                    }
+                }
+                
+                files.add(record);
+            }
+        }
+        
+        System.out.printf("[MessageDao] ✅ Loaded %d file messages from DM%n", files.size());
+        return files;
+    }
+    
+    /**
+     * Extract file name from path
+     */
+    private String extractFileNameFromPath(String filePath) {
+        if (filePath == null || filePath.isEmpty()) return "Unknown File";
+        int lastSlash = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+        return lastSlash >= 0 ? filePath.substring(lastSlash + 1) : filePath;
+    }
+    
+    /**
+     * Get MIME type from file name
+     */
+    private String getMimeFromFileName(String fileName) {
+        if (fileName == null) return "application/octet-stream";
+        String lower = fileName.toLowerCase();
+        if (lower.endsWith(".png")) return "image/png";
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+        if (lower.endsWith(".gif")) return "image/gif";
+        if (lower.endsWith(".webp")) return "image/webp";
+        if (lower.endsWith(".bmp")) return "image/bmp";
+        if (lower.endsWith(".mp4")) return "video/mp4";
+        if (lower.endsWith(".mov")) return "video/quicktime";
+        if (lower.endsWith(".mkv")) return "video/x-matroska";
+        if (lower.endsWith(".avi")) return "video/x-msvideo";
+        if (lower.endsWith(".pdf")) return "application/pdf";
+        if (lower.endsWith(".doc") || lower.endsWith(".docx")) return "application/msword";
+        if (lower.endsWith(".xls") || lower.endsWith(".xlsx")) return "application/vnd.ms-excel";
+        if (lower.endsWith(".ppt") || lower.endsWith(".pptx")) return "application/vnd.ms-powerpoint";
+        if (lower.endsWith(".txt")) return "text/plain";
+        if (lower.endsWith(".md")) return "text/markdown";
+        if (lower.endsWith(".zip")) return "application/zip";
+        if (lower.endsWith(".rar")) return "application/x-rar-compressed";
+        if (lower.endsWith(".7z")) return "application/x-7z-compressed";
+        if (lower.endsWith(".tar")) return "application/x-tar";
+        if (lower.endsWith(".gz")) return "application/gzip";
+        return "application/octet-stream";
+    }
+    
+    /**
+     * DM File Record - represents a file shared in DM
+     */
+    public static class DmFileRecord {
+        public String id;  // TEXT type
+        public String conversationId;
+        public String senderId;
+        public String messageType;
+        public String fileName;
+        public long fileSize;
+        public String filePath;
+        public String mimeType;
+        public long createdAt;
+        public boolean isOutgoing;
+        public Image thumbnail;
+        
+        /**
+         * Get file category based on MIME type
+         */
+        public String getCategory() {
+            if (mimeType == null) return "Other";
+            if (mimeType.startsWith("image/")) return "Images";
+            if (mimeType.startsWith("video/")) return "Videos";
+            if (mimeType.contains("pdf") || mimeType.contains("word") || 
+                mimeType.contains("excel") || mimeType.contains("powerpoint") ||
+                mimeType.contains("text/") || mimeType.contains("document")) return "Documents";
+            if (mimeType.contains("zip") || mimeType.contains("rar") || 
+                mimeType.contains("7z") || mimeType.contains("tar") || 
+                mimeType.contains("gzip")) return "Archives";
+            return "Other";
+        }
+        
+        public String getFormattedSize() {
+            if (fileSize < 1024) return fileSize + " B";
+            if (fileSize < 1024 * 1024) return String.format("%.1f KB", fileSize / 1024.0);
+            if (fileSize < 1024 * 1024 * 1024) return String.format("%.1f MB", fileSize / (1024.0 * 1024.0));
+            return String.format("%.1f GB", fileSize / (1024.0 * 1024.0 * 1024.0));
+        }
+        
+        public String getFormattedDate() {
+            java.time.Instant instant = java.time.Instant.ofEpochMilli(createdAt);
+            return instant.atZone(java.time.ZoneId.systemDefault())
+                .format(java.time.format.DateTimeFormatter.ofPattern("MMM dd, yyyy"));
+        }
     }
 }
 

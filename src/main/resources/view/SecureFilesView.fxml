@@ -68,7 +68,37 @@
             <VBox spacing="15" VBox.vgrow="ALWAYS">
                 <!-- Vault Header -->
                 <HBox alignment="CENTER_LEFT" spacing="15">
-                    <Label text="Your Encrypted Files" styleClass="section-title" />
+                    <Label text="Your Files" styleClass="section-title" />
+                    <Pane HBox.hgrow="ALWAYS" />
+                    
+                    <!-- Category Filters -->
+                    <HBox fx:id="categoryFilterBar" spacing="6" alignment="CENTER_LEFT">
+                        <Button fx:id="filterAll" text="All" styleClass="filter-button" />
+                        <Button fx:id="filterImages" styleClass="filter-button">
+                            <graphic>
+                                <FontIcon iconLiteral="fas-image" iconSize="12" />
+                            </graphic>
+                            <text>Images</text>
+                        </Button>
+                        <Button fx:id="filterDocuments" styleClass="filter-button">
+                            <graphic>
+                                <FontIcon iconLiteral="fas-file-alt" iconSize="12" />
+                            </graphic>
+                            <text>Docs</text>
+                        </Button>
+                        <Button fx:id="filterArchives" styleClass="filter-button">
+                            <graphic>
+                                <FontIcon iconLiteral="fas-file-archive" iconSize="12" />
+                            </graphic>
+                            <text>Archives</text>
+                        </Button>
+                        <Button fx:id="filterEncrypted" styleClass="filter-button">
+                            <graphic>
+                                <FontIcon iconLiteral="fas-lock" iconSize="12" />
+                            </graphic>
+                            <text>Encrypted</text>
+                        </Button>
+                    </HBox>
                     <Pane HBox.hgrow="ALWAYS" />
                     
                     <Button fx:id="refreshButton" styleClass="icon-button" 
@@ -93,11 +123,11 @@
                 </ScrollPane>
                 
                 <!-- Empty State -->
-                <VBox fx:id="emptyState" alignment="CENTER" spacing="15" 
+                <VBox fx:id="emptyState" alignment="CENTER" spacing="12" 
                       styleClass="empty-state" visible="true" managed="true">
-                    <FontIcon iconLiteral="fas-folder-open" iconSize="48" iconColor="#64748b" />
-                    <Label text="No encrypted files yet" styleClass="empty-state-label" />
-                    <Label text="Drop files above to get started" styleClass="empty-state-sublabel" />
+                    <FontIcon iconLiteral="fas-inbox" iconSize="52" iconColor="#6e7681" />
+                    <Label text="No files found" styleClass="empty-state-label" />
+                    <Label text="Files from DM conversations will appear here, or drop files above to encrypt" styleClass="empty-state-sublabel" />
                 </VBox>
             </VBox>
         </VBox>
