@@ -325,22 +325,32 @@ public class SecureFilesController {
     private void displayFilteredFiles() {
         filesGrid.getChildren().clear();
         
+        // Get list of already encrypted file names to filter out from DM list
+        java.util.Set<String> encryptedOriginalNames = encryptedFiles.stream()
+            .map(sf -> sf.originalName)
+            .collect(java.util.stream.Collectors.toSet());
+        
+        // Filter DM files - exclude ones that are already encrypted
+        List<DmFileRecord> unencryptedDmFiles = dmFiles.stream()
+            .filter(dm -> !encryptedOriginalNames.contains(dm.fileName))
+            .toList();
+        
         List<Object> filesToShow = new ArrayList<>();
         
         switch (currentFilter) {
             case "Images":
-                // Filter DM files by category
-                dmFiles.stream()
+                // Filter DM files by category (excluding encrypted ones)
+                unencryptedDmFiles.stream()
                     .filter(dm -> "Images".equals(dm.getCategory()))
                     .forEach(filesToShow::add);
                 break;
             case "Documents":
-                dmFiles.stream()
+                unencryptedDmFiles.stream()
                     .filter(dm -> "Documents".equals(dm.getCategory()))
                     .forEach(filesToShow::add);
                 break;
             case "Archives":
-                dmFiles.stream()
+                unencryptedDmFiles.stream()
                     .filter(dm -> "Archives".equals(dm.getCategory()))
                     .forEach(filesToShow::add);
                 break;
@@ -348,7 +358,7 @@ public class SecureFilesController {
                 filesToShow.addAll(encryptedFiles);
                 break;
             default: // All
-                filesToShow.addAll(dmFiles);
+                filesToShow.addAll(unencryptedDmFiles);
                 filesToShow.addAll(encryptedFiles);
                 break;
         }
@@ -369,11 +379,11 @@ public class SecureFilesController {
                 .toList();
         }
         
-        // Update stats with category counts
-        int totalFiles = dmFiles.size() + encryptedFiles.size();
-        long imageCount = dmFiles.stream().filter(dm -> "Images".equals(dm.getCategory())).count();
-        long docCount = dmFiles.stream().filter(dm -> "Documents".equals(dm.getCategory())).count();
-        long archiveCount = dmFiles.stream().filter(dm -> "Archives".equals(dm.getCategory())).count();
+        // Update stats with category counts (using unencrypted DM files)
+        int totalFiles = unencryptedDmFiles.size() + encryptedFiles.size();
+        long imageCount = unencryptedDmFiles.stream().filter(dm -> "Images".equals(dm.getCategory())).count();
+        long docCount = unencryptedDmFiles.stream().filter(dm -> "Documents".equals(dm.getCategory())).count();
+        long archiveCount = unencryptedDmFiles.stream().filter(dm -> "Archives".equals(dm.getCategory())).count();
         
         updateVaultStats(totalFiles, encryptedFiles.size(), (int) imageCount, (int) docCount, (int) archiveCount);
         

@@ -196,6 +196,43 @@ public class SecureFilesDatabase {
     }
     
     /**
+     * Check if a file with the given original name is already encrypted
+     */
+    public boolean isFileAlreadyEncrypted(String originalName) throws SQLException {
+        String sql = "SELECT COUNT(*) FROM secure_files WHERE original_name = ?";
+        
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, originalName);
+            
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1) > 0;
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Get all original names of encrypted files (for filtering DM list)
+     */
+    public List<String> getAllEncryptedOriginalNames() throws SQLException {
+        String sql = "SELECT original_name FROM secure_files";
+        List<String> names = new ArrayList<>();
+        
+        try (Statement stmt = connection.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            
+            while (rs.next()) {
+                names.add(rs.getString("original_name"));
+            }
+        }
+        
+        return names;
+    }
+    
+    /**
      * Delete file record
      */
     public boolean deleteFile(long id) throws SQLException {

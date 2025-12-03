@@ -67,7 +67,21 @@ public class SecureFilesService {
     public CompletableFuture<EncryptionResult> encryptFileAsync(Path sourceFile, boolean compress) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                System.out.println("[SecureFiles] 🔒 Starting encryption: " + sourceFile.getFileName());
+                String originalName = sourceFile.getFileName().toString();
+                System.out.println("[SecureFiles] 🔒 Starting encryption: " + originalName);
+                
+                // Check if file is already encrypted
+                if (database.isFileAlreadyEncrypted(originalName)) {
+                    System.out.println("[SecureFiles] ⚠️ File already encrypted: " + originalName);
+                    return new EncryptionResult(
+                        false,
+                        -1,
+                        null,
+                        null,
+                        null,
+                        "File '" + originalName + "' is already encrypted. Check the Encrypted filter to see it."
+                    );
+                }
                 
                 // Generate encryption key
                 SecretKey key = AES256GCMEncryptor.generateKey();
