@@ -15,10 +15,6 @@ import java.util.function.Consumer;
 import java.util.List;
 import java.util.ArrayList;
 
-// JNA imports for Windows COM (STA thread)
-import com.sun.jna.Pointer;
-import com.sun.jna.platform.win32.Ole32;
-
 /**
  * WebRTC Client Manager (Real Implementation)
  * Uses webrtc-java library for actual media streaming
@@ -130,81 +126,81 @@ public class WebRTCClient {
     }
     
     /**
-     * WINDOWS: Initialize AudioDeviceModule in STA thread
+     * WINDOWS: Initialize AudioDeviceModule on a dedicated background thread
      * 
-     * Windows requires COM to be initialized in Single-Threaded Apartment (STA) mode
-     * for AudioDeviceModule to work correctly. JavaFX/JVM starts in MTA mode which
-     * causes COM threading conflicts.
+     * The webrtc-java native library handles COM initialization internally.
+     * We must NOT call CoInitializeEx ourselves - let the native library do it.
      * 
-     * Solution: Create a dedicated STA thread for ADM initialization.
+     * Key: Run initialization on a CLEAN thread (not JavaFX Application Thread)
+     * to avoid COM threading conflicts with JavaFX's own COM usage.
      */
     private static void initWindowsAudio() throws Exception {
-        System.out.println("[WebRTC] [Windows] Initializing AudioDeviceModule with STA thread pipeline...");
+        System.out.println("[WebRTC] [Windows] Initializing AudioDeviceModule on dedicated thread...");
+        System.out.println("[WebRTC] [Windows] Note: COM will be handled by native webrtc library");
         
         AtomicReference<AudioDeviceModule> admRef = new AtomicReference<>();
         AtomicReference<Throwable> errorRef = new AtomicReference<>();
         CountDownLatch latch = new CountDownLatch(1);
         
-        // Create STA thread for COM-dependent AudioDeviceModule initialization
-        Thread staThread = Thread.ofPlatform()
-            .name("webrtc-sta-init")
+        // Create a CLEAN background thread for WebRTC initialization
+        // The native library will handle COM initialization on this thread
+        Thread webrtcInitThread = Thread.ofPlatform()
+            .name("webrtc-audio-init")
             .unstarted(() -> {
                 try {
-                    // Initialize COM in STA mode (required for Windows audio APIs)
-                    Ole32.INSTANCE.CoInitializeEx(Pointer.NULL, Ole32.COINIT_APARTMENTTHREADED);
-                    System.out.println("[WebRTC] [Windows] COM initialized in STA mode");
+                    System.out.println("[WebRTC] [Windows] Background thread started (tid=" + 
+                        Thread.currentThread().threadId() + ")");
                     
-                    try {
-                        // Get default audio devices
-                        AudioDevice defaultMic = MediaDevices.getDefaultAudioCaptureDevice();
-                        AudioDevice defaultSpeaker = MediaDevices.getDefaultAudioRenderDevice();
-                        
-                        // Create AudioDeviceModule in STA context
-                        AudioDeviceModule adm = new AudioDeviceModule();
-                        
-                        if (defaultMic != null) {
-                            System.out.println("[WebRTC] [Windows] Default microphone: " + defaultMic.getName());
-                            adm.setRecordingDevice(defaultMic);
-                            adm.initRecording();
-                        }
-                        
-                        if (defaultSpeaker != null) {
-                            System.out.println("[WebRTC] [Windows] Default speaker: " + defaultSpeaker.getName());
-                            adm.setPlayoutDevice(defaultSpeaker);
-                            adm.initPlayout();
-                        }
-                        
-                        admRef.set(adm);
-                        System.out.println("[WebRTC] [Windows] AudioDeviceModule initialized successfully in STA thread");
-                        
-                    } finally {
-                        // Uninitialize COM
-                        Ole32.INSTANCE.CoUninitialize();
-                        System.out.println("[WebRTC] [Windows] COM uninitialized");
+                    // Get default audio devices - native code will init COM here
+                    AudioDevice defaultMic = MediaDevices.getDefaultAudioCaptureDevice();
+                    AudioDevice defaultSpeaker = MediaDevices.getDefaultAudioRenderDevice();
+                    
+                    // Create AudioDeviceModule - this triggers native COM usage
+                    AudioDeviceModule adm = new AudioDeviceModule();
+                    
+                    if (defaultMic != null) {
+                        System.out.println("[WebRTC] [Windows] Default microphone: " + defaultMic.getName());
+                        adm.setRecordingDevice(defaultMic);
+                        adm.initRecording();
+                    } else {
+                        System.out.println("[WebRTC] [Windows] No microphone detected");
                     }
+                    
+                    if (defaultSpeaker != null) {
+                        System.out.println("[WebRTC] [Windows] Default speaker: " + defaultSpeaker.getName());
+                        adm.setPlayoutDevice(defaultSpeaker);
+                        adm.initPlayout();
+                    } else {
+                        System.out.println("[WebRTC] [Windows] No speaker detected");
+                    }
+                    
+                    admRef.set(adm);
+                    System.out.println("[WebRTC] [Windows] AudioDeviceModule initialized successfully");
+                    
                 } catch (Throwable t) {
                     errorRef.set(t);
-                    System.err.println("[WebRTC] [Windows] STA thread error: " + t.getMessage());
+                    System.err.println("[WebRTC] [Windows] Init thread error: " + t.getMessage());
+                    t.printStackTrace();
                 } finally {
                     latch.countDown();
                 }
             });
         
-        // Start STA thread and wait for completion
-        staThread.start();
+        // Start init thread and wait for completion
+        webrtcInitThread.start();
         
-        if (!latch.await(10, TimeUnit.SECONDS)) {
-            throw new RuntimeException("[WebRTC] [Windows] STA thread initialization timeout");
+        if (!latch.await(15, TimeUnit.SECONDS)) {
+            throw new RuntimeException("[WebRTC] [Windows] Initialization timeout (15s)");
         }
         
         // Check for errors
         if (errorRef.get() != null) {
-            throw new RuntimeException("[WebRTC] [Windows] STA thread failed", errorRef.get());
+            throw new RuntimeException("[WebRTC] [Windows] Initialization failed", errorRef.get());
         }
         
         // Store the ADM reference
         audioDeviceModule = admRef.get();
-        System.out.println("[WebRTC] [Windows] STA thread pipeline completed successfully");
+        System.out.println("[WebRTC] [Windows] Audio initialization completed");
     }
     
     /**
