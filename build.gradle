@@ -76,6 +76,10 @@ dependencies {
     // QR Code generation for Secure Files
     implementation 'com.google.zxing:core:3.5.3'
     implementation 'com.google.zxing:javase:3.5.3'
+    
+    // JNA for Windows COM (WebRTC STA thread)
+    implementation 'net.java.dev.jna:jna:5.14.0'
+    implementation 'net.java.dev.jna:jna-platform:5.14.0'
 
     // Logging
     implementation files('libs/slf4j-api-1.7.36.jar')
@@ -160,6 +164,7 @@ tasks.withType(Zip).configureEach {
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += '--enable-preview'
     options.release = 21
+    options.encoding = 'UTF-8'  // Windows Turkce karakter sorunu icin
 }
 
 tasks.withType(Test).configureEach {

@@ -6,19 +6,44 @@ import dev.onvoid.webrtc.media.audio.*;
 import dev.onvoid.webrtc.media.video.*;
 import dev.onvoid.webrtc.media.video.desktop.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.List;
 import java.util.ArrayList;
 
+// JNA imports for Windows COM (STA thread)
+import com.sun.jna.Pointer;
+import com.sun.jna.platform.win32.Ole32;
+
 /**
  * WebRTC Client Manager (Real Implementation)
  * Uses webrtc-java library for actual media streaming
+ * 
+ * Platform-aware initialization:
+ * - Windows: STA thread pipeline for COM-dependent AudioDeviceModule
+ * - Linux/macOS: Standard thread initialization
+ * 
+ * Uses Virtual Threads for high-concurrency WebRTC operations.
  */
 public class WebRTCClient {
     
+    // Platform detection
+    private static final String OS_NAME = System.getProperty("os.name").toLowerCase();
+    private static final boolean IS_WINDOWS = OS_NAME.contains("win");
+    private static final boolean IS_LINUX = OS_NAME.contains("linux");
+    private static final boolean IS_MAC = OS_NAME.contains("mac");
+    
     private static boolean initialized = false;
     private static PeerConnectionFactory factory;
+    private static AudioDeviceModule audioDeviceModule;
     private static WebRTCPlatformConfig platformConfig = WebRTCPlatformConfig.empty();
+    
+    // Virtual Thread executor for async WebRTC operations (ICE, signaling, DataChannel)
+    private static ExecutorService webrtcExecutor;
     
     private String currentCallId;
     private String remoteUsername;
@@ -42,6 +67,10 @@ public class WebRTCClient {
     
     /**
      * Initialize WebRTC (call once at app startup)
+     * 
+     * Platform-aware initialization:
+     * - Windows: Uses STA thread for COM-dependent AudioDeviceModule
+     * - Linux/macOS: Standard initialization
      */
     public static synchronized void initialize() {
         if (initialized) {
@@ -49,42 +78,244 @@ public class WebRTCClient {
             return;
         }
         
+        System.out.println("[WebRTC] ═══════════════════════════════════════════════════════════");
         System.out.println("[WebRTC] Initializing WebRTC with native library...");
+        System.out.printf("[WebRTC] Platform: %s%n", detectPlatformName());
+        System.out.println("[WebRTC] ═══════════════════════════════════════════════════════════");
+        
+        // Initialize Virtual Thread executor for async WebRTC operations
+        webrtcExecutor = Executors.newVirtualThreadPerTaskExecutor();
+        System.out.println("[WebRTC] Virtual Thread executor initialized");
         
         try {
-            // Get default audio devices (MacOS automatically selects correct Bluetooth mode)
-            AudioDevice defaultMic = MediaDevices.getDefaultAudioCaptureDevice();
-            AudioDevice defaultSpeaker = MediaDevices.getDefaultAudioRenderDevice();
-            
-            // Create and configure AudioDeviceModule
-            AudioDeviceModule audioModule = new AudioDeviceModule();
-            
-            if (defaultMic != null) {
-                System.out.println("[WebRTC] Default microphone: " + defaultMic.getName());
-                audioModule.setRecordingDevice(defaultMic);
-                audioModule.initRecording();
+            // Platform-specific audio initialization
+            if (IS_WINDOWS) {
+                initWindowsAudio();
+            } else if (IS_LINUX) {
+                initLinuxAudio();
+            } else if (IS_MAC) {
+                initMacAudio();
+            } else {
+                initDefaultAudio();
             }
             
-            if (defaultSpeaker != null) {
-                System.out.println("[WebRTC] Default speaker: " + defaultSpeaker.getName());
-                audioModule.setPlayoutDevice(defaultSpeaker);
-                audioModule.initPlayout();
-            }
-            
-            // Initialize factory with audio device module
-            factory = new PeerConnectionFactory(audioModule);
-            platformConfig = WebRTCPlatformConfig.detect(factory);
+            // Initialize PeerConnectionFactory with audio module
+            initPeerConnectionFactory();
             
             initialized = true;
-            System.out.println("[WebRTC] WebRTC initialized successfully with native library");
+            System.out.println("[WebRTC] ═══════════════════════════════════════════════════════════");
+            System.out.println("[WebRTC] WebRTC initialized successfully!");
+            System.out.println("[WebRTC] ═══════════════════════════════════════════════════════════");
+            
         } catch (Throwable e) {
             // Fallback to mock mode (native library not available)
-            System.err.printf("[WebRTC]  Native library failed to load: %s%n", e.getMessage());
+            System.err.printf("[WebRTC] Native library failed to load: %s%n", e.getMessage());
+            e.printStackTrace();
             System.out.println("[WebRTC] Running in MOCK mode (signaling will work, but no real media)");
             
             factory = null;
+            audioDeviceModule = null;
             initialized = true;
         }
+    }
+    
+    /**
+     * Detect platform name for logging
+     */
+    private static String detectPlatformName() {
+        if (IS_WINDOWS) return "Windows (COM STA thread required)";
+        if (IS_LINUX) return "Linux (PulseAudio/ALSA)";
+        if (IS_MAC) return "macOS (CoreAudio)";
+        return "Unknown (" + OS_NAME + ")";
+    }
+    
+    /**
+     * WINDOWS: Initialize AudioDeviceModule in STA thread
+     * 
+     * Windows requires COM to be initialized in Single-Threaded Apartment (STA) mode
+     * for AudioDeviceModule to work correctly. JavaFX/JVM starts in MTA mode which
+     * causes COM threading conflicts.
+     * 
+     * Solution: Create a dedicated STA thread for ADM initialization.
+     */
+    private static void initWindowsAudio() throws Exception {
+        System.out.println("[WebRTC] [Windows] Initializing AudioDeviceModule with STA thread pipeline...");
+        
+        AtomicReference<AudioDeviceModule> admRef = new AtomicReference<>();
+        AtomicReference<Throwable> errorRef = new AtomicReference<>();
+        CountDownLatch latch = new CountDownLatch(1);
+        
+        // Create STA thread for COM-dependent AudioDeviceModule initialization
+        Thread staThread = Thread.ofPlatform()
+            .name("webrtc-sta-init")
+            .unstarted(() -> {
+                try {
+                    // Initialize COM in STA mode (required for Windows audio APIs)
+                    Ole32.INSTANCE.CoInitializeEx(Pointer.NULL, Ole32.COINIT_APARTMENTTHREADED);
+                    System.out.println("[WebRTC] [Windows] COM initialized in STA mode");
+                    
+                    try {
+                        // Get default audio devices
+                        AudioDevice defaultMic = MediaDevices.getDefaultAudioCaptureDevice();
+                        AudioDevice defaultSpeaker = MediaDevices.getDefaultAudioRenderDevice();
+                        
+                        // Create AudioDeviceModule in STA context
+                        AudioDeviceModule adm = new AudioDeviceModule();
+                        
+                        if (defaultMic != null) {
+                            System.out.println("[WebRTC] [Windows] Default microphone: " + defaultMic.getName());
+                            adm.setRecordingDevice(defaultMic);
+                            adm.initRecording();
+                        }
+                        
+                        if (defaultSpeaker != null) {
+                            System.out.println("[WebRTC] [Windows] Default speaker: " + defaultSpeaker.getName());
+                            adm.setPlayoutDevice(defaultSpeaker);
+                            adm.initPlayout();
+                        }
+                        
+                        admRef.set(adm);
+                        System.out.println("[WebRTC] [Windows] AudioDeviceModule initialized successfully in STA thread");
+                        
+                    } finally {
+                        // Uninitialize COM
+                        Ole32.INSTANCE.CoUninitialize();
+                        System.out.println("[WebRTC] [Windows] COM uninitialized");
+                    }
+                } catch (Throwable t) {
+                    errorRef.set(t);
+                    System.err.println("[WebRTC] [Windows] STA thread error: " + t.getMessage());
+                } finally {
+                    latch.countDown();
+                }
+            });
+        
+        // Start STA thread and wait for completion
+        staThread.start();
+        
+        if (!latch.await(10, TimeUnit.SECONDS)) {
+            throw new RuntimeException("[WebRTC] [Windows] STA thread initialization timeout");
+        }
+        
+        // Check for errors
+        if (errorRef.get() != null) {
+            throw new RuntimeException("[WebRTC] [Windows] STA thread failed", errorRef.get());
+        }
+        
+        // Store the ADM reference
+        audioDeviceModule = admRef.get();
+        System.out.println("[WebRTC] [Windows] STA thread pipeline completed successfully");
+    }
+    
+    /**
+     * LINUX: Standard AudioDeviceModule initialization
+     * Uses PulseAudio/ALSA - no COM threading issues
+     */
+    private static void initLinuxAudio() throws Exception {
+        System.out.println("[WebRTC] [Linux] Initializing AudioDeviceModule (PulseAudio/ALSA)...");
+        
+        AudioDevice defaultMic = MediaDevices.getDefaultAudioCaptureDevice();
+        AudioDevice defaultSpeaker = MediaDevices.getDefaultAudioRenderDevice();
+        
+        audioDeviceModule = new AudioDeviceModule();
+        
+        if (defaultMic != null) {
+            System.out.println("[WebRTC] [Linux] Default microphone: " + defaultMic.getName());
+            audioDeviceModule.setRecordingDevice(defaultMic);
+            audioDeviceModule.initRecording();
+        }
+        
+        if (defaultSpeaker != null) {
+            System.out.println("[WebRTC] [Linux] Default speaker: " + defaultSpeaker.getName());
+            audioDeviceModule.setPlayoutDevice(defaultSpeaker);
+            audioDeviceModule.initPlayout();
+        }
+        
+        System.out.println("[WebRTC] [Linux] AudioDeviceModule initialized successfully");
+    }
+    
+    /**
+     * macOS: Standard AudioDeviceModule initialization
+     * Uses CoreAudio - no COM threading issues
+     */
+    private static void initMacAudio() throws Exception {
+        System.out.println("[WebRTC] [macOS] Initializing AudioDeviceModule (CoreAudio)...");
+        
+        AudioDevice defaultMic = MediaDevices.getDefaultAudioCaptureDevice();
+        AudioDevice defaultSpeaker = MediaDevices.getDefaultAudioRenderDevice();
+        
+        audioDeviceModule = new AudioDeviceModule();
+        
+        if (defaultMic != null) {
+            System.out.println("[WebRTC] [macOS] Default microphone: " + defaultMic.getName());
+            audioDeviceModule.setRecordingDevice(defaultMic);
+            audioDeviceModule.initRecording();
+        }
+        
+        if (defaultSpeaker != null) {
+            System.out.println("[WebRTC] [macOS] Default speaker: " + defaultSpeaker.getName());
+            audioDeviceModule.setPlayoutDevice(defaultSpeaker);
+            audioDeviceModule.initPlayout();
+        }
+        
+        System.out.println("[WebRTC] [macOS] AudioDeviceModule initialized successfully");
+    }
+    
+    /**
+     * Default/Unknown platform: Standard initialization
+     */
+    private static void initDefaultAudio() throws Exception {
+        System.out.println("[WebRTC] [Unknown] Initializing AudioDeviceModule (default path)...");
+        
+        AudioDevice defaultMic = MediaDevices.getDefaultAudioCaptureDevice();
+        AudioDevice defaultSpeaker = MediaDevices.getDefaultAudioRenderDevice();
+        
+        audioDeviceModule = new AudioDeviceModule();
+        
+        if (defaultMic != null) {
+            audioDeviceModule.setRecordingDevice(defaultMic);
+            audioDeviceModule.initRecording();
+        }
+        
+        if (defaultSpeaker != null) {
+            audioDeviceModule.setPlayoutDevice(defaultSpeaker);
+            audioDeviceModule.initPlayout();
+        }
+        
+        System.out.println("[WebRTC] [Unknown] AudioDeviceModule initialized");
+    }
+    
+    /**
+     * Initialize PeerConnectionFactory with configured AudioDeviceModule
+     */
+    private static void initPeerConnectionFactory() {
+        if (audioDeviceModule != null) {
+            factory = new PeerConnectionFactory(audioDeviceModule);
+            System.out.println("[WebRTC] PeerConnectionFactory created with AudioDeviceModule");
+        } else {
+            factory = new PeerConnectionFactory();
+            System.out.println("[WebRTC] PeerConnectionFactory created (no AudioDeviceModule)");
+        }
+        
+        platformConfig = WebRTCPlatformConfig.detect(factory);
+        System.out.println("[WebRTC] Platform config detected: " + platformConfig);
+    }
+    
+    /**
+     * Get the Virtual Thread executor for async WebRTC operations
+     */
+    public static ExecutorService getExecutor() {
+        return webrtcExecutor;
+    }
+    
+    /**
+     * Execute a task asynchronously using Virtual Threads
+     */
+    public static CompletableFuture<Void> runAsync(Runnable task) {
+        if (webrtcExecutor != null) {
+            return CompletableFuture.runAsync(task, webrtcExecutor);
+        }
+        return CompletableFuture.runAsync(task);
     }
 
     /**
@@ -112,9 +343,38 @@ public class WebRTCClient {
     public static synchronized void shutdown() {
         if (!initialized) return;
         
+        System.out.println("[WebRTC] Shutting down WebRTC...");
+        
+        // Shutdown Virtual Thread executor
+        if (webrtcExecutor != null) {
+            webrtcExecutor.shutdown();
+            try {
+                if (!webrtcExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    webrtcExecutor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                webrtcExecutor.shutdownNow();
+            }
+            webrtcExecutor = null;
+            System.out.println("[WebRTC] Virtual Thread executor shutdown");
+        }
+        
+        // Dispose PeerConnectionFactory
         if (factory != null) {
             factory.dispose();
             factory = null;
+            System.out.println("[WebRTC] PeerConnectionFactory disposed");
+        }
+        
+        // Dispose AudioDeviceModule
+        if (audioDeviceModule != null) {
+            try {
+                audioDeviceModule.dispose();
+            } catch (Exception e) {
+                System.err.println("[WebRTC] Error disposing AudioDeviceModule: " + e.getMessage());
+            }
+            audioDeviceModule = null;
+            System.out.println("[WebRTC] AudioDeviceModule disposed");
         }
         
         initialized = false;
