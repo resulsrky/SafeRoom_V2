@@ -171,13 +171,29 @@ tasks.withType(Test).configureEach {
 tasks.withType(JavaExec).configureEach {
     jvmArgs += '--enable-preview'
     
-    // JavaFX GPU Acceleration & Profiling Flags
-    jvmArgs += '-Dprism.verbose=true'           // Log which renderer is used
-    jvmArgs += '-Dprism.order=es2,sw'           // Prefer ES2 (OpenGL), fallback to software
-    jvmArgs += '-Dprism.forceGPU=true'          // Force GPU usage
-    jvmArgs += '-Djavafx.animation.fullspeed=false'  // Don't skip frames
-    jvmArgs += '-Dprism.vsync=true'             // Enable VSync for smoother rendering
-    jvmArgs += '-Dprism.dirtyopts=true'         // Optimize dirty region rendering
+    // Platform-specific JavaFX rendering pipeline
+    def osName = System.getProperty('os.name').toLowerCase()
+    if (osName.contains('win')) {
+        // Windows: Use DirectX (D3D) pipeline - much faster than SW fallback
+        jvmArgs += '-Dprism.order=d3d,sw'
+        jvmArgs += '-Dprism.d3d.forceGPU=true'
+        System.out.println("[Build] Windows detected: Using DirectX (D3D) pipeline")
+    } else if (osName.contains('mac')) {
+        // macOS: Use Metal or ES2 (OpenGL)
+        jvmArgs += '-Dprism.order=es2,sw'
+        jvmArgs += '-Dprism.forceGPU=true'
+    } else {
+        // Linux: Use ES2 (OpenGL)
+        jvmArgs += '-Dprism.order=es2,sw'
+        jvmArgs += '-Dprism.forceGPU=true'
+    }
+    
+    // Common JavaFX optimizations
+    jvmArgs += '-Dprism.verbose=true'                  // Log which renderer is used
+    jvmArgs += '-Djavafx.animation.fullspeed=false'    // Don't skip frames
+    jvmArgs += '-Dprism.vsync=true'                    // Enable VSync
+    jvmArgs += '-Dprism.dirtyopts=true'                // Dirty region optimizations
+    
     // Uncomment for detailed stats:
     // jvmArgs += '-Dprism.printStats=true'
 }

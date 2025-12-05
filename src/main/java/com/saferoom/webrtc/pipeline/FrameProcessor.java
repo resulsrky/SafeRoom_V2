@@ -39,9 +39,21 @@ public final class FrameProcessor implements AutoCloseable {
         this.consumer = Objects.requireNonNull(consumer, "consumer");
         int resolvedCapacity = capacity > 0 ? capacity : DEFAULT_QUEUE_CAPACITY;
         this.queue = new ArrayBlockingQueue<>(Math.max(1, resolvedCapacity));
-        this.workerThread = Thread.ofVirtual()
-            .name("frame-processor-" + System.identityHashCode(this))
-            .unstarted(this::processLoop);
+        
+        // Use platform thread on Windows for better native interop
+        // Virtual threads can have issues with native code on Windows
+        String os = System.getProperty("os.name", "").toLowerCase();
+        if (os.contains("win")) {
+            this.workerThread = Thread.ofPlatform()
+                .name("frame-processor-" + System.identityHashCode(this))
+                .daemon(true)
+                .unstarted(this::processLoop);
+            System.out.println("[FrameProcessor] Using platform thread (Windows)");
+        } else {
+            this.workerThread = Thread.ofVirtual()
+                .name("frame-processor-" + System.identityHashCode(this))
+                .unstarted(this::processLoop);
+        }
         this.workerThread.start();
     }
 

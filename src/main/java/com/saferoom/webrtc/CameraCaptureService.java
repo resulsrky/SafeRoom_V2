@@ -26,36 +26,56 @@ public final class CameraCaptureService {
     }
 
     public static CameraCaptureResource createCameraTrack(String trackId, CaptureProfile profile) {
+        System.out.println("[CameraCaptureService] ═══════════════════════════════════════════");
+        System.out.println("[CameraCaptureService] Creating camera track: " + trackId);
+        
         PeerConnectionFactory factory = WebRTCClient.getFactory();
         if (factory == null) {
             throw new IllegalStateException("[CameraCaptureService] PeerConnectionFactory bulunamadı");
         }
 
+        // List all available cameras
         List<VideoDevice> cameras = MediaDevices.getVideoCaptureDevices();
+        System.out.printf("[CameraCaptureService] Found %d camera(s):%n", cameras.size());
+        for (int i = 0; i < cameras.size(); i++) {
+            System.out.printf("  [%d] %s%n", i, cameras.get(i).getName());
+        }
+        
         if (cameras.isEmpty()) {
             throw new IllegalStateException("[CameraCaptureService] Kamera bulunamadı");
         }
 
         VideoDevice camera = cameras.get(0);
-        System.out.println("[CameraCaptureService] Kullanılan kamera: " + camera.getName());
+        System.out.println("[CameraCaptureService] Selected camera: " + camera.getName());
 
         VideoDeviceSource source = new VideoDeviceSource();
         source.setVideoCaptureDevice(camera);
+        System.out.println("[CameraCaptureService] VideoDeviceSource created");
 
-        VideoCaptureCapability capability =
-            new VideoCaptureCapability(
-                profile.width(),
-                profile.height(),
-                profile.fps());
+        VideoCaptureCapability capability = new VideoCaptureCapability(
+            profile.width(),
+            profile.height(),
+            profile.fps()
+        );
         source.setVideoCaptureCapability(capability);
+        System.out.printf("[CameraCaptureService] Capture capability set: %dx%d@%dfps%n",
+            profile.width(), profile.height(), profile.fps());
 
         VideoTrack track = factory.createVideoTrack(trackId, source);
         track.setEnabled(true);
+        System.out.printf("[CameraCaptureService] VideoTrack created: id=%s, enabled=%b%n", 
+            track.getId(), track.isEnabled());
 
-        source.start();
-        System.out.printf("[CameraCaptureService] Kamera capture başlatıldı (%dx%d@%dfps)%n",
-            profile.width(), profile.height(), profile.fps());
-
+        try {
+            source.start();
+            System.out.println("[CameraCaptureService] ✅ Camera capture STARTED successfully");
+        } catch (Exception e) {
+            System.err.printf("[CameraCaptureService] ❌ Failed to start camera: %s%n", e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Camera start failed", e);
+        }
+        
+        System.out.println("[CameraCaptureService] ═══════════════════════════════════════════");
         return new CameraCaptureResource(source, track);
     }
 

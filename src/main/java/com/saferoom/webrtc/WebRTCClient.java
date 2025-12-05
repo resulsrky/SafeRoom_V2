@@ -461,8 +461,21 @@ public class WebRTCClient {
                 @Override
                 public void onTrack(RTCRtpTransceiver transceiver) {
                     MediaStreamTrack track = transceiver.getReceiver().getTrack();
-                    System.out.printf("[WebRTC] Remote track received: %s (kind=%s)%n", 
-                        track.getId(), track.getKind());
+                    System.out.println("[WebRTC] ═══════════════════════════════════════════");
+                    System.out.printf("[WebRTC] 📡 REMOTE TRACK RECEIVED%n");
+                    System.out.printf("[WebRTC]   ID: %s%n", track.getId());
+                    System.out.printf("[WebRTC]   Kind: %s%n", track.getKind());
+                    System.out.printf("[WebRTC]   Enabled: %b%n", track.isEnabled());
+                    System.out.printf("[WebRTC]   State: %s%n", track.getState());
+                    
+                    // Log transceiver details
+                    try {
+                        System.out.printf("[WebRTC]   Direction: %s%n", transceiver.getDirection());
+                        System.out.printf("[WebRTC]   Mid: %s%n", transceiver.getMid());
+                    } catch (Exception e) {
+                        System.out.println("[WebRTC]   (Could not get transceiver details)");
+                    }
+                    System.out.println("[WebRTC] ═══════════════════════════════════════════");
                     
                     // Handle audio track automatically
                     if (track.getKind().equals("audio") && track instanceof AudioTrack) {
@@ -930,11 +943,22 @@ public class WebRTCClient {
      * Handle remote video track
      */
     private void handleRemoteVideoTrack(VideoTrack videoTrack) {
-        System.out.println("[WebRTC] Remote video track received: " + videoTrack.getId());
+        System.out.println("[WebRTC] ═══════════════════════════════════════════");
+        System.out.printf("[WebRTC] 🎥 HANDLING REMOTE VIDEO TRACK%n");
+        System.out.printf("[WebRTC]   Track ID: %s%n", videoTrack.getId());
+        System.out.printf("[WebRTC]   Enabled: %b%n", videoTrack.isEnabled());
+        System.out.printf("[WebRTC]   State: %s%n", videoTrack.getState());
+        
+        // Enable the track if it's not already enabled
+        if (!videoTrack.isEnabled()) {
+            System.out.println("[WebRTC]   Enabling disabled video track...");
+            videoTrack.setEnabled(true);
+            System.out.printf("[WebRTC]   After enable - Enabled: %b%n", videoTrack.isEnabled());
+        }
         
         // Video rendering will be handled by VideoPanel through callback
-        // Just log for now - GUI will attach VideoPanel via onRemoteTrackCallback
-        System.out.println("[WebRTC] Remote video track ready (waiting for VideoPanel attachment)");
+        System.out.println("[WebRTC]   Waiting for VideoPanel attachment via callback...");
+        System.out.println("[WebRTC] ═══════════════════════════════════════════");
     }
     
     public void toggleAudio(boolean enabled) {

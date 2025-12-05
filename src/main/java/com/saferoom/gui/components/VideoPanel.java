@@ -69,6 +69,10 @@ public class VideoPanel extends Canvas {
         drawPlaceholder("No Video");
     }
     
+    // Frame counter for debugging
+    private volatile long frameCount = 0;
+    private volatile long lastFrameCountLog = 0;
+    
     /**
      * Attach a video track to this panel for rendering
      */
@@ -78,15 +82,25 @@ public class VideoPanel extends Canvas {
             return;
         }
         
-        System.out.println("[VideoPanel] Attaching video track: " + track.getId());
+        System.out.println("[VideoPanel] ═══════════════════════════════════════════");
+        System.out.printf("[VideoPanel] Attaching video track: %s (enabled=%b)%n", 
+            track.getId(), track.isEnabled());
         
         detachVideoTrack();
         this.renderingPaused = false;
         this.videoTrack = track;
         this.isActive = true;
+        this.frameCount = 0;
 
         frameProcessor = buildFrameProcessor();
         videoSink = frame -> {
+            frameCount++;
+            // Log every 100 frames to show video is being received
+            if (frameCount - lastFrameCountLog >= 100) {
+                System.out.printf("[VideoPanel] Received %d frames (size: %dx%d)%n", 
+                    frameCount, frame.buffer.getWidth(), frame.buffer.getHeight());
+                lastFrameCountLog = frameCount;
+            }
             FrameProcessor processor = frameProcessor;
             if (processor != null) {
                 processor.submit(frame);
@@ -95,7 +109,8 @@ public class VideoPanel extends Canvas {
 
         track.addSink(videoSink);
         startAnimation();
-        System.out.println("[VideoPanel] Video track attached successfully");
+        System.out.printf("[VideoPanel] ✅ Video sink attached, waiting for frames...%n");
+        System.out.println("[VideoPanel] ═══════════════════════════════════════════");
     }
     
     /**
