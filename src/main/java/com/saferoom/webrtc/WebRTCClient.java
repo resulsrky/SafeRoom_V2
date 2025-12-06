@@ -14,6 +14,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * WebRTC Client Manager (Real Implementation)
@@ -671,6 +673,13 @@ public class WebRTCClient {
     public void close() {
         System.out.println("[WebRTC] Closing peer connection...");
         
+        // Clean up all audio sinks first
+        if (!audioSinks.isEmpty()) {
+            System.out.printf("[WebRTC] Cleaning up %d audio sink(s)%n", audioSinks.size());
+            audioSinks.clear();
+            audioStats.clear();
+        }
+        
         // First, remove tracks from peer connection before disposing
         if (peerConnection != null) {
             try {
@@ -925,34 +934,71 @@ public class WebRTCClient {
     /**
      * Handle remote audio track (automatically plays received audio)
      */
-    // Audio monitoring
-    private volatile long audioFrameCount = 0;
-    private volatile long lastAudioLogTime = 0;
+    // Per-track audio monitoring to support multi-party calls
+    private final Map<String, AudioTrackSink> audioSinks = new ConcurrentHashMap<>();
+    private final Map<String, long[]> audioStats = new ConcurrentHashMap<>(); // [frameCount, lastLogTime]
     
     private void handleRemoteAudioTrack(AudioTrack audioTrack) {
+        String trackId = audioTrack.getId();
+        
         System.out.println("[WebRTC] ═══════════════════════════════════════════");
         System.out.println("[WebRTC] 🔊 Setting up remote audio playback...");
-        System.out.printf("[WebRTC]   Track ID: %s%n", audioTrack.getId());
+        System.out.printf("[WebRTC]   Track ID: %s%n", trackId);
         System.out.printf("[WebRTC]   Enabled: %b%n", audioTrack.isEnabled());
         
-        audioFrameCount = 0;
-        lastAudioLogTime = System.currentTimeMillis();
+        // Remove existing sink for this track if any (prevents duplicate sinks)
+        AudioTrackSink existingSink = audioSinks.remove(trackId);
+        if (existingSink != null) {
+            try {
+                audioTrack.removeSink(existingSink);
+                System.out.printf("[WebRTC]   Removed existing sink for track: %s%n", trackId);
+            } catch (Exception e) {
+                // Sink may already be removed
+            }
+        }
         
-        // Add sink to monitor audio data and confirm it's playing
+        // Per-track counters: [frameCount, lastLogTime]
+        long[] stats = new long[] { 0, System.currentTimeMillis() };
+        audioStats.put(trackId, stats);
+        
+        // Create sink with per-track counter
         AudioTrackSink sink = (data, bitsPerSample, sampleRate, channels, frames) -> {
-            audioFrameCount++;
-            long now = System.currentTimeMillis();
-            // Log every 5 seconds to confirm audio is flowing
-            if (now - lastAudioLogTime >= 5000) {
-                System.out.printf("[WebRTC] 🔊 Audio flowing: %d frames @ %dHz, %dch%n", 
-                    audioFrameCount, sampleRate, channels);
-                lastAudioLogTime = now;
+            long[] trackStats = audioStats.get(trackId);
+            if (trackStats != null) {
+                trackStats[0]++; // frameCount
+                long now = System.currentTimeMillis();
+                // Log every 5 seconds to confirm audio is flowing
+                if (now - trackStats[1] >= 5000) {
+                    System.out.printf("[WebRTC] 🔊 Audio [%s]: %d frames @ %dHz, %dch%n", 
+                        trackId.substring(0, Math.min(8, trackId.length())), 
+                        trackStats[0], sampleRate, channels);
+                    trackStats[1] = now;
+                }
             }
         };
         
+        audioSinks.put(trackId, sink);
         audioTrack.addSink(sink);
         System.out.println("[WebRTC] ✅ Remote audio track ready (playback via AudioDeviceModule)");
         System.out.println("[WebRTC] ═══════════════════════════════════════════");
+    }
+    
+    /**
+     * Remove audio sink for a specific track (called during cleanup)
+     */
+    private void removeAudioSink(AudioTrack audioTrack) {
+        if (audioTrack == null) return;
+        String trackId = audioTrack.getId();
+        AudioTrackSink sink = audioSinks.remove(trackId);
+        audioStats.remove(trackId);
+        if (sink != null) {
+            try {
+                audioTrack.removeSink(sink);
+                System.out.printf("[WebRTC] 🔊 Removed audio sink for track: %s%n", trackId);
+            } catch (Exception e) {
+                // Ignore - sink may already be removed
+            }
+        }
     }
     
     /**
