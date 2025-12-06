@@ -39,6 +39,8 @@ public class WebRTCClient {
     private static PeerConnectionFactory factory;
     private static AudioDeviceModule audioDeviceModule;
     private static WebRTCPlatformConfig platformConfig = WebRTCPlatformConfig.empty();
+    private static volatile boolean playoutStarted = false;
+    private static volatile boolean recordingStarted = false;
     
     // Virtual Thread executor for async WebRTC operations (ICE, signaling, DataChannel)
     private static ExecutorService webrtcExecutor;
@@ -879,6 +881,9 @@ public class WebRTCClient {
             // Add track to peer connection with stream ID
             peerConnection.addTrack(audioTrack, List.of("stream1"));
            
+        // Ensure capture is started
+        ensureRecordingStarted();
+        
             System.out.println("[WebRTC] ✅ Audio track added with ADVANCED processing:");
             System.out.println("  ├─ Echo cancellation: ENABLED (removes speaker feedback)");
             System.out.println("  ├─ Noise suppression: ENABLED (removes background noise)");
@@ -1047,6 +1052,9 @@ public class WebRTCClient {
         audioTracks.put(trackId, audioTrack);
         audioSinks.put(trackId, sink);
         audioTrack.addSink(sink);
+        
+        // Ensure speakers are started for playout
+        ensurePlayoutStarted();
         System.out.println("[WebRTC] ✅ Remote audio track ready (playback via AudioDeviceModule)");
         System.out.println("[WebRTC] ═══════════════════════════════════════════");
     }
@@ -1077,6 +1085,42 @@ public class WebRTCClient {
         audioSinks.clear();
         audioTracks.clear();
         audioStats.clear();
+    }
+    
+    /**
+     * Ensure audio playout (speaker) is started once
+     */
+    private static void ensurePlayoutStarted() {
+        if (audioDeviceModule == null) return;
+        if (playoutStarted) return;
+        synchronized (WebRTCClient.class) {
+            if (playoutStarted) return;
+            try {
+                audioDeviceModule.startPlayout();
+                playoutStarted = true;
+                System.out.println("[WebRTC] 🔊 Playout started");
+            } catch (Exception e) {
+                System.err.printf("[WebRTC] Failed to start playout: %s%n", e.getMessage());
+            }
+        }
+    }
+    
+    /**
+     * Ensure audio recording (mic) is started once
+     */
+    private static void ensureRecordingStarted() {
+        if (audioDeviceModule == null) return;
+        if (recordingStarted) return;
+        synchronized (WebRTCClient.class) {
+            if (recordingStarted) return;
+            try {
+                audioDeviceModule.startRecording();
+                recordingStarted = true;
+                System.out.println("[WebRTC] 🎙️ Recording started");
+            } catch (Exception e) {
+                System.err.printf("[WebRTC] Failed to start recording: %s%n", e.getMessage());
+            }
+        }
     }
     
     /**
