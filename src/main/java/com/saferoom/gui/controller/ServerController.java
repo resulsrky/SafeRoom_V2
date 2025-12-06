@@ -12,16 +12,16 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
-import javafx.scene.SnapshotParameters;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.TextField;
-import javafx.scene.input.ClipboardContent;
-import javafx.scene.input.Dragboard;
-import javafx.scene.input.TransferMode;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
@@ -29,144 +29,85 @@ import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 import org.kordamp.ikonli.javafx.FontIcon;
-
 import java.io.IOException;
 import java.net.URL;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.ResourceBundle;
-
-import javafx.scene.control.Alert;
-import javafx.scene.control.Alert.AlertType;
 import javafx.stage.Popup;
-import com.saferoom.gui.controller.EditChannelPopupController;
-import com.saferoom.gui.controller.EditChannelPopupController.Result;
+import java.util.ArrayList;
+import javafx.scene.input.Dragboard;
+import javafx.scene.input.TransferMode;
+import javafx.scene.input.ClipboardContent;
+import javafx.scene.SnapshotParameters; 
+import com.saferoom.gui.controller.MainController; // Ensure this is imported if not already
 
 public class ServerController implements Initializable {
 
-    // Main Pane
-    @FXML
-    private BorderPane serverPane;
+    @FXML private BorderPane serverPane;
+    @FXML private VBox channelsContainer;
+    @FXML private VBox voiceChannelsList;
+    @FXML private VBox textChannelsList;
+    @FXML private VBox fileChannelsList;
+    @FXML private VBox voiceChannelsSection;
+    @FXML private VBox textChannelsSection;
+    @FXML private VBox fileChannelsSection;
+    
+    // User Info
+    @FXML private Label currentUserName;
+    @FXML private Label serverNameLabel;
+    @FXML private Label serverMembersLabel;
+    @FXML private Label serverPrivacyBadge;
+    @FXML private FontIcon serverIcon;
+    @FXML private Label totalUsersCount;
+    @FXML private Label onlineUsersCount;
+    @FXML private Label offlineUsersCount;
+    @FXML private VBox onlineUsersList;
+    @FXML private VBox offlineUsersList;
 
+    // Chat
+    @FXML private ListView<Message> messagesListView;
+    @FXML private TextField messageTextField;
+    @FXML private Button sendMessageBtn;
+    @FXML private VBox defaultChannelView;
+    @FXML private BorderPane textChatView;
+    @FXML private VBox voiceChatView;
+    @FXML private Label currentChannelName;
+    @FXML private FontIcon currentChannelIcon;
+    @FXML private Label currentChannelTopic;
+    @FXML private VBox textGeneralNotification;
+    @FXML private VBox textTeamNotification;
+
+    // Voice
+    @FXML private Label voiceChannelName;
+    @FXML private FlowPane voiceUsersContainer; // CHANGED to FlowPane
+    @FXML private Button toggleMicBtn;
+    @FXML private Button toggleDeafenBtn;
+    @FXML private Button muteBtn;
+    @FXML private Button deafenBtn;
+    @FXML private Button shareScreenBtn;
+
+    // Channel Items (for selection clearing)
+    @FXML private HBox voiceGeneral;
+    @FXML private HBox voiceMeeting;
+    @FXML private HBox voicePrivate;
+    @FXML private HBox textGeneral;
+    @FXML private HBox textAnnouncements;
+    @FXML private HBox textTeam;
+    @FXML private HBox textPrivate;
+    @FXML private HBox fileResources;
+    @FXML private HBox fileProject;
+
+    // State
+    private List<User> serverUsers = new java.util.ArrayList<>();
+    private List<Channel> textChannels = new java.util.ArrayList<>();
+    private List<Channel> voiceChannels = new java.util.ArrayList<>();
+    private String currentServerName = "SafeRoom";
+    private String currentChannel = "";
+    private boolean isUserMuted = false;
+    private boolean isUserDeafened = false;
     private Popup currentEditPopup;
     private Node currentEditTarget;
 
-    // Left Sidebar - Channels
-    @FXML
-    private VBox channelsSidebar;
-    @FXML
-    private VBox serverHeader;
-    @FXML
-    private FontIcon serverIcon;
-    @FXML
-    private Label serverNameLabel;
-    @FXML
-    private Label serverMembersLabel;
-    @FXML
-    private Label serverPrivacyBadge; // Added
-    @FXML
-    private Button serverSettingsBtn;
-    @FXML
-    private VBox channelsContainer;
-    @FXML
-    private VBox voiceChannelsSection;
-    @FXML
-    private VBox textChannelsSection;
-    @FXML
-    private VBox voiceChannelsList;
-    @FXML
-    private VBox textChannelsList;
-    @FXML
-    private VBox fileChannelsSection;
-    @FXML
-    private VBox fileChannelsList;
-    @FXML
-    private HBox userInfoBottom;
-    // @FXML private Label currentUserAvatar; // Removed as per UI change
-    @FXML
-    private Label currentUserName;
-    @FXML
-    private Label currentUserStatus;
-    @FXML
-    private Button muteBtn;
-    @FXML
-    private Button deafenBtn;
-    @FXML
-    private Button settingsBtn;
-
-    // Voice Channel Items
-    @FXML
-    private HBox voiceGeneral;
-    @FXML
-    private HBox voiceMeeting;
-    @FXML
-    private HBox voicePrivate;
-    @FXML
-    private VBox voiceGeneralUsers;
-    @FXML
-    private VBox voiceMeetingUsers;
-
-    // Text Channel Items
-    @FXML
-    private HBox textGeneral;
-    @FXML
-    private HBox textAnnouncements;
-    @FXML
-    private HBox textTeam;
-    @FXML
-    private HBox textPrivate;
-    @FXML
-    private HBox fileResources;
-    @FXML
-    private HBox fileProject;
-    @FXML
-    private VBox textGeneralNotification;
-    @FXML
-    private VBox textTeamNotification;
-
-    // Main Content Area
-    @FXML
-    private StackPane mainContentArea;
-    @FXML
-    private VBox defaultChannelView;
-    @FXML
-    private BorderPane textChatView;
-    @FXML
-    private VBox voiceChatView;
-
-    // Text Chat Components
-    @FXML
-    private HBox chatHeader;
-    @FXML
-    private FontIcon currentChannelIcon;
-    @FXML
-    private Label currentChannelName;
-    @FXML
-    private Label currentChannelTopic;
-    @FXML
-    private ListView<Message> messagesListView;
-    @FXML
-    private HBox messageInputArea;
-    @FXML
-    private TextField messageTextField;
-    @FXML
-    private Button sendMessageBtn;
-
-    // Voice Chat Components
-    @FXML
-    private Label voiceChannelName;
-    @FXML
-    private Label voiceChannelInfo;
-    @FXML
-    private VBox voiceUsersContainer;
-    @FXML
-    private HBox voiceControls;
-    @FXML
-    private Button toggleMicBtn;
-    @FXML
-    private Button toggleDeafenBtn;
-    @FXML
-    private Button shareScreenBtn;
     @FXML
     private Button leaveVoiceBtn;
 
@@ -543,30 +484,13 @@ public class ServerController implements Initializable {
         setupChannelContextMenu(item, true);
     }
 
-    // Right Sidebar - Users
-    @FXML
-    private VBox usersSidebar;
-    @FXML
-    private Label totalUsersCount;
-    @FXML
-    private Label onlineUsersCount;
-    @FXML
-    private Label offlineUsersCount;
-    @FXML
-    private VBox onlineUsersList;
-    @FXML
-    private VBox offlineUsersList;
-    @FXML
-    private VBox offlineUsersSection;
+    @FXML private VBox usersSidebar;
+    @FXML private VBox offlineUsersSection;
+    @FXML private Button settingsBtn;
+    @FXML private Label currentUserStatus;
 
-    // Data
-    private String currentServerName = "";
-    private Channel currentChannel = null;
-    private List<User> serverUsers = new ArrayList<>();
-    private List<Channel> voiceChannels = new ArrayList<>();
-    private List<Channel> textChannels = new ArrayList<>();
-    private boolean isUserMuted = false;
-    private boolean isUserDeafened = false;
+    // Data - Unique fields preserved
+
     private boolean offlineUsersExpanded = false;
     private boolean voiceChannelsExpanded = true;
     private boolean textChannelsExpanded = true;
@@ -587,11 +511,13 @@ public class ServerController implements Initializable {
 
         setupReordering(fileChannelsList);
 
-        // initializeMockData(); // Removed to prevent confusion with FXML data
+        initializeMockData(); 
         setupContextMenusForExistingNodes();
         populateUsers();
         setupMessageListView();
-        initializeMockVoiceUsers();
+        
+        // Auto-join voice to show participants
+        joinVoiceChannel("General", "fas-volume-up");
 
         // Set default view
         showDefaultView();
@@ -643,8 +569,7 @@ public class ServerController implements Initializable {
                 event -> openTextChannel("project-files", "fas-file-code", "Project files repository"));
 
         // Voice users indicators
-        voiceGeneralUsers.setVisible(true);
-        voiceMeetingUsers.setVisible(true);
+
 
         // Update channel selection styling
         updateChannelSelection();
@@ -741,6 +666,10 @@ public class ServerController implements Initializable {
         toggleDeafenBtn.setOnAction(event -> toggleDeafen());
         shareScreenBtn.setOnAction(event -> shareScreen());
         leaveVoiceBtn.setOnAction(event -> leaveVoiceChannel());
+        
+        // Chat controls  
+        sendMessageBtn.setOnAction(event -> sendMessage());
+        messageTextField.setOnAction(event -> sendMessage());
     }
 
     private void initializeMockVoiceUsers() {
@@ -933,17 +862,36 @@ public class ServerController implements Initializable {
         clearChannelNotifications(channelName);
     }
 
+
+
     private void joinVoiceChannel(String channelName, String iconLiteral) {
         voiceChannelName.setText(channelName);
 
         // Populate with mock voice users
         voiceUsersContainer.getChildren().clear();
 
-        List<User> voiceUsers = serverUsers.subList(0, Math.min(5, serverUsers.size()));
+        List<User> voiceUsers = new java.util.ArrayList<>();
+    
+        // Add CURRENT USER first (use actual username from currentUserName label)
+        String actualUsername = currentUserName.getText();
+        if (actualUsername == null || actualUsername.isEmpty()) {
+            actualUsername = "Guest"; // Fallback
+        }
+        User currentUser = new User("me", actualUsername, "Online", "Member", "", false, "");
+        voiceUsers.add(currentUser);
+        
+        // Add some other mock users
+        voiceUsers.addAll(serverUsers.subList(0, Math.min(5, serverUsers.size())));
+        
         for (User user : voiceUsers) {
             if (user.isOnline()) {
                 VBox voiceUser = createVoiceUserItem(user);
                 voiceUsersContainer.getChildren().add(voiceUser);
+                
+                // Special styling for current user (optional, can just reuse createVoiceUserItem)
+                if (user.getId().equals("me")) {
+                     voiceUser.getStyleClass().add("current-user-voice-card");
+                }
             }
         }
 
@@ -956,9 +904,12 @@ public class ServerController implements Initializable {
         voiceUser.setAlignment(Pos.CENTER);
         voiceUser.getStyleClass().add("voice-user-item");
 
-        // User avatar
+        // User avatar - set explicit size for circular shape
         StackPane avatar = new StackPane();
         avatar.getStyleClass().add("voice-user-avatar");
+        avatar.setMinSize(64, 64);
+        avatar.setMaxSize(64, 64);
+        avatar.setPrefSize(64, 64);
         Label avatarText = new Label(user.getUsername().substring(0, 1).toUpperCase());
         avatarText.getStyleClass().add("voice-user-avatar-text");
         avatar.getChildren().add(avatarText);
@@ -1037,13 +988,28 @@ public class ServerController implements Initializable {
 
     private void sendMessage() {
         String messageText = messageTextField.getText().trim();
-        if (!messageText.isEmpty()) {
-            messagesListView.getItems().add(new Message(messageText, "You", "Y"));
-            messageTextField.clear();
-
-            // Scroll to bottom
-            messagesListView.scrollTo(messagesListView.getItems().size() - 1);
+        if (messageText.isEmpty()) {
+            return;
         }
+        
+        // Get the actual current user's name
+        String actualUsername = currentUserName.getText();
+        if (actualUsername == null || actualUsername.isEmpty()) {
+            actualUsername = "Guest"; // Fallback
+        }
+        
+        // Get first character for avatar
+        String avatarChar = actualUsername.substring(0, 1).toUpperCase();
+        
+        // Create and add the message
+        Message newMessage = new Message(messageText, actualUsername, avatarChar);
+        messagesListView.getItems().add(newMessage);
+        
+        // Clear the input field
+        messageTextField.clear();
+        
+        // Scroll to bottom
+        messagesListView.scrollTo(messagesListView.getItems().size() - 1);
     }
 
     private void toggleMute() {

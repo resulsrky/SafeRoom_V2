@@ -388,7 +388,7 @@
 .messages-list .list-cell {
   -fx-background-color: transparent;
   -fx-text-fill: #cbd5e1;
-  -fx-padding: 8px 0;
+  -fx-padding: 0;
 }
 
 .message-input {
@@ -458,7 +458,7 @@
 
 .voice-user-avatar {
   -fx-background-color: #334155;
-  -fx-background-radius: 32px;
+  -fx-background-radius: 50%; /* Perfect circle */
   -fx-pref-width: 64px;
   -fx-pref-height: 64px;
   -fx-alignment: CENTER;

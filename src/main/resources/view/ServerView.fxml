@@ -11,6 +11,7 @@
 <?import javafx.scene.layout.Pane?>
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
+<?import javafx.scene.layout.FlowPane?>
 <?import org.kordamp.ikonli.javafx.FontIcon?>
 
 <BorderPane fx:id="serverPane" stylesheets="@../styles/styles.css,@../styles/server_styles.css" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.saferoom.gui.controller.ServerController">
@@ -281,9 +282,12 @@
 
                 <!-- Voice Users Grid -->
                 <ScrollPane fx:id="voiceUsersScrollPane" styleClass="voice-users-scroll" fitToWidth="true" VBox.vgrow="ALWAYS">
-                    <VBox fx:id="voiceUsersContainer" styleClass="voice-users-container" spacing="15.0" alignment="CENTER">
+                    <FlowPane fx:id="voiceUsersContainer" styleClass="voice-users-container" hgap="15.0" vgap="15.0" alignment="TOP_LEFT">
+                        <padding>
+                            <Insets top="10.0" left="10.0" right="10.0" bottom="10.0" />
+                        </padding>
                         <!-- Voice users will be dynamically added here -->
-                    </VBox>
+                    </FlowPane>
                 </ScrollPane>
 
                 <!-- Voice Controls -->

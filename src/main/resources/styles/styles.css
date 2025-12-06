@@ -3873,11 +3873,7 @@
   -fx-cursor: hand;
 }
 
-.voice-user-avatar {
-  -fx-text-fill: white;
-  -fx-font-size: 12px;
-  -fx-font-weight: 600;
-}
+/* Legacy voice-user styles moved to server_styles.css */
 
 .voice-mic-icon {
   -fx-fill: #10b981;
