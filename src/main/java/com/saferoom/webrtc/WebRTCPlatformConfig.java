@@ -60,17 +60,13 @@ final class WebRTCPlatformConfig {
         
         // ═══════════════════════════════════════════════════════════════
         // CROSS-PLATFORM FIX: Force VP8 for Linux <-> Windows compatibility
-        // 
-        // H.264 has format issues between platforms:
-        // - Windows (Media Foundation): Uses AVCC format (length prefix)
-        // - Linux (FFmpeg): Expects Annex B format (start codes)
-        // - SPS/PPS may be sent out-of-band on one platform, in-band on other
         //
-        // VP8 is a pure software codec with NO format ambiguity
-        // It works identically on all platforms
+        // H.264 platform farkları (AVCC vs Annex B, SPS/PPS in-band/out-of-band)
+        // yüzünden decode başarısız olabiliyor. VP8 yazılım tabanlı ve
+        // kapsülleme farkları yok.
         // ═══════════════════════════════════════════════════════════════
         
-        List<RTCRtpCodecCapability> sorted = reorderCodecs(senderCaps, false); // VP8 first!
+        List<RTCRtpCodecCapability> sorted = reorderCodecs(senderCaps, false); // VP8 ONLY
         
         if (!sorted.isEmpty()) {
             System.out.printf("[WebRTC] %s → VP8 preferred (cross-platform compatibility)%n", platformName);
@@ -174,6 +170,16 @@ final class WebRTCPlatformConfig {
             String name = codec.getName();
             return name != null && name.toUpperCase(Locale.ROOT).contains("VP9");
         };
+
+        // Force VP8 ONLY for cross-platform reliability
+        if (!preferH264) {
+            List<RTCRtpCodecCapability> vp8Only = codecs.stream()
+                .filter(isVP8)
+                .toList();
+            if (!vp8Only.isEmpty()) {
+                return Collections.unmodifiableList(vp8Only);
+            }
+        }
 
         if (preferH264) {
             // H264 first, then VP8, then VP9, then others
