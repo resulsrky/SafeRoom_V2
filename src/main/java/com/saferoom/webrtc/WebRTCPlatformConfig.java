@@ -53,31 +53,32 @@ final class WebRTCPlatformConfig {
         
         if (factory == null) {
             System.out.println("[WebRTC] Factory null - using default codec order");
-            return new WebRTCPlatformConfig(mac || windows, windows, List.of(), platformName);
+            return new WebRTCPlatformConfig(true, windows, List.of(), platformName);
         }
 
         RTCRtpCapabilities senderCaps = factory.getRtpSenderCapabilities(MediaType.VIDEO);
         
-        // Both macOS and Windows benefit from H264 hardware encoding
-        if (mac || windows) {
-            List<RTCRtpCodecCapability> sorted = reorderCodecs(senderCaps, true);
-            if (!sorted.isEmpty()) {
-                System.out.printf("[WebRTC] %s → prioritizing %s for hardware encoding%n",
-                    platformName, sorted.get(0).getName());
-                printAvailableCodecs(sorted);
-            } else {
-                System.out.printf("[WebRTC] %s detected but codec capabilities unavailable%n", platformName);
+        // ═══════════════════════════════════════════════════════════════
+        // CROSS-PLATFORM FIX: Always prefer H264 for compatibility
+        // Windows webrtc-java doesn't include VP8/VP9 software codecs
+        // H264 is supported everywhere (hardware or software)
+        // ═══════════════════════════════════════════════════════════════
+        List<RTCRtpCodecCapability> sorted = reorderCodecs(senderCaps, true); // ALWAYS prefer H264
+        
+        if (!sorted.isEmpty()) {
+            System.out.printf("[WebRTC] %s → H264 preferred (cross-platform compatibility)%n", platformName);
+            printAvailableCodecs(sorted);
+            
+            // Log all available codecs for debugging
+            System.out.println("[WebRTC] All available codecs:");
+            for (RTCRtpCodecCapability codec : sorted) {
+                System.out.printf("  - %s%n", codec.getName());
             }
-            return new WebRTCPlatformConfig(true, windows, sorted, platformName);
+        } else {
+            System.out.printf("[WebRTC] %s detected but codec capabilities unavailable%n", platformName);
         }
         
-        // Linux: VP8/VP9 preferred (better VAAPI support for some cards)
-        List<RTCRtpCodecCapability> sorted = reorderCodecs(senderCaps, false);
-        if (!sorted.isEmpty()) {
-            System.out.printf("[WebRTC] Linux → using %s (VP8/VP9 preferred)%n", sorted.get(0).getName());
-            printAvailableCodecs(sorted);
-        }
-        return new WebRTCPlatformConfig(false, false, sorted, platformName);
+        return new WebRTCPlatformConfig(true, windows, sorted, platformName);
     }
 
     static WebRTCPlatformConfig empty() {
