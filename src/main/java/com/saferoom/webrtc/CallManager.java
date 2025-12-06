@@ -211,8 +211,9 @@ public class CallManager {
     /**
      * Accept incoming call
      * 
-     * NOW is when we create peer connection and start media capture!
-     * This ensures camera/mic only start after user explicitly accepts.
+     * Create peer connection but DO NOT add tracks yet!
+     * Tracks will be added in handleOffer() AFTER setRemoteDescription()
+     * This ensures correct transceiver direction (SEND_RECV not SEND_ONLY)
      */
     public void acceptCall(String callId) {
         if (currentState != CallState.RINGING || isOutgoingCall) {
@@ -223,29 +224,19 @@ public class CallManager {
         System.out.printf("[CallManager] ✅ Accepting call: %s%n", callId);
         
         // ═══════════════════════════════════════════════════════════════
-        // NOW create peer connection and add media tracks
-        // This is the correct place - AFTER user consent
+        // Create peer connection but DO NOT add tracks yet!
+        // Tracks must be added AFTER setRemoteDescription in handleOffer()
+        // to ensure proper transceiver direction matching
         // ═══════════════════════════════════════════════════════════════
-        System.out.println("[CallManager] 🎥 NOW starting media capture (user accepted)...");
+        System.out.println("[CallManager] 🔧 Creating peer connection (tracks will be added after OFFER)...");
         
         webrtcClient = new WebRTCClient(currentCallId, remoteUsername);
         webrtcClient.createPeerConnection(pendingAudioEnabled, pendingVideoEnabled);
         ensureScreenShareController();
-        
-        // 🎤 Add audio track if audio enabled
-        if (pendingAudioEnabled) {
-            System.out.println("[CallManager] Adding audio track for accepted call...");
-            webrtcClient.addAudioTrack();
-        }
-        
-        // 📹 Add video track if video enabled
-        if (pendingVideoEnabled) {
-            System.out.println("[CallManager] Adding video track for accepted call...");
-            webrtcClient.addVideoTrack();
-            registerCameraWithScreenShareController();
-        }
-        
         setupWebRTCCallbacks();
+        
+        // Reset flag for track addition
+        tracksAddedForIncomingCall = false;
         
         // Send CALL_ACCEPT
         boolean success = signalingClient.sendCallAccept(callId, remoteUsername);
@@ -253,9 +244,10 @@ public class CallManager {
         if (success) {
             this.currentState = CallState.CONNECTING;
             
-            // 🔧 DON'T create answer here! Wait for OFFER to arrive first.
-            // Answer will be created in handleOffer() after remote description is set.
+            // 🔧 DON'T add tracks or create answer here!
+            // Wait for OFFER → setRemoteDescription → addTracks → createAnswer
             System.out.println("[CallManager] ⏳ Waiting for SDP offer from caller...");
+            System.out.println("[CallManager] 📋 Media will start when OFFER is received");
             
             if (onCallAcceptedCallback != null) {
                 onCallAcceptedCallback.accept(callId);
@@ -432,6 +424,7 @@ public class CallManager {
     // Store incoming call media settings for later use when accepted
     private boolean pendingAudioEnabled = false;
     private boolean pendingVideoEnabled = false;
+    private boolean tracksAddedForIncomingCall = false;
     
     /**
      * Handle incoming call request
@@ -534,16 +527,42 @@ public class CallManager {
     
     /**
      * Handle SDP offer
+     * 
+     * CRITICAL: For callee, add tracks AFTER setRemoteDescription
+     * This ensures proper transceiver direction matching (SEND_RECV not SEND_ONLY)
      */
     private void handleOffer(WebRTCSignal signal) {
         System.out.println("[CallManager] Received SDP offer");
         
-        // Set remote description
+        // Set remote description FIRST
         webrtcClient.setRemoteDescription("offer", signal.getSdp());
         
         // 🔧 If we're the callee (incoming call accepted), create answer now
         if (!isOutgoingCall && currentState == CallState.CONNECTING) {
-            System.out.println("[CallManager] Creating SDP answer (after remote offer set)...");
+            // ═══════════════════════════════════════════════════════════════
+            // CRITICAL FIX: Add tracks AFTER setRemoteDescription
+            // This ensures transceivers are properly matched for SEND_RECV
+            // If tracks are added BEFORE, they become SEND_ONLY and can't receive
+            // ═══════════════════════════════════════════════════════════════
+            
+            if (!tracksAddedForIncomingCall) {
+                System.out.println("[CallManager] 🎥 Adding media tracks AFTER remote offer (correct order)...");
+                
+                if (pendingAudioEnabled) {
+                    System.out.println("[CallManager] Adding audio track...");
+                    webrtcClient.addAudioTrack();
+                }
+                
+                if (pendingVideoEnabled) {
+                    System.out.println("[CallManager] Adding video track...");
+                    webrtcClient.addVideoTrack();
+                    registerCameraWithScreenShareController();
+                }
+                
+                tracksAddedForIncomingCall = true;
+            }
+            
+            System.out.println("[CallManager] Creating SDP answer (after tracks added)...");
             webrtcClient.createAnswer().thenAccept(sdp -> {
                 // Send ANSWER to caller
                 signalingClient.sendAnswer(currentCallId, remoteUsername, sdp);
@@ -762,6 +781,7 @@ public class CallManager {
         // Clear pending media settings
         this.pendingAudioEnabled = false;
         this.pendingVideoEnabled = false;
+        this.tracksAddedForIncomingCall = false;
         
         // Now close WebRTC connection (this may trigger callbacks, but state is already IDLE)
         if (webrtcClient != null) {
