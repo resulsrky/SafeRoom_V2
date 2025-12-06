@@ -2,6 +2,7 @@ package com.saferoom.gui.controller;
 
 import com.saferoom.gui.model.User;
 import com.saferoom.gui.model.Channel;
+import com.saferoom.gui.model.Message;
 import com.saferoom.gui.utils.UserSession;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
@@ -143,7 +144,7 @@ public class ServerController implements Initializable {
     @FXML
     private Label currentChannelTopic;
     @FXML
-    private ListView<String> messagesListView;
+    private ListView<Message> messagesListView;
     @FXML
     private HBox messageInputArea;
     @FXML
@@ -589,6 +590,8 @@ public class ServerController implements Initializable {
         // initializeMockData(); // Removed to prevent confusion with FXML data
         setupContextMenusForExistingNodes();
         populateUsers();
+        setupMessageListView();
+        initializeMockVoiceUsers();
 
         // Set default view
         showDefaultView();
@@ -740,6 +743,36 @@ public class ServerController implements Initializable {
         leaveVoiceBtn.setOnAction(event -> leaveVoiceChannel());
     }
 
+    private void initializeMockVoiceUsers() {
+        if (voiceUsersContainer != null) {
+            voiceUsersContainer.getChildren().clear();
+            
+            java.util.List<User> mockVoiceUsers = new java.util.ArrayList<>();
+            mockVoiceUsers.add(new User("v1", "SilentBob", "Online", "Member", "", true, "Listening"));
+            mockVoiceUsers.add(new User("v2", "LoudMouth", "Online", "Admin", "fas-crown", true, "Talking"));
+            mockVoiceUsers.add(new User("v3", "MusicBot", "Online", "Bot", "fas-robot", true, "Playing Music"));
+            
+            // Set mock speaking states
+            for (User user : mockVoiceUsers) {
+                 VBox userItem = createVoiceUserItem(user);
+                 
+                 // Mock states for visual demo
+                 if (user.getUsername().equals("LoudMouth")) {
+                     userItem.getStyleClass().add("speaking");
+                 }
+                 if (user.getUsername().equals("SilentBob")) {
+                     userItem.getStyleClass().add("muted");
+                     // Find mic icon and update it
+                     if (userItem.getChildren().size() > 2 && userItem.getChildren().get(2) instanceof FontIcon) {
+                         ((FontIcon) userItem.getChildren().get(2)).setIconLiteral("fas-microphone-slash");
+                     }
+                 }
+                 
+                 voiceUsersContainer.getChildren().add(userItem);
+            }
+        }
+    }
+
     private void initializeMockData() {
         // Create mock users
         serverUsers.add(new User("1", "Username", "Online", "Owner", "fas-crown", true, "Working on project"));
@@ -885,12 +918,13 @@ public class ServerController implements Initializable {
         messageTextField.setPromptText("Message #" + channelName);
 
         // Clear and populate with mock messages
+        // Clear and populate with mock messages
         messagesListView.getItems().clear();
         messagesListView.getItems().addAll(
-                "Alice Cooper: Welcome to the " + channelName + " channel!",
-                "Bob Smith: Thanks for setting this up",
-                "Carol Johnson: Looking forward to collaborating here",
-                "David Wilson: Great to have a secure space for our discussions");
+                new Message("Welcome to the " + channelName + " channel!", "Alice Cooper", "A"),
+                new Message("Thanks for setting this up", "Bob Smith", "B"),
+                new Message("Looking forward to collaborating here", "Carol Johnson", "C"),
+                new Message("Great to have a secure space for our discussions", "David Wilson", "D"));
 
         showTextChatView();
         updateChannelSelection();
@@ -938,6 +972,15 @@ public class ServerController implements Initializable {
         micIcon.getStyleClass().add("voice-user-mic");
 
         voiceUser.getChildren().addAll(avatar, username, micIcon);
+        
+        // Add speaking/muted logic (mock)
+        if (user.getUsername().equals("Alice Cooper")) {
+            voiceUser.getStyleClass().add("speaking");
+        }
+        if (user.getUsername().equals("Bob Smith")) {
+            voiceUser.getStyleClass().add("muted");
+            micIcon.setIconLiteral("fas-microphone-slash");
+        }
 
         return voiceUser;
     }
@@ -995,7 +1038,7 @@ public class ServerController implements Initializable {
     private void sendMessage() {
         String messageText = messageTextField.getText().trim();
         if (!messageText.isEmpty()) {
-            messagesListView.getItems().add("You: " + messageText);
+            messagesListView.getItems().add(new Message(messageText, "You", "Y"));
             messageTextField.clear();
 
             // Scroll to bottom
@@ -1402,6 +1445,95 @@ public class ServerController implements Initializable {
                 }
             }
             event.consume();
+        });
+    }
+
+
+    private void setupMessageListView() {
+        messagesListView.setCellFactory(listView -> new javafx.scene.control.ListCell<Message>() {
+            @Override
+            protected void updateItem(Message message, boolean empty) {
+                super.updateItem(message, empty);
+                if (empty || message == null) {
+                    setText(null);
+                    setGraphic(null);
+                    setStyle("-fx-background-color: transparent;");
+                } else {
+                    // Check if previous message is from same user (grouping)
+                    boolean isGrouped = false;
+                    int index = getIndex();
+                    if (index > 0) {
+                        Message prev = getListView().getItems().get(index - 1);
+                        if (prev != null && prev.getSenderId().equals(message.getSenderId())) {
+                            // Check time difference (e.g., 5 minutes)
+                            java.time.Duration diff = java.time.Duration.between(prev.getTimestamp(), message.getTimestamp());
+                            if (diff.toMinutes() < 5) {
+                                isGrouped = true;
+                            }
+                        }
+                    }
+
+                    // Main Container
+                    HBox container = new HBox(10);
+                    container.setAlignment(Pos.TOP_LEFT);
+                    container.setPadding(new javafx.geometry.Insets(2, 0, 2, 10)); // Top/Bottom padding small for grouped
+
+                    // Avatar Area (Left)
+                    StackPane avatarContainer = new StackPane();
+                    avatarContainer.setPrefWidth(40);
+                    avatarContainer.setMinWidth(40);
+                    
+                    if (!isGrouped) {
+                        avatarContainer.setPrefHeight(40);
+                        avatarContainer.setMinHeight(40);
+                        container.setPadding(new javafx.geometry.Insets(10, 0, 2, 10)); // More top padding for new group
+                        
+                        Label avatarLabel = new Label(message.getSenderAvatarChar());
+                        avatarLabel.setStyle("-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 16px;");
+                        
+                        javafx.scene.shape.Circle avatarBg = new javafx.scene.shape.Circle(20);
+                        avatarBg.setFill(Color.web("#5865F2")); // Discord Blurple-ish
+                        
+                        avatarContainer.getChildren().addAll(avatarBg, avatarLabel);
+                    } else {
+                        // Grouped: no specific height, naturally collapsed
+                    }
+
+                    // Content Area (Right)
+                    VBox contentBox = new VBox(2);
+                    contentBox.setAlignment(Pos.TOP_LEFT);
+                    
+                    if (!isGrouped) {
+                        // Header: Username + Timestamp
+                        HBox header = new HBox(8);
+                        header.setAlignment(Pos.BASELINE_LEFT);
+                        
+                        Label usernameLabel = new Label(message.getSenderId()); // Use senderId as name for now
+                        usernameLabel.setStyle("-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 14px;");
+                        
+                        java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("HH:mm");
+                        Label timeLabel = new Label("Today at " + message.getTimestamp().format(formatter));
+                        timeLabel.setStyle("-fx-text-fill: #94a3b8; -fx-font-size: 11px;");
+                        
+                        header.getChildren().addAll(usernameLabel, timeLabel);
+                        contentBox.getChildren().add(header);
+                    }
+
+                    // Message Text
+                    Label messageLabel = new Label(message.getText());
+                    messageLabel.setWrapText(true);
+                    messageLabel.setStyle("-fx-text-fill: #dcddde; -fx-font-size: 14px;");
+                    // Limit width to avoid horizontal scroll if possible, or let ListView handle it
+                    messageLabel.setMaxWidth(500); // Arbitrary max width, better to bind to list width
+
+                    contentBox.getChildren().add(messageLabel);
+
+                    container.getChildren().addAll(avatarContainer, contentBox);
+                    setGraphic(container);
+                    setText(null);
+                    setStyle("-fx-background-color: transparent;");
+                }
+            }
         });
     }
 }

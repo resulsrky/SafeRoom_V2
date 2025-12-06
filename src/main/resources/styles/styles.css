@@ -5026,4 +5026,150 @@
   -fx-border-radius: 8;
   -fx-border-width: 1;
 }
->>>>>>> 6a1cce6282266ba3b35f888df6b96d1a7e8827f0
+
+
+/* =================================================================
+   CHAT PANEL STYLES (Discord-like)
+   ================================================================= */
+
+.messages-list {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+.messages-list .viewport {
+    -fx-background-color: transparent;
+}
+
+.messages-list .list-cell {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+    -fx-border-width: 0;
+}
+
+.messages-list .list-cell:filled:selected:focused, 
+.messages-list .list-cell:filled:selected {
+    -fx-background-color: rgba(255, 255, 255, 0.05);
+}
+
+.messages-list .list-cell:hover {
+    -fx-background-color: rgba(4, 4, 5, 0.07);
+}
+
+.message-input-area {
+    -fx-background-color: #36393f;
+    -fx-border-color: #202225;
+    -fx-border-width: 1px 0 0 0;
+}
+
+.message-input {
+    -fx-background-color: #40444b;
+    -fx-text-fill: #dcddde;
+    -fx-prompt-text-fill: #72767d;
+    -fx-background-radius: 8px;
+    -fx-border-width: 0;
+    -fx-padding: 10px;
+    -fx-font-size: 14px;
+}
+
+.message-input:focused {
+    -fx-background-color: #40444b;
+    -fx-border-width: 0;
+    -fx-effect: none;
+}
+
+.input-icon {
+    -fx-icon-color: #b9bbbe;
+    -fx-icon-size: 20px;
+}
+
+.icon-button:hover .input-icon {
+    -fx-icon-color: #dcddde;
+}
+
+/* =================================================================
+   VOICE PANEL STYLES (Discord-like)
+   ================================================================= */
+
+.voice-users-container {
+    -fx-padding: 20px;
+    -fx-background-color: transparent;
+}
+
+.voice-user-item {
+    -fx-background-color: #2f3136;
+    -fx-background-radius: 8px;
+    -fx-padding: 15px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 5, 0, 0, 2);
+    -fx-min-width: 120px;
+    -fx-min-height: 120px;
+    -fx-alignment: center;
+    -fx-cursor: hand;
+    -fx-border-color: transparent;
+    -fx-border-width: 2px;
+    -fx-border-radius: 8px;
+}
+
+.voice-user-item:hover {
+    -fx-background-color: #36393f;
+}
+
+.voice-user-item.speaking {
+    -fx-border-color: #3ba55c;
+    -fx-effect: dropshadow(gaussian, #3ba55c, 10, 0, 0, 0);
+}
+
+.voice-user-avatar {
+    -fx-background-color: #5865F2;
+    -fx-background-radius: 50%;
+    -fx-pref-width: 60px;
+    -fx-pref-height: 60px;
+    -fx-min-width: 60px;
+    -fx-min-height: 60px;
+}
+
+.voice-user-avatar-text {
+    -fx-text-fill: white;
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+}
+
+.voice-user-name {
+    -fx-text-fill: white;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+}
+
+.voice-user-mic {
+    -fx-icon-color: #b9bbbe;
+    -fx-icon-size: 16px;
+}
+
+.voice-user-item.muted .voice-user-mic {
+    -fx-icon-color: #ed4245; /* Red for muted */
+    -fx-icon-literal: 'fas-microphone-slash';
+}
+
+/* Message List View - Ensure dark background */
+.list-view {
+    -fx-background-color: transparent;
+    -fx-control-inner-background: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.list-cell {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+    -fx-text-fill: white;
+}
+
+.list-cell:filled:selected:focused, .list-cell:filled:selected {
+    -fx-background-color: transparent;
+    -fx-text-fill: white;
+}
+
+.list-cell:even, .list-cell:odd {
+    -fx-background-color: transparent;
+}
+

@@ -10,6 +10,7 @@ public class Message {
     private final String id = UUID.randomUUID().toString();
     private final String senderId;
     private final String senderAvatarChar;
+    private final java.time.LocalDateTime timestamp = java.time.LocalDateTime.now();
 
     private final StringProperty text = new SimpleStringProperty("");
     private final ObjectProperty<MessageType> type = new SimpleObjectProperty<>(MessageType.TEXT);
@@ -131,6 +132,10 @@ public class Message {
 
     public String getSenderAvatarChar() {
         return senderAvatarChar;
+    }
+
+    public java.time.LocalDateTime getTimestamp() {
+        return timestamp;
     }
 
     public void setThumbnail(Image image) {
