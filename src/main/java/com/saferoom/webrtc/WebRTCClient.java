@@ -447,17 +447,47 @@ public class WebRTCClient {
                 @Override
                 public void onIceConnectionChange(RTCIceConnectionState state) {
                     System.out.printf("[WebRTC] ICE Connection state: %s%n", state);
+                    
+                    // Extra diagnostic info for CHECKING state
+                    if (state == RTCIceConnectionState.CHECKING) {
+                        System.out.println("[WebRTC]   ℹ️ ICE is checking connectivity between candidates...");
+                        System.out.println("[WebRTC]   ℹ️ This can take up to 30s depending on network conditions");
+                    }
+                    
                     if (state == RTCIceConnectionState.CONNECTED || state == RTCIceConnectionState.COMPLETED) {
-                        System.out.println("[WebRTC] ICE connection established!");
+                        System.out.println("[WebRTC] ✅ ICE connection established!");
+                        System.out.println("[WebRTC]   Media should now flow between peers");
                         if (onConnectionEstablishedCallback != null) {
                             onConnectionEstablishedCallback.run();
                         }
-                    } else if (state == RTCIceConnectionState.FAILED || state == RTCIceConnectionState.DISCONNECTED) {
-                        System.out.println("[WebRTC] ICE connection failed/disconnected");
+                    } else if (state == RTCIceConnectionState.FAILED) {
+                        System.err.println("[WebRTC] ❌ ICE connection FAILED!");
+                        System.err.println("[WebRTC]   Possible causes:");
+                        System.err.println("[WebRTC]   1. Both peers behind symmetric NAT (need TURN server)");
+                        System.err.println("[WebRTC]   2. Firewall blocking UDP/TCP traffic");
+                        System.err.println("[WebRTC]   3. Network timeout");
+                        if (onConnectionClosedCallback != null) {
+                            onConnectionClosedCallback.run();
+                        }
+                    } else if (state == RTCIceConnectionState.DISCONNECTED) {
+                        System.out.println("[WebRTC] ⚠️ ICE connection disconnected (may recover)");
                         if (onConnectionClosedCallback != null) {
                             onConnectionClosedCallback.run();
                         }
                     }
+                }
+                
+                @Override
+                public void onIceGatheringChange(RTCIceGatheringState state) {
+                    System.out.printf("[WebRTC] ICE Gathering state: %s%n", state);
+                    if (state == RTCIceGatheringState.COMPLETE) {
+                        System.out.println("[WebRTC]   ✅ All ICE candidates gathered");
+                    }
+                }
+                
+                @Override
+                public void onConnectionChange(RTCPeerConnectionState state) {
+                    System.out.printf("[WebRTC] Peer Connection state: %s%n", state);
                 }
                 
                 @Override
@@ -1013,6 +1043,11 @@ public class WebRTCClient {
     /**
      * Handle remote video track
      */
+    // Store remote video track reference for diagnostics
+    private volatile VideoTrack remoteVideoTrack;
+    private volatile long remoteVideoFrameCount = 0;
+    private volatile long lastRemoteVideoLogTime = 0;
+    
     private void handleRemoteVideoTrack(VideoTrack videoTrack) {
         System.out.println("[WebRTC] ═══════════════════════════════════════════");
         System.out.printf("[WebRTC] 🎥 HANDLING REMOTE VIDEO TRACK%n");
@@ -1026,6 +1061,37 @@ public class WebRTCClient {
             videoTrack.setEnabled(true);
             System.out.printf("[WebRTC]   After enable - Enabled: %b%n", videoTrack.isEnabled());
         }
+        
+        // Store reference
+        this.remoteVideoTrack = videoTrack;
+        this.remoteVideoFrameCount = 0;
+        this.lastRemoteVideoLogTime = System.currentTimeMillis();
+        
+        // ═══════════════════════════════════════════════════════════════
+        // DIAGNOSTIC: Add a debug sink directly to detect if frames arrive
+        // This helps distinguish between:
+        //   1. WebRTC not receiving frames (network/ICE issue)
+        //   2. VideoPanel not receiving frames (sink attachment issue)
+        // ═══════════════════════════════════════════════════════════════
+        VideoTrackSink debugSink = frame -> {
+            remoteVideoFrameCount++;
+            long now = System.currentTimeMillis();
+            // Log first frame immediately, then every 5 seconds
+            if (remoteVideoFrameCount == 1) {
+                int width = frame.buffer != null ? frame.buffer.getWidth() : 0;
+                int height = frame.buffer != null ? frame.buffer.getHeight() : 0;
+                System.out.printf("[WebRTC] 🎬 FIRST REMOTE VIDEO FRAME RECEIVED! (size: %dx%d)%n", width, height);
+            } else if (now - lastRemoteVideoLogTime >= 5000) {
+                int width = frame.buffer != null ? frame.buffer.getWidth() : 0;
+                int height = frame.buffer != null ? frame.buffer.getHeight() : 0;
+                System.out.printf("[WebRTC] 📹 Remote video: %d frames received (latest: %dx%d)%n",
+                    remoteVideoFrameCount, width, height);
+                lastRemoteVideoLogTime = now;
+            }
+            frame.release();
+        };
+        videoTrack.addSink(debugSink);
+        System.out.println("[WebRTC]   ✅ Debug sink attached to remote video track");
         
         // Video rendering will be handled by VideoPanel through callback
         System.out.println("[WebRTC]   Waiting for VideoPanel attachment via callback...");
