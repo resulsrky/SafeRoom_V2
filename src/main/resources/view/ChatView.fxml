@@ -201,7 +201,7 @@
 
                                     <VBox spacing="10.0">
                                         <HBox alignment="CENTER_LEFT">
-                                            <Label text="Shared Media" styleClass="section-header-label" />
+                                        <Label text="Shared Media" styleClass="section-header-label" />
                                             <Pane HBox.hgrow="ALWAYS" />
                                             <Label fx:id="sharedMediaCount" styleClass="media-count-label" text="" />
                                         </HBox>

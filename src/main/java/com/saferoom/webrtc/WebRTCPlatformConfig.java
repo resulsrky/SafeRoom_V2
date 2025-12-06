@@ -53,32 +53,35 @@ final class WebRTCPlatformConfig {
         
         if (factory == null) {
             System.out.println("[WebRTC] Factory null - using default codec order");
-            return new WebRTCPlatformConfig(true, windows, List.of(), platformName);
+            return new WebRTCPlatformConfig(false, windows, List.of(), platformName);
         }
 
         RTCRtpCapabilities senderCaps = factory.getRtpSenderCapabilities(MediaType.VIDEO);
         
         // ═══════════════════════════════════════════════════════════════
-        // CROSS-PLATFORM FIX: Always prefer H264 for compatibility
-        // Windows webrtc-java doesn't include VP8/VP9 software codecs
-        // H264 is supported everywhere (hardware or software)
+        // CROSS-PLATFORM FIX: Let WebRTC auto-negotiate codecs
+        // Don't force any codec preference - SDP negotiation will find
+        // the best common codec between platforms automatically
         // ═══════════════════════════════════════════════════════════════
-        List<RTCRtpCodecCapability> sorted = reorderCodecs(senderCaps, true); // ALWAYS prefer H264
         
-        if (!sorted.isEmpty()) {
-            System.out.printf("[WebRTC] %s → H264 preferred (cross-platform compatibility)%n", platformName);
-            printAvailableCodecs(sorted);
-            
-            // Log all available codecs for debugging
-            System.out.println("[WebRTC] All available codecs:");
-            for (RTCRtpCodecCapability codec : sorted) {
-                System.out.printf("  - %s%n", codec.getName());
+        // Log available codecs for debugging (but don't reorder)
+        List<RTCRtpCodecCapability> codecs = List.of();
+        if (senderCaps != null && senderCaps.getCodecs() != null) {
+            codecs = new ArrayList<>(senderCaps.getCodecs());
+            System.out.printf("[WebRTC] %s → Using default codec order (auto-negotiation)%n", platformName);
+            System.out.println("[WebRTC] Available video codecs:");
+            for (int i = 0; i < Math.min(10, codecs.size()); i++) {
+                RTCRtpCodecCapability codec = codecs.get(i);
+                if (codec != null && codec.getName() != null) {
+                    System.out.printf("  [%d] %s%n", i + 1, codec.getName());
+                }
             }
         } else {
             System.out.printf("[WebRTC] %s detected but codec capabilities unavailable%n", platformName);
         }
         
-        return new WebRTCPlatformConfig(true, windows, sorted, platformName);
+        // Return EMPTY codec preferences - let WebRTC handle negotiation
+        return new WebRTCPlatformConfig(false, windows, List.of(), platformName);
     }
 
     static WebRTCPlatformConfig empty() {

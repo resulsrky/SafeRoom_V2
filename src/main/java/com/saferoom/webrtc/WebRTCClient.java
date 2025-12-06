@@ -590,6 +590,10 @@ public class WebRTCClient {
                         public void onSuccess() {
                             System.out.println("[WebRTC] Offer created and set as local description");
                             String sdp = description.sdp;
+                            
+                            // Log video codec info from SDP
+                            logSdpVideoCodecs(sdp, "OFFER");
+                            
                             if (onLocalSDPCallback != null) {
                                 onLocalSDPCallback.accept(sdp);
                             }
@@ -644,6 +648,10 @@ public class WebRTCClient {
                         public void onSuccess() {
                             System.out.println("[WebRTC] Answer created and set as local description");
                             String sdp = description.sdp;
+                            
+                            // Log video codec info from SDP
+                            logSdpVideoCodecs(sdp, "ANSWER");
+                            
                             if (onLocalSDPCallback != null) {
                                 onLocalSDPCallback.accept(sdp);
                             }
@@ -686,6 +694,9 @@ public class WebRTCClient {
         try {
             RTCSdpType type = sdpType.equalsIgnoreCase("offer") ? RTCSdpType.OFFER : RTCSdpType.ANSWER;
             RTCSessionDescription description = new RTCSessionDescription(type, sdp);
+            
+            // Log remote SDP video codecs
+            logSdpVideoCodecs(sdp, "REMOTE " + sdpType.toUpperCase());
             
             peerConnection.setRemoteDescription(description, new SetSessionDescriptionObserver() {
                 @Override
@@ -1296,5 +1307,43 @@ public class WebRTCClient {
             sb.append(chars.charAt((int) (Math.random() * chars.length())));
         }
         return sb.toString();
+    }
+    
+    /**
+     * Log video codec information from SDP for debugging cross-platform issues
+     */
+    private void logSdpVideoCodecs(String sdp, String label) {
+        if (sdp == null || sdp.isEmpty()) return;
+        
+        System.out.printf("[WebRTC] ═══════════════════════════════════════════%n");
+        System.out.printf("[WebRTC] SDP %s - Video Codec Analysis%n", label);
+        
+        // Find video m-line
+        String[] lines = sdp.split("\r\n|\n");
+        boolean inVideoSection = false;
+        StringBuilder videoCodecs = new StringBuilder();
+        
+        for (String line : lines) {
+            if (line.startsWith("m=video")) {
+                inVideoSection = true;
+                // Extract payload types from m=video line
+                String[] parts = line.split(" ");
+                System.out.printf("[WebRTC]   m=video line: %s%n", line.substring(0, Math.min(80, line.length())));
+            } else if (line.startsWith("m=")) {
+                inVideoSection = false;
+            } else if (inVideoSection) {
+                // Log rtpmap lines (codec definitions)
+                if (line.startsWith("a=rtpmap:")) {
+                    String codec = line.substring(9);
+                    System.out.printf("[WebRTC]   Codec: %s%n", codec);
+                }
+                // Log fmtp lines (codec parameters)
+                if (line.startsWith("a=fmtp:") && line.contains("profile-level-id")) {
+                    System.out.printf("[WebRTC]   Profile: %s%n", line.substring(7));
+                }
+            }
+        }
+        
+        System.out.printf("[WebRTC] ═══════════════════════════════════════════%n");
     }
 }

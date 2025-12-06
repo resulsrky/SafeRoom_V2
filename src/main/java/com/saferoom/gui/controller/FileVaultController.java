@@ -53,7 +53,7 @@ public class FileVaultController {
         setupDragAndDrop();
         setupDropZoneClick();
         setupFilterButtons();
-        
+
         // Downloads klasöründen dosyaları yükle
         loadFilesFromDownloads();
 
@@ -193,17 +193,17 @@ public class FileVaultController {
             filteredFiles = allFiles;
         } else {
             filteredFiles = allFiles.stream()
-                .filter(file -> file.getType().equalsIgnoreCase(filter))
-                .collect(Collectors.toList());
+                    .filter(file -> file.getType().equalsIgnoreCase(filter))
+                    .collect(Collectors.toList());
         }
 
         if (filteredFiles.isEmpty()) {
             showEmptyState();
         } else {
-            for (VaultFile file : filteredFiles) {
-                fileGrid.getChildren().add(createFileCard(file));
-            }
+        for (VaultFile file : filteredFiles) {
+            fileGrid.getChildren().add(createFileCard(file));
         }
+    }
     }
 
     /**
