@@ -722,7 +722,7 @@
 }
 
 .user-info-avatar-container {
-  -fx-alignment: BOTTOM_RIGHT;
+  -fx-alignment: CENTER;
 }
 
 .user-info-avatar {
@@ -730,30 +730,50 @@
   -fx-background-radius: 48px;
   -fx-pref-width: 96px;
   -fx-pref-height: 96px;
+  -fx-min-width: 96px;
+  -fx-min-height: 96px;
+  -fx-max-width: 96px;
+  -fx-max-height: 96px;
   -fx-alignment: CENTER;
+  -fx-border-width: 3px;
+  -fx-border-radius: 48px;
+  -fx-border-color: transparent;
+}
+
+.avatar-online {
+  -fx-border-color: #22c55e;
+}
+
+.avatar-idle {
+  -fx-border-color: #fbbf24;
+}
+
+.avatar-dnd {
+  -fx-border-color: #ef4444;
+}
+
+.avatar-offline {
+  -fx-border-color: #6b7280;
 }
 
 .user-info-avatar-text {
   -fx-text-fill: white;
   -fx-font-size: 36px;
   -fx-font-weight: bold;
+  -fx-underline: false;
+  -fx-strikethrough: false;
 }
 
 .user-info-status-indicator {
-  -fx-background-radius: 12px;
-  -fx-pref-width: 24px;
-  -fx-pref-height: 24px;
-  -fx-border-color: #1e293b;
-  -fx-border-width: 3px;
-  -fx-border-radius: 12px;
-  -fx-translate-x: 32px;
-  -fx-translate-y: 32px;
+  -fx-border-color: transparent;
 }
 
 .user-info-username {
   -fx-text-fill: white;
   -fx-font-size: 20px;
   -fx-font-weight: bold;
+  -fx-alignment: center;
+  -fx-text-alignment: center;
 }
 
 .user-info-role-icon {
@@ -764,6 +784,8 @@
 .user-info-status-text {
   -fx-text-fill: #94a3b8;
   -fx-font-size: 14px;
+  -fx-alignment: center;
+  -fx-text-alignment: center;
 }
 
 .popup-separator {
