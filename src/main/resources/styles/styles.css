@@ -2110,40 +2110,6 @@
 
 .friend-activity-modern {
   -fx-text-fill: #60a5fa;
-  -fx-font-size: 12px;
-  -fx-font-weight: 600;
-}
-
-/* ========== ACTION BUTTONS ========== */
-.friend-action-modern {
-  -fx-background-color: rgba(51, 65, 85, 0.6);
-  -fx-background-radius: 8px;
-  -fx-padding: 8px;
-  -fx-cursor: hand;
-  -fx-min-width: 36px;
-  -fx-min-height: 36px;
-  -fx-max-width: 36px;
-  -fx-max-height: 36px;
-  -fx-transition: all 0.2s ease;
-}
-
-.friend-action-modern:hover {
-  -fx-background-color: rgba(59, 130, 246, 0.8);
-
-}
-
-.action-icon-modern {
-  -fx-icon-color: #94a3b8;
-  -fx-icon-size: 16px;
-}
-
-.friend-action-modern:hover .action-icon-modern {
-  -fx-icon-color: white;
-}
-
-/* ========== PENDING REQUEST BUTTONS ========== */
-.pending-accept-btn-modern {
-  -fx-background-color: #0b592d;
   -fx-background-radius: 8px;
   -fx-text-fill: white;
   -fx-font-size: 12px;
@@ -2863,32 +2829,52 @@
   -fx-icon-color: white;
 }
 .settings-combo-box {
-  -fx-background-color: #1e2b3b;
-  -fx-border-color: #475569;
-  -fx-border-radius: 8px;
+  -fx-background-color: #1e293b;
   -fx-background-radius: 8px;
+  -fx-border-color: #334155;
+  -fx-border-radius: 8px;
+  -fx-border-width: 1px;
   -fx-text-fill: white;
-  -jfx-focus-color: transparent;
-  -jfx-unfocus-color: transparent;
+  -fx-font-size: 14px;
+  -fx-padding: 10px 15px;
+  -fx-pref-height: 45px;
+  -jfx-focus-color: #5865f2;
+  -jfx-unfocus-color: #334155;
 }
-.jfx-combo-box-popup .list-view {
-  -fx-background-color: #1e2b3b;
-  -fx-background-radius: 8px;
-  -fx-padding: 5px;
+
+.settings-combo-box:hover {
   -fx-border-color: #475569;
-  -fx-border-radius: 8px;
+  -fx-background-color: #283548;
 }
-.jfx-combo-box-popup .list-cell {
+
+.settings-combo-box .combo-box-popup .list-view {
+  -fx-background-color: #1e293b;
+  -fx-background-radius: 8px;
+  -fx-border-color: #334155;
+  -fx-border-width: 1px;
+  -fx-border-radius: 8px;
+  -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.5), 15, 0, 0, 5);
+}
+
+.settings-combo-box .combo-box-popup .list-cell {
   -fx-background-color: transparent;
   -fx-text-fill: white;
-  -fx-padding: 10px;
-  -fx-background-radius: 6px;
+  -fx-padding: 12px 16px;
+  -fx-font-size: 14px;
+  -fx-background-radius: 4px;
 }
-.jfx-combo-box-popup .list-cell:hover {
+
+.settings-combo-box .combo-box-popup .list-cell:hover {
   -fx-background-color: #334155;
 }
-.jfx-combo-box-popup .list-cell:selected {
-  -fx-background-color: #2563eb;
+
+.settings-combo-box .combo-box-popup .list-cell:filled:selected {
+  -fx-background-color: #5865f2;
+  -fx-text-fill: white;
+}
+
+.settings-combo-box:disabled {
+  -fx-opacity: 0.5;
 }
 .mic-test-bar {
   -fx-pref-height: 8px;
