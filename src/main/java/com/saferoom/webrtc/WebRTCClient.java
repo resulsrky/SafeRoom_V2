@@ -113,6 +113,10 @@ public class WebRTCClient {
             if (defaultMic != null)
                 currentMicName = defaultMic.getName();
 
+            AudioDevice defaultSpeaker = MediaDevices.getDefaultAudioRenderDevice();
+            if (defaultSpeaker != null)
+                currentSpeakerName = defaultSpeaker.getName();
+
             initialized = true;
             startDeviceMonitor();
             System.out.println("[WebRTC] ═══════════════════════════════════════════════════════════");
@@ -1440,7 +1444,15 @@ public class WebRTCClient {
                         switchMicrophone(defaultMic);
                     }
 
-                    // Note: Same logic can be applied to Speaker if needed
+                    // Check Speaker
+                    AudioDevice defaultSpeaker = MediaDevices.getDefaultAudioRenderDevice();
+                    if (defaultSpeaker != null && !defaultSpeaker.getName().equals(currentSpeakerName)) {
+                        System.out.println("[WebRTC] ⚠️ Default speaker changed!");
+                        System.out.println("   Old: " + currentSpeakerName);
+                        System.out.println("   New: " + defaultSpeaker.getName());
+
+                        switchSpeaker(defaultSpeaker);
+                    }
 
                 } catch (InterruptedException e) {
                     break;
@@ -1483,6 +1495,42 @@ public class WebRTCClient {
 
         } catch (Exception e) {
             System.err.println("[WebRTC] ❌ Error switching microphone: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Safely switches the speaker/headphones without restarting the entire peer
+     * connection.
+     */
+    private static synchronized void switchSpeaker(AudioDevice newDevice) {
+        if (audioDeviceModule == null)
+            return;
+
+        System.out.println("[WebRTC] 🔄 Switching speaker to: " + newDevice.getName());
+
+        try {
+            // 1. Stop playout if active (releases old device lock)
+            boolean wasPlayout = playoutStarted;
+            if (wasPlayout) {
+                audioDeviceModule.stopPlayout();
+            }
+
+            // 2. Set new device
+            audioDeviceModule.setPlayoutDevice(newDevice);
+            currentSpeakerName = newDevice.getName();
+
+            // 3. Restart playout if it was active
+            if (wasPlayout) {
+                audioDeviceModule.initPlayout();
+                audioDeviceModule.startPlayout();
+                System.out.println("[WebRTC] ✅ Speaker switched and restarted successfully");
+            } else {
+                System.out.println("[WebRTC] ✅ Speaker swapped (idle)");
+            }
+
+        } catch (Exception e) {
+            System.err.println("[WebRTC] ❌ Error switching speaker: " + e.getMessage());
             e.printStackTrace();
         }
     }
