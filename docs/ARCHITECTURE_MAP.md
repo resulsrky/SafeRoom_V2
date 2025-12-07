@@ -75,7 +75,7 @@
   - Lines 907-958: `addVideoTrack()` — Camera capture integration
   - Lines 1012-1060: `handleRemoteAudioTrack()` — Per-track audio sink management
   - Lines 1134-1182: `handleRemoteVideoTrack()` — Debug sink for frame flow diagnostics
-- **Risk level for conflicts:** 🔴 **CRITICAL** — Most branches will touch this file
+- **Risk level for conflicts:**  **CRITICAL** — Most branches will touch this file
 - **Threading concerns:** 
   - Windows requires dedicated STA thread for COM
   - `playoutStarted`/`recordingStarted` are volatile flags with synchronized blocks
@@ -90,7 +90,7 @@
   - Lines 534-575: `handleOffer()` — CRITICAL: setRemoteDescription BEFORE addTracks
   - Lines 662-708: `setupWebRTCCallbacks()` — Callback wiring for ICE/SDP
   - Lines 766-802: `cleanup()` — Resource teardown, recursion prevention
-- **Risk level for conflicts:** 🔴 **CRITICAL** — Core call flow logic
+- **Risk level for conflicts:**  **CRITICAL** — Core call flow logic
 - **State machine concerns:**
   - `tracksAddedForIncomingCall` flag prevents duplicate track addition
   - `pendingAudioEnabled`/`pendingVideoEnabled` store media settings for deferred use
@@ -103,7 +103,7 @@
   - Lines 45-83: `detect()` — Platform detection and codec ordering
   - Lines 98-134: `applyVideoCodecPreferences()` — Transceiver codec configuration
   - Lines 140-179: `reorderCodecsKeepAll()` — Codec sorting algorithm
-- **Risk level for conflicts:** 🟡 **MEDIUM** — Platform optimization changes
+- **Risk level for conflicts:**  **MEDIUM** — Platform optimization changes
 - **Platform concerns:**
   - VP8 preferred for software encoding compatibility
   - H264 kept as fallback for hardware acceleration
@@ -115,7 +115,7 @@
 - **Related modules:** WebRTCClient, GroupCallManager
 - **Critical code regions:**
   - Lines 24-80: `createCameraTrack()` — Camera enumeration, source creation, track setup
-- **Risk level for conflicts:** 🟢 **LOW** — Isolated service
+- **Risk level for conflicts:**  **LOW** — Isolated service
 - **Resource concerns:**
   - Camera resource is shared; must be stopped/disposed properly
   - Default profile: 640x480@30fps
@@ -123,16 +123,16 @@
 #### WebRTCSignalingClient.java
 - **Purpose:** gRPC signaling stream client. Handles CALL_REQUEST, OFFER, ANSWER, ICE_CANDIDATE, and other WebRTC signal types.
 - **Related modules:** CallManager, P2PConnectionManager
-- **Risk level for conflicts:** 🟡 **MEDIUM** — Signal routing changes
+- **Risk level for conflicts:**  **MEDIUM** — Signal routing changes
 
 #### GroupCallManager.java
 - **Purpose:** Multi-party mesh call orchestration. Manages multiple WebRTCClient instances for group calls.
 - **Related modules:** WebRTCClient, WebRTCSignalingClient
-- **Risk level for conflicts:** 🟡 **MEDIUM** — Group call feature development
+- **Risk level for conflicts:**  **MEDIUM** — Group call feature development
 
 #### WebRTCSessionManager.java
 - **Purpose:** Server-side session management (if running embedded server).
-- **Risk level for conflicts:** 🟢 **LOW** — Server-side logic
+- **Risk level for conflicts:**  **LOW** — Server-side logic
 
 ### webrtc/pipeline/ — Video Processing Pipeline
 
@@ -144,7 +144,7 @@
   - Lines 55-70: `submit()` — Frame queue with backpressure (drops oldest)
   - Lines 77-120: `processLoop()` — Main processing loop with stall detection
   - Lines 133-139: `convertFrame()` — I420 → ARGB conversion
-- **Risk level for conflicts:** 🔴 **HIGH** — CPU optimization focus area
+- **Risk level for conflicts:**  **HIGH** — CPU optimization focus area
 - **Threading concerns:**
   - Uses platform thread (not virtual) due to native code compatibility
   - Queue capacity: 12 frames (configurable via system property)
@@ -153,16 +153,16 @@
 #### FrameRenderResult.java
 - **Purpose:** Immutable frame data holder for FX thread consumption. Contains ARGB pixel buffer from pooled memory.
 - **Related modules:** FrameProcessor, ArgbBufferPool, VideoPanel
-- **Risk level for conflicts:** 🟡 **MEDIUM** — Zero-copy optimization target
+- **Risk level for conflicts:**  **MEDIUM** — Zero-copy optimization target
 
 #### ArgbBufferPool.java
 - **Purpose:** Recycling buffer pool for ARGB pixel arrays. Reduces GC pressure during video rendering.
 - **Related modules:** FrameRenderResult, FrameProcessor
-- **Risk level for conflicts:** 🟡 **MEDIUM** — Memory optimization target
+- **Risk level for conflicts:**  **MEDIUM** — Memory optimization target
 
 #### VideoPipelineStats.java
 - **Purpose:** Performance statistics collector for video pipeline diagnostics.
-- **Risk level for conflicts:** 🟢 **LOW** — Logging/diagnostics only
+- **Risk level for conflicts:**  **LOW** — Logging/diagnostics only
 
 ### webrtc/screenshare/ — Screen Sharing
 
@@ -175,18 +175,18 @@
   - Lines 141-157: `startNativeCapture()` — Native capturer setup
   - Lines 159-195: `renegotiate()` — SDP renegotiation for track changes
   - Lines 197-240: `publishTrack()`/`detachTrack()` — Track management with replaceTrack
-- **Risk level for conflicts:** 🟡 **MEDIUM** — Platform-specific capture logic
+- **Risk level for conflicts:**  **MEDIUM** — Platform-specific capture logic
 - **Platform concerns:**
   - Linux: Requires PipeWire/FFmpeg for desktop capture
   - Windows/macOS: Native ScreenCapturer from webrtc-java
 
 #### ScreenShareController.java
 - **Purpose:** High-level screen share API for GUI. Wraps ScreenShareManager with async operations.
-- **Risk level for conflicts:** 🟢 **LOW** — API wrapper
+- **Risk level for conflicts:**  **LOW** — API wrapper
 
 #### ScreenSourceOption.java
 - **Purpose:** Value object for screen/window source selection.
-- **Risk level for conflicts:** 🟢 **LOW** — Data class
+- **Risk level for conflicts:**  **LOW** — Data class
 
 ### gui/components/ — UI Components
 
@@ -199,7 +199,7 @@
   - Lines 138-159: `detachVideoTrack()` — Cleanup with safety checks
   - Lines 161-198: `paintFrame()` — Aspect-ratio-aware rendering
   - Lines 283-320: `handleStall()` — Recovery logic for video freeze
-- **Risk level for conflicts:** 🔴 **HIGH** — UI rendering + optimization target
+- **Risk level for conflicts:**  **HIGH** — UI rendering + optimization target
 - **Threading concerns:**
   - AnimationTimer runs on FX thread
   - Frame submission from WebRTC callback thread
@@ -216,15 +216,15 @@
   - Lines 372-431: `handleShareScreen()`/`startScreenSharing()` — Screen share workflow
   - Lines 544-579: `attachLocalVideo()`/`attachRemoteVideo()` — Track attachment
   - Lines 697-715: `registerRemoteTrackCallback()` — Auto-attach remote video
-- **Risk level for conflicts:** 🟡 **MEDIUM** — UI logic for calls
+- **Risk level for conflicts:**  **MEDIUM** — UI logic for calls
 
 #### IncomingCallDialog.java
 - **Purpose:** Incoming call notification dialog with accept/reject buttons.
-- **Risk level for conflicts:** 🟢 **LOW** — Simple dialog
+- **Risk level for conflicts:**  **LOW** — Simple dialog
 
 #### OutgoingCallDialog.java
 - **Purpose:** Outgoing call ringing dialog with cancel button.
-- **Risk level for conflicts:** 🟢 **LOW** — Simple dialog
+- **Risk level for conflicts:**  **LOW** — Simple dialog
 
 ### gui/controller/ — View Controllers
 
@@ -234,15 +234,15 @@
 - **Critical code regions:**
   - Lines 133-209: `initialize()` — App startup, CallManager init
   - Lines 703-745: `setupGlobalCallCallbacks()` — Incoming call handling
-- **Risk level for conflicts:** 🟡 **MEDIUM** — Entry point modifications
+- **Risk level for conflicts:**  **MEDIUM** — Entry point modifications
 
 #### ChatViewController.java
 - **Purpose:** Chat view controller for messaging UI.
-- **Risk level for conflicts:** 🟢 **LOW** — Chat UI logic
+- **Risk level for conflicts:**  **LOW** — Chat UI logic
 
 #### MeetingPanelController.java
 - **Purpose:** Meeting room panel controller.
-- **Risk level for conflicts:** 🟡 **MEDIUM** — Meeting feature changes
+- **Risk level for conflicts:**  **MEDIUM** — Meeting feature changes
 
 ### gui/service/ — Application Services
 
@@ -253,11 +253,11 @@
   - Lines 125-204: `sendMessage()` — P2P routing with server fallback
   - Lines 224-296: `receiveP2PMessage()` — Incoming message handling + persistence
   - Lines 303-474: `sendFileMessage()`/`doSendFile()` — File transfer workflow
-- **Risk level for conflicts:** 🟡 **MEDIUM** — Messaging changes
+- **Risk level for conflicts:**  **MEDIUM** — Messaging changes
 
 #### ContactService.java
 - **Purpose:** Contact list management service.
-- **Risk level for conflicts:** 🟢 **LOW** — Contact UI logic
+- **Risk level for conflicts:**  **LOW** — Contact UI logic
 
 ### p2p/ — P2P Connection Management
 
@@ -269,54 +269,54 @@
   - Lines 172-249: `createConnection()` — Peer connection setup with MESH_* signals
   - Lines 304-381: `handleP2POffer()` — Answer side SDP handling
   - Lines 532-999: `P2PConnection` inner class — Connection lifecycle
-- **Risk level for conflicts:** 🟡 **MEDIUM** — P2P feature development
+- **Risk level for conflicts:**  **MEDIUM** — P2P feature development
 - **Signal routing concerns:**
   - Uses MESH_* signal types for reliability
   - Must not conflict with CallManager signals
 
 #### DataChannelReliableMessaging.java
 - **Purpose:** Reliable messaging protocol over DataChannel with chunking, ACK/NACK, CRC.
-- **Risk level for conflicts:** 🟢 **LOW** — Protocol implementation
+- **Risk level for conflicts:**  **LOW** — Protocol implementation
 
 #### DataChannelFileTransfer.java
 - **Purpose:** File transfer coordinator over DataChannel.
-- **Risk level for conflicts:** 🟢 **LOW** — File transfer protocol
+- **Risk level for conflicts:**  **LOW** — File transfer protocol
 
 ### file_transfer/ — File Transfer Protocol
 
 #### FileTransferRuntime.java
 - **Purpose:** Runtime coordinator for file transfer sender/receiver.
-- **Risk level for conflicts:** 🟢 **LOW**
+- **Risk level for conflicts:**  **LOW**
 
 #### EnhancedFileTransferSender.java
 - **Purpose:** Enhanced sender with congestion control and NACK handling.
-- **Risk level for conflicts:** 🟢 **LOW**
+- **Risk level for conflicts:**  **LOW**
 
 #### FileTransferReceiver.java
 - **Purpose:** Chunk-based file receiver with reassembly.
-- **Risk level for conflicts:** 🟢 **LOW**
+- **Risk level for conflicts:**  **LOW**
 
 #### HybridCongestionController.java
 - **Purpose:** Adaptive congestion control algorithm.
-- **Risk level for conflicts:** 🟢 **LOW**
+- **Risk level for conflicts:**  **LOW**
 
 ### storage/ — Persistent Storage
 
 #### LocalDatabase.java
 - **Purpose:** SQLite database wrapper with encryption support.
-- **Risk level for conflicts:** 🟢 **LOW**
+- **Risk level for conflicts:**  **LOW**
 
 #### LocalMessageRepository.java
 - **Purpose:** Message persistence repository.
-- **Risk level for conflicts:** 🟢 **LOW**
+- **Risk level for conflicts:**  **LOW**
 
 ### Resources
 
 #### FXML Files (view/*.fxml)
-- **Risk level for conflicts:** 🟢 **LOW** — UI layout only
+- **Risk level for conflicts:**  **LOW** — UI layout only
 
 #### CSS Files (styles/*.css, css/*.css)
-- **Risk level for conflicts:** 🟢 **LOW** — Styling only
+- **Risk level for conflicts:**  **LOW** — Styling only
 
 ---
 
@@ -332,7 +332,7 @@
 - `VideoPanel.java` — dispose() and detachVideoTrack()
 - `FrameProcessor.java` — close() and drainQueue()
 
-**Conflict Risk:** 🔴 **HIGH**  
+**Conflict Risk:**  **HIGH**  
 **Rationale:** Meeting exit touches the entire call teardown path. Multiple cleanup methods must coordinate properly. `cleanup()` in CallManager has recursion prevention that can conflict with other exit flow changes.
 
 ---
@@ -346,7 +346,7 @@
 - `ActiveCallDialog.java` — UI button handlers
 - `CameraCaptureService.java` — Camera switching
 
-**Conflict Risk:** 🟡 **MEDIUM**  
+**Conflict Risk:**  **MEDIUM**  
 **Rationale:** Device switching is relatively isolated but touches the sensitive AudioDeviceModule. Windows COM threading must be respected.
 
 ---
@@ -360,7 +360,7 @@
 - `CallManager.java` — handleOffer(), addTrack() timing
 - `FrameProcessor.java` — Platform thread selection
 
-**Conflict Risk:** 🔴 **CRITICAL**  
+**Conflict Risk:**  **CRITICAL**  
 **Rationale:** This is the current critical bug (Linux→Windows video). Touches SDP negotiation, track addition order, and platform-specific initialization. Direct conflict with BUGFIX-05 and BUGFIX-06.
 
 ---
@@ -374,7 +374,7 @@
 - `ScreenShareManager.java` — asyncExecutor lifecycle
 - `P2PConnectionManager.java` — Thread cleanup
 
-**Conflict Risk:** 🟡 **MEDIUM**  
+**Conflict Risk:**  **MEDIUM**  
 **Rationale:** Thread lifecycle is spread across multiple files but changes are typically additive (adding shutdown hooks).
 
 ---
@@ -387,7 +387,7 @@
 - `CallManager.java` — addAudioTrack() timing
 - `WebRTCPlatformConfig.java` — Windows-specific config
 
-**Conflict Risk:** 🔴 **HIGH**  
+**Conflict Risk:**  **HIGH**  
 **Rationale:** Windows audio initialization is sensitive to COM threading. Direct conflict with BUGFIX-03 (cross-platform) on WebRTCClient.java.
 
 ---
@@ -401,7 +401,7 @@
 - `ScreenShareManager.java` — startLinuxCapture()
 - `LinuxScreenShareEngine.java` — FFmpeg pipeline
 
-**Conflict Risk:** 🟡 **MEDIUM**  
+**Conflict Risk:**  **MEDIUM**  
 **Rationale:** Linux-specific changes are isolated to Linux code paths. May conflict with BUGFIX-03 on platform detection.
 
 ---
@@ -414,7 +414,7 @@
 - `MainController.java` — macOS fullscreen handling
 - `MacOSFullscreenHandler.java` — macOS-specific code
 
-**Conflict Risk:** 🟢 **LOW**  
+**Conflict Risk:**  **LOW**  
 **Rationale:** macOS UI issues are isolated to macOS code paths and UI components.
 
 ---
@@ -427,7 +427,7 @@
 - `CallManager.java` — cleanup() audio handling
 - `ActiveCallDialog.java` — Audio mute/unmute
 
-**Conflict Risk:** 🟡 **MEDIUM**  
+**Conflict Risk:**  **MEDIUM**  
 **Rationale:** Audio sink management is centralized in WebRTCClient. May conflict with BUGFIX-05 on audio initialization.
 
 ---
@@ -441,7 +441,7 @@
 - `FrameRenderResult.java` — Memory layout
 - `ArgbBufferPool.java` — Pool sizing
 
-**Conflict Risk:** 🔴 **HIGH**  
+**Conflict Risk:**  **HIGH**  
 **Rationale:** Core rendering path optimization. Direct conflict with BUGFIX-07 (macOS freeze) on VideoPanel.java.
 
 ---
@@ -455,7 +455,7 @@
 - `ArgbBufferPool.java` — Direct buffer support
 - `VideoPanel.java` — PixelWriter integration
 
-**Conflict Risk:** 🔴 **HIGH**  
+**Conflict Risk:**  **HIGH**  
 **Rationale:** Fundamental change to video data flow. Conflicts with OPT-01 and any VideoPanel changes.
 
 ---
@@ -468,7 +468,7 @@
 - `WebRTCPlatformConfig.java` — Platform detection
 - `PlatformDetector.java` — Detection logic
 
-**Conflict Risk:** 🟢 **LOW**  
+**Conflict Risk:**  **LOW**  
 **Rationale:** Build configuration and detection are mostly additive.
 
 ---
@@ -482,7 +482,7 @@
 - `FrameProcessor.java` — Frame release
 - `ArgbBufferPool.java` — Pool cleanup
 
-**Conflict Risk:** 🟡 **MEDIUM**  
+**Conflict Risk:**  **MEDIUM**  
 **Rationale:** Memory leak fixes span multiple files but changes are typically defensive additions.
 
 ---
@@ -494,7 +494,7 @@
 - `build.gradle` — Remove unused deps
 - Various imports across codebase
 
-**Conflict Risk:** 🟢 **LOW**  
+**Conflict Risk:**  **LOW**  
 **Rationale:** Build-level changes, minimal code impact.
 
 ---
@@ -508,7 +508,7 @@
 - `FrameProcessor.java` — Log statement optimization
 - `Logger.java` — Logging infrastructure
 
-**Conflict Risk:** 🟢 **LOW**  
+**Conflict Risk:**  **LOW**  
 **Rationale:** Logging changes are typically non-breaking.
 
 ---
@@ -589,7 +589,7 @@
 
 ## PART 4 — CONFLICT PROBABILITY MAP
 
-### 🔴 HIGH CONFLICT AREAS
+### HIGH CONFLICT AREAS
 
 #### WebRTCClient.java
 - **Touched by:** BUGFIX-01, BUGFIX-02, BUGFIX-03, BUGFIX-04, BUGFIX-05, BUGFIX-06, BUGFIX-08, OPT-04, OPT-06
@@ -623,7 +623,7 @@
   - BUGFIX-04 thread cleanup must not conflict with OPT-01 optimizations
 - **Final merge authority:** **Yaaz**
 
-### 🟡 MEDIUM CONFLICT AREAS
+###  MEDIUM CONFLICT AREAS
 
 #### WebRTCPlatformConfig.java
 - **Touched by:** BUGFIX-03, BUGFIX-05, BUGFIX-06, OPT-03
@@ -638,7 +638,7 @@
 - **Touched by:** BUGFIX-04, OPT-06
 - **Final merge authority:** **Hayri**
 
-### 🟢 LOW CONFLICT AREAS
+###  LOW CONFLICT AREAS
 
 - `CameraCaptureService.java`
 - `WebRTCSessionManager.java`
@@ -703,7 +703,7 @@ For each branch merge:
 3. **Architecture-level conflicts:** Escalate to **Hasan** (WebRTC lead)
 4. **All conflicts affecting CallManager.java:** Require **Hasan** review
 
-### Warning Flags 🚨
+### Warning Flags 
 
 - **Never merge two branches that both modify `handleOffer()` or `acceptCall()` without integration testing**
 - **Never modify `initWindowsAudio()` without testing on actual Windows hardware**
@@ -716,15 +716,15 @@ For each branch merge:
 
 | File | Risk | Primary Owner | Key Concern |
 |------|------|---------------|-------------|
-| WebRTCClient.java | 🔴 | Hasan | Platform init, threading |
-| CallManager.java | 🔴 | Hasan | State machine, track timing |
-| VideoPanel.java | 🔴 | Yaaz | AnimationTimer, FX thread |
-| FrameProcessor.java | 🔴 | Yaaz | Thread selection, native code |
-| WebRTCPlatformConfig.java | 🟡 | Hasan | Codec ordering |
-| ActiveCallDialog.java | 🟡 | Meriç | UI + track attachment |
-| P2PConnectionManager.java | 🟡 | Hayri | Signal routing |
-| CameraCaptureService.java | 🟢 | Hasan | Resource lifecycle |
-| ChatService.java | 🟢 | Hayri | P2P + persistence |
+| WebRTCClient.java | HIGH | Hasan | Platform init, threading |
+| CallManager.java | HIGH | Hasan | State machine, track timing |
+| VideoPanel.java | HIGH | Yaaz | AnimationTimer, FX thread |
+| FrameProcessor.java | HIGH | Yaaz | Thread selection, native code |
+| WebRTCPlatformConfig.java | MEDIUM | Hasan | Codec ordering |
+| ActiveCallDialog.java | MEDIUM | Meriç | UI + track attachment |
+| P2PConnectionManager.java | MEDIUM | Hayri | Signal routing |
+| CameraCaptureService.java | LOW  | Hasan | Resource lifecycle |
+| ChatService.java | LOW  | Hayri | P2P + persistence |
 
 ---
 
