@@ -44,6 +44,7 @@ public class CallManager {
     private Runnable onCallConnectedCallback;
     private Consumer<MediaStreamTrack> onRemoteTrackCallback;
     private Runnable onRemoteScreenShareStoppedCallback; // Screen share stopped callback
+    private Runnable onLocalTracksReadyCallback; // Callback when local audio/video tracks are added
     
     /**
      * Call states (matching server-side WebRTCSessionManager.CallState)
@@ -176,6 +177,12 @@ public class CallManager {
                 
                 // Set up callbacks
                 setupWebRTCCallbacks();
+                
+                // 🎥 Notify GUI that local tracks are ready (for CALLER)
+                if (onLocalTracksReadyCallback != null) {
+                    System.out.println("[CallManager] 🎥 Local tracks ready (caller) - notifying GUI");
+                    onLocalTracksReadyCallback.run();
+                }
                 
                 return callId;
             })
@@ -560,6 +567,12 @@ public class CallManager {
                 }
                 
                 tracksAddedForIncomingCall = true;
+                
+                // 🎥 Notify GUI that local tracks are ready (for CALLEE)
+                if (onLocalTracksReadyCallback != null) {
+                    System.out.println("[CallManager] 🎥 Local tracks ready (callee) - notifying GUI");
+                    onLocalTracksReadyCallback.run();
+                }
             }
             
             System.out.println("[CallManager] Creating SDP answer (after tracks added)...");
@@ -831,6 +844,10 @@ public class CallManager {
     
     public void setOnRemoteScreenShareStoppedCallback(Runnable callback) {
         this.onRemoteScreenShareStoppedCallback = callback;
+    }
+    
+    public void setOnLocalTracksReadyCallback(Runnable callback) {
+        this.onLocalTracksReadyCallback = callback;
     }
     
     // ===============================

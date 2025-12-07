@@ -1656,11 +1656,21 @@ public class ChatViewController {
                 if (currentActiveCallDialog == null) {
                     currentActiveCallDialog = new ActiveCallDialog(currentChannelId, callId, currentCallVideoEnabled, callManager);
                     currentActiveCallDialog.show();
-                    if (currentCallVideoEnabled) {
-                        VideoTrack localVideo = callManager.getLocalVideoTrack();
-                        if (localVideo != null) {
-                            currentActiveCallDialog.attachLocalVideo(localVideo);
-                        }
+                    // NOTE: Local video will be attached via onLocalTracksReadyCallback
+                    // For CALLER, tracks are added in startCall() so callback fires immediately
+                    // For CALLEE, tracks are added in handleOffer() after this callback
+                }
+            });
+        });
+        
+        // 🎥 Attach local video when tracks are actually ready
+        callManager.setOnLocalTracksReadyCallback(() -> {
+            Platform.runLater(() -> {
+                if (currentActiveCallDialog != null && currentCallVideoEnabled) {
+                    VideoTrack localVideo = callManager.getLocalVideoTrack();
+                    if (localVideo != null) {
+                        System.out.println("[ChatViewController] 🎥 Attaching local video (tracks now ready)");
+                        currentActiveCallDialog.attachLocalVideo(localVideo);
                     }
                 }
             });

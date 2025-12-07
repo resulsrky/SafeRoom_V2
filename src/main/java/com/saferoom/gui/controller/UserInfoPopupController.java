@@ -364,12 +364,19 @@ public class UserInfoPopupController implements Initializable {
                         callManager
                     );
                     currentActiveCallDialog.show();
-                    
-                    if (currentCallVideoEnabled) {
-                        VideoTrack localVideo = callManager.getLocalVideoTrack();
-                        if (localVideo != null) {
-                            currentActiveCallDialog.attachLocalVideo(localVideo);
-                        }
+                    // NOTE: Local video will be attached via onLocalTracksReadyCallback
+                }
+            });
+        });
+        
+        // 🎥 Attach local video when tracks are actually ready
+        callManager.setOnLocalTracksReadyCallback(() -> {
+            Platform.runLater(() -> {
+                if (currentActiveCallDialog != null && currentCallVideoEnabled) {
+                    VideoTrack localVideo = callManager.getLocalVideoTrack();
+                    if (localVideo != null) {
+                        System.out.println("[UserInfoPopupController] 🎥 Attaching local video (tracks now ready)");
+                        currentActiveCallDialog.attachLocalVideo(localVideo);
                     }
                 }
             });
