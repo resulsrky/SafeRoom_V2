@@ -3,21 +3,20 @@ package com.saferoom.gui.view.cell;
 import com.saferoom.gui.model.FileAttachment;
 import com.saferoom.gui.model.Message;
 import com.saferoom.gui.model.MessageType;
-import java.awt.Desktop;
-import java.awt.image.BufferedImage;
+import com.saferoom.system.PlatformDetector;
+
 import java.nio.file.Path;
+import java.util.concurrent.CompletableFuture;
 import javafx.animation.FadeTransition;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.beans.binding.StringBinding;
 import javafx.beans.value.ChangeListener;
-import javafx.embed.swing.SwingFXUtils;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ProgressBar;
-import javafx.scene.control.ScrollPane;
 import javafx.scene.effect.GaussianBlur;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -33,8 +32,6 @@ import javafx.scene.shape.Rectangle;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.util.Duration;
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.rendering.PDFRenderer;
 
 public class MessageCell extends ListCell<Message> {
     private static final double THUMB_SIZE = 140;
@@ -399,68 +396,39 @@ public class MessageCell extends ListCell<Message> {
         stage.show();
     }
 
+    /**
+     * Opens PDF with the system default application.
+     * In-app PDF rendering via PDFBox has been removed to reduce dependencies.
+     */
     private void openPdfModal(FileAttachment attachment) {
         if (attachment == null || attachment.getLocalPath() == null) {
             return;
         }
-        Path path = attachment.getLocalPath();
-        Stage stage = new Stage();
-        stage.initModality(Modality.APPLICATION_MODAL);
-        stage.setTitle(attachment.getFileName());
-
-        VBox pages = new VBox(12);
-        pages.setStyle("-fx-padding: 16; -fx-background-color: #0f111a;");
-
-        ScrollPane scrollPane = new ScrollPane(pages);
-        scrollPane.setFitToWidth(true);
-        scrollPane.setStyle("-fx-background: transparent; -fx-border-color: transparent;");
-
-        BorderPane root = new BorderPane(scrollPane);
-        Scene scene = new Scene(root, 900, 960);
-        stage.setScene(scene);
-
-        Label loading = new Label("Loading PDF…");
-        loading.getStyleClass().add("file-status");
-        pages.getChildren().add(loading);
-
-        Thread loader = new Thread(() -> {
-            try (PDDocument doc = PDDocument.load(path.toFile())) {
-                PDFRenderer renderer = new PDFRenderer(doc);
-                int pageCount = doc.getNumberOfPages();
-                for (int i = 0; i < pageCount; i++) {
-                    BufferedImage page = renderer.renderImageWithDPI(i, 150);
-                    Image fxImage = SwingFXUtils.toFXImage(page, null);
-                    final int idx = i;
-                    Platform.runLater(() -> {
-                        pages.getChildren().remove(loading);
-                        ImageView view = new ImageView(fxImage);
-                        view.setPreserveRatio(true);
-                        view.setFitWidth(860);
-                        view.setSmooth(true);
-                        Label pageLabel = new Label("Page " + (idx + 1));
-                        pageLabel.getStyleClass().add("file-status");
-                        pages.getChildren().add(pageLabel);
-                        pages.getChildren().add(view);
-                    });
+        openWithSystemApp(attachment.getLocalPath());
+    }
+    
+    /**
+     * Opens a file with the system's default application.
+     * Uses xdg-open on Linux to avoid GDK threading issues with Desktop.open().
+     */
+    private void openWithSystemApp(Path filePath) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                if (PlatformDetector.isLinux()) {
+                    // Use xdg-open on Linux to avoid GDK threading issues
+                    new ProcessBuilder("xdg-open", filePath.toAbsolutePath().toString())
+                        .redirectErrorStream(true)
+                        .start();
+                } else {
+                    // Use Desktop.open() on Windows/macOS
+                    if (java.awt.Desktop.isDesktopSupported()) {
+                        java.awt.Desktop.getDesktop().open(filePath.toFile());
+                    }
                 }
             } catch (Exception e) {
-                Platform.runLater(() -> {
-                    pages.getChildren().clear();
-                    Label error = new Label("Failed to load PDF: " + e.getMessage());
-                    error.getStyleClass().add("file-status");
-                    pages.getChildren().add(error);
-                });
-            }
-        }, "pdf-render-" + System.nanoTime());
-        loader.setDaemon(true);
-        loader.start();
-
-        scene.setOnKeyPressed(event -> {
-            if (event.getCode() == KeyCode.ESCAPE) {
-                stage.close();
+                System.err.println("[MessageCell] Failed to open file with system app: " + e.getMessage());
             }
         });
-        stage.show();
     }
 
     private void openGenericFile(FileAttachment attachment) {
