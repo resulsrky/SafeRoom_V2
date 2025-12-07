@@ -74,9 +74,6 @@ public class UserInfoPopupController implements Initializable {
     private Button kickBtn;
     @FXML
     private Button banBtn;
-    @FXML
-    private Button closeBtn;
-
     private User currentUser;
     private boolean isCurrentUserAdmin = false; // This would be determined by current user's permissions
 
@@ -149,6 +146,14 @@ public class UserInfoPopupController implements Initializable {
         statusIndicator.getStyleClass().removeAll("status-online", "status-idle", "status-dnd", "status-offline");
         statusIndicator.getStyleClass().add(getStatusStyleClass(currentUser.getStatus()));
 
+        // Set avatar status border
+        userAvatar.getStyleClass().removeAll("avatar-online", "avatar-idle", "avatar-dnd", "avatar-offline");
+        userAvatar.getStyleClass().add(getAvatarStatusStyleClass(currentUser.getStatus()));
+
+        // Set avatar status border
+        userAvatar.getStyleClass().removeAll("avatar-online", "avatar-idle", "avatar-dnd", "avatar-offline");
+        userAvatar.getStyleClass().add(getAvatarStatusStyleClass(currentUser.getStatus()));
+
         // Set role
         roleLabel.setText(currentUser.getRole());
 
@@ -196,6 +201,21 @@ public class UserInfoPopupController implements Initializable {
         int daysAgo = Math.abs(currentUser.getId().hashCode()) % 365 + 30; // 30-395 days ago
         LocalDate memberSince = LocalDate.now().minusDays(daysAgo);
         return memberSince.format(DateTimeFormatter.ofPattern("MMMM yyyy"));
+    }
+
+    private String getAvatarStatusStyleClass(String status) {
+        switch (status.toLowerCase()) {
+            case "online":
+                return "avatar-online";
+            case "idle":
+                return "avatar-idle";
+            case "do not disturb":
+                return "avatar-dnd";
+            case "offline":
+                return "avatar-offline";
+            default:
+                return "avatar-offline";
+        }
     }
 
     private void setupActionHandlers() {
@@ -262,7 +282,7 @@ public class UserInfoPopupController implements Initializable {
             onCloseCallback.run();
         } else {
             // Fallback for standalone usage
-            Stage stage = (Stage) closeBtn.getScene().getWindow();
+            Stage stage = (Stage) userAvatarContainer.getScene().getWindow();
             if (stage != null) {
                 stage.close();
             }

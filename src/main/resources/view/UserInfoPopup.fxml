@@ -125,9 +125,7 @@
     </VBox>
 
     <!-- Close Button -->
+    <!-- Close Button Removed -->
     <Pane VBox.vgrow="ALWAYS" />
-    <HBox alignment="CENTER">
-        <Button fx:id="closeBtn" styleClass="user-action-button, neutral-action" text="Close" prefWidth="100.0" onAction="#closePopup" />
-    </HBox>
 
 </VBox>
