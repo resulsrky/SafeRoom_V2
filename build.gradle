@@ -303,25 +303,63 @@ tasks.withType(Test).configureEach {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // RUNTIME JVM CONFIGURATION
-// Platform-specific rendering and memory optimization
+// Aggressive memory optimization for minimal footprint
 // ═══════════════════════════════════════════════════════════════════════════════
 
 tasks.withType(JavaExec).configureEach {
     jvmArgs += '--enable-preview'
     
-    // Memory settings (optimized for WebRTC + JavaFX)
-    jvmArgs += '-Xms64m'
-    jvmArgs += '-Xmx512m'
+    // ─────────────────────────────────────────────────────────────────────────────
+    // HEAP CONFIGURATION
+    // ─────────────────────────────────────────────────────────────────────────────
+    jvmArgs += '-Xms32m'              // Start small (32MB)
+    jvmArgs += '-Xmx384m'             // Max 384MB heap (reduced from 512)
+    
+    // ─────────────────────────────────────────────────────────────────────────────
+    // GARBAGE COLLECTOR (G1GC optimized for low latency)
+    // ─────────────────────────────────────────────────────────────────────────────
     jvmArgs += '-XX:+UseG1GC'
     jvmArgs += '-XX:MaxGCPauseMillis=50'
+    jvmArgs += '-XX:G1HeapRegionSize=1m'
+    jvmArgs += '-XX:+UseStringDeduplication'     // Deduplicate strings (saves ~5-10%)
+    jvmArgs += '-XX:InitiatingHeapOccupancyPercent=45'
     
-    // Netty/gRPC buffer optimization
-    jvmArgs += '-Dio.netty.allocator.maxOrder=3'
-    jvmArgs += '-Dio.netty.allocator.numDirectArenas=2'
+    // ─────────────────────────────────────────────────────────────────────────────
+    // THREAD STACK SIZE (DEFAULT 1MB → 512KB per thread)
+    // With ~80 threads, this saves ~40MB
+    // ─────────────────────────────────────────────────────────────────────────────
+    jvmArgs += '-Xss512k'
     
-    // Platform-specific JavaFX rendering pipeline
+    // ─────────────────────────────────────────────────────────────────────────────
+    // METASPACE LIMITS
+    // ─────────────────────────────────────────────────────────────────────────────
+    jvmArgs += '-XX:MetaspaceSize=32m'
+    jvmArgs += '-XX:MaxMetaspaceSize=128m'
+    
+    // ─────────────────────────────────────────────────────────────────────────────
+    // CODE CACHE (JIT compiled code)
+    // ─────────────────────────────────────────────────────────────────────────────
+    jvmArgs += '-XX:ReservedCodeCacheSize=64m'
+    jvmArgs += '-XX:InitialCodeCacheSize=16m'
+    
+    // ─────────────────────────────────────────────────────────────────────────────
+    // NETTY / gRPC OPTIMIZATION
+    // Reduced buffer pools and arenas
+    // ─────────────────────────────────────────────────────────────────────────────
+    jvmArgs += '-Dio.netty.allocator.maxOrder=3'           // Smaller chunks
+    jvmArgs += '-Dio.netty.allocator.numDirectArenas=2'    // Fewer arenas
+    jvmArgs += '-Dio.netty.allocator.numHeapArenas=2'
+    jvmArgs += '-Dio.netty.buffer.checkBounds=false'       // Skip bounds check
+    jvmArgs += '-Dio.netty.buffer.checkAccessible=false'
+    
+    // Limit gRPC thread pool (default can grow unbounded)
+    jvmArgs += '-Dio.grpc.netty.shaded.io.netty.eventLoopThreads=4'
+    
+    // ─────────────────────────────────────────────────────────────────────────────
+    // PLATFORM-SPECIFIC RENDERING
+    // ─────────────────────────────────────────────────────────────────────────────
     if (isWindows) {
-        // Windows: DirectX 11 (D3D) for best performance
+        // Windows: DirectX 11 (D3D) - no LLVM/Mesa overhead
         jvmArgs += '-Dprism.order=d3d,sw'
         jvmArgs += '-Dprism.d3d.forceGPU=true'
     } else if (isMacOS) {
@@ -329,15 +367,26 @@ tasks.withType(JavaExec).configureEach {
         jvmArgs += '-Dprism.order=es2,sw'
         jvmArgs += '-Dprism.forceGPU=true'
     } else {
-        // Linux: OpenGL ES2
+        // Linux: OpenGL ES2 (loads LLVM+Mesa ~55MB - unavoidable)
         jvmArgs += '-Dprism.order=es2,sw'
         jvmArgs += '-Dprism.forceGPU=true'
+        // Alternative: Software rendering (avoids LLVM but slower)
+        // jvmArgs += '-Dprism.order=sw'
     }
     
     // Common rendering optimizations
     jvmArgs += '-Dprism.vsync=true'
     jvmArgs += '-Dprism.dirtyopts=true'
-    jvmArgs += '-Dglass.gtk.uiScale=1.0' // Consistent DPI on Linux
+    jvmArgs += '-Dprism.poolstats=false'
+    jvmArgs += '-Dglass.gtk.uiScale=1.0'
+    
+    // ─────────────────────────────────────────────────────────────────────────────
+    // MISC OPTIMIZATIONS
+    // ─────────────────────────────────────────────────────────────────────────────
+    jvmArgs += '-XX:+UseCompressedOops'           // Compressed object pointers
+    jvmArgs += '-XX:+UseCompressedClassPointers'  // Compressed class pointers
+    jvmArgs += '-XX:+OptimizeStringConcat'        // String concat optimization
+    jvmArgs += '-XX:TieredStopAtLevel=1'          // Only C1 compiler (faster startup, less code cache)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
