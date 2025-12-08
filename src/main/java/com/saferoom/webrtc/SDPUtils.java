@@ -64,4 +64,45 @@ public class SDPUtils {
 
         return false;
     }
+
+    /**
+     * Force the specified media type to have 'sendrecv' direction.
+     * Use this to correct Early Offer race conditions where the track
+     * might not be fully registered yet, but we INTEND to send.
+     */
+    public static String enforceSendRecv(String sdp, String mediaType) {
+        if (sdp == null || !sdp.contains("m=" + mediaType))
+            return sdp;
+
+        StringBuilder sb = new StringBuilder();
+        String[] lines = sdp.split("\r\n");
+        boolean inMediaSection = false;
+        boolean directionSet = false;
+
+        for (String line : lines) {
+            if (line.startsWith("m=")) {
+                inMediaSection = line.startsWith("m=" + mediaType);
+                if (inMediaSection) {
+                    // Reset flag for this new section
+                    directionSet = false;
+                }
+            }
+
+            if (inMediaSection) {
+                // If we see an existing direction, force it to sendrecv
+                if (line.equals("a=recvonly") || line.equals("a=sendonly") || line.equals("a=inactive")) {
+                    sb.append("a=sendrecv").append("\r\n");
+                    directionSet = true;
+                    continue;
+                }
+                if (line.equals("a=sendrecv")) {
+                    directionSet = true;
+                }
+            }
+
+            sb.append(line).append("\r\n");
+        }
+
+        return sb.toString();
+    }
 }

@@ -607,16 +607,21 @@ public class WebRTCClient {
                             // ⚡ MINIMIZE SDP
                             // Strip unused codecs/extensions for faster transmission
                             String optimizedSdp = SDPUtils.mungeSDP(description.sdp);
+
+                            // ⚡ FIX ONE-WAY VIDEO RACE
+                            // Force 'sendrecv' even if track isn't fully attached yet (Early Offer)
+                            optimizedSdp = SDPUtils.enforceSendRecv(optimizedSdp, "video");
+
                             System.out.printf("[WebRTC] Optimized SDP from %d bytes to %d bytes%n",
                                     description.sdp.length(), optimizedSdp.length());
 
                             // Log video codec info from SDP
-                            logSdpVideoCodecs(sdp, "OFFER");
+                            logSdpVideoCodecs(optimizedSdp, "OFFER");
 
                             if (onLocalSDPCallback != null) {
-                                onLocalSDPCallback.accept(sdp);
+                                onLocalSDPCallback.accept(optimizedSdp);
                             }
-                            future.complete(sdp);
+                            future.complete(optimizedSdp);
                         }
 
                         @Override
@@ -671,6 +676,11 @@ public class WebRTCClient {
                             // ⚡ MINIMIZE SDP
                             // Strip unused codecs/extensions for faster transmission
                             String optimizedSdp = SDPUtils.mungeSDP(description.sdp);
+
+                            // ⚡ FIX ONE-WAY VIDEO RACE
+                            // Force 'sendrecv' in Answer too
+                            optimizedSdp = SDPUtils.enforceSendRecv(optimizedSdp, "video");
+
                             System.out.printf("[WebRTC] Optimized SDP from %d bytes to %d bytes%n",
                                     description.sdp.length(), optimizedSdp.length());
 
