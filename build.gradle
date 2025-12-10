@@ -164,6 +164,9 @@ dependencies {
     // WebRTC Native Libraries (platform-specific)
     runtimeOnly "dev.onvoid.webrtc:webrtc-java:${versions.webrtc}:${webrtcClassifier}"
     
+    // SQLite Native Libraries (platform-specific)
+    runtimeOnly "org.xerial:sqlite-jdbc:${versions.sqlite}:${sqliteClassifier}"
+    
     if (isWindows) {
         // ═══════════════════════════════════════════════════════════════════════
         // WINDOWS-SPECIFIC DEPENDENCIES
@@ -309,14 +312,6 @@ tasks.withType(Test).configureEach {
 tasks.withType(JavaExec).configureEach {
     jvmArgs += '--enable-preview'
     
-    // JFR Profiling: ./gradlew run -Pjfr=post_opt
-    if (project.hasProperty('jfr')) {
-        def jfrFile = "${projectDir}/profiling/${project.property('jfr')}.jfr"
-        file("${projectDir}/profiling").mkdirs()
-        jvmArgs += "-XX:StartFlightRecording=filename=${jfrFile},dumponexit=true,settings=profile"
-        println "🎬 JFR: ${jfrFile}"
-    }
-    
     // ─────────────────────────────────────────────────────────────────────────────
     // JFR PROFILING (optional)
     // Usage: ./gradlew run -Pjfr=pre_opt  → creates profiling/pre_opt.jfr
@@ -332,17 +327,27 @@ tasks.withType(JavaExec).configureEach {
     // ─────────────────────────────────────────────────────────────────────────────
     // HEAP CONFIGURATION
     // ─────────────────────────────────────────────────────────────────────────────
-    jvmArgs += '-Xms32m'              // Start small (32MB)
-    jvmArgs += '-Xmx384m'             // Max 384MB heap (reduced from 512)
+    // Setting min=max prevents heap resizing overhead during connection establishment
+    jvmArgs += '-Xms2g'
+    jvmArgs += '-Xmx2g'
     
     // ─────────────────────────────────────────────────────────────────────────────
-    // GARBAGE COLLECTOR (G1GC optimized for low latency)
+    // GARBAGE COLLECTOR (G1GC optimized for low latency media)
     // ─────────────────────────────────────────────────────────────────────────────
     jvmArgs += '-XX:+UseG1GC'
-    jvmArgs += '-XX:MaxGCPauseMillis=50'
-    jvmArgs += '-XX:G1HeapRegionSize=1m'
-    jvmArgs += '-XX:+UseStringDeduplication'     // Deduplicate strings (saves ~5-10%)
+    jvmArgs += '-XX:G1HeapRegionSize=4m'       // Critical for 1080p frames (~1.2MB) to avoid humongous allocations
+    jvmArgs += '-XX:MaxGCPauseMillis=10'       // Aggressive low-latency target
+    jvmArgs += '-XX:ParallelGCThreads=4'       // Optimized for query/video processing
+    jvmArgs += '-XX:ConcGCThreads=2'
+    
+    // Tuning Young Generation
+    jvmArgs += '-XX:+UnlockExperimentalVMOptions'
+    jvmArgs += '-XX:G1NewSizePercent=30'       // Prevent tiny Eden
+    jvmArgs += '-XX:G1MaxNewSizePercent=60'    // Allow burst handling
     jvmArgs += '-XX:InitiatingHeapOccupancyPercent=45'
+    jvmArgs += '-XX:+DisableExplicitGC'
+    
+    jvmArgs += '-XX:+UseStringDeduplication'
     
     // ─────────────────────────────────────────────────────────────────────────────
     // THREAD STACK SIZE (DEFAULT 1MB → 512KB per thread)
@@ -354,7 +359,7 @@ tasks.withType(JavaExec).configureEach {
     // METASPACE LIMITS
     // ─────────────────────────────────────────────────────────────────────────────
     jvmArgs += '-XX:MetaspaceSize=32m'
-    jvmArgs += '-XX:MaxMetaspaceSize=128m'
+    jvmArgs += '-XX:MaxMetaspaceSize=256m'
     
     // ─────────────────────────────────────────────────────────────────────────────
     // CODE CACHE (JIT compiled code)
@@ -406,7 +411,6 @@ tasks.withType(JavaExec).configureEach {
     jvmArgs += '-XX:+UseCompressedOops'           // Compressed object pointers
     jvmArgs += '-XX:+UseCompressedClassPointers'  // Compressed class pointers
     jvmArgs += '-XX:+OptimizeStringConcat'        // String concat optimization
-    jvmArgs += '-XX:TieredStopAtLevel=1'          // Only C1 compiler (faster startup, less code cache)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
