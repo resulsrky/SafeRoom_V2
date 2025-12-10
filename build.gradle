@@ -164,9 +164,6 @@ dependencies {
     // WebRTC Native Libraries (platform-specific)
     runtimeOnly "dev.onvoid.webrtc:webrtc-java:${versions.webrtc}:${webrtcClassifier}"
     
-    // SQLite Native Libraries (platform-specific)
-    runtimeOnly "org.xerial:sqlite-jdbc:${versions.sqlite}:${sqliteClassifier}"
-    
     if (isWindows) {
         // ═══════════════════════════════════════════════════════════════════════
         // WINDOWS-SPECIFIC DEPENDENCIES
