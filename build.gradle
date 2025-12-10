@@ -337,10 +337,10 @@ tasks.withType(JavaExec).configureEach {
     jvmArgs += '-XX:ParallelGCThreads=4'       // Optimized for query/video processing
     jvmArgs += '-XX:ConcGCThreads=2'
     
-    // Tuning Young Generation
+    // Tuning Young Generation (Less aggressive to prevent 20ms+ Evac pauses)
     jvmArgs += '-XX:+UnlockExperimentalVMOptions'
-    jvmArgs += '-XX:G1NewSizePercent=30'       // Prevent tiny Eden
-    jvmArgs += '-XX:G1MaxNewSizePercent=60'    // Allow burst handling
+    jvmArgs += '-XX:G1NewSizePercent=20'       // Was 30 - Reduced to lower pause impact
+    jvmArgs += '-XX:G1MaxNewSizePercent=40'    // Was 60 - Cap burst size
     jvmArgs += '-XX:InitiatingHeapOccupancyPercent=45'
     jvmArgs += '-XX:+DisableExplicitGC'
     
@@ -353,16 +353,16 @@ tasks.withType(JavaExec).configureEach {
     jvmArgs += '-Xss512k'
     
     // ─────────────────────────────────────────────────────────────────────────────
-    // METASPACE LIMITS
+    // METASPACE LIMITS (Fix for Metadata GC Pauses)
     // ─────────────────────────────────────────────────────────────────────────────
-    jvmArgs += '-XX:MetaspaceSize=32m'
-    jvmArgs += '-XX:MaxMetaspaceSize=256m'
+    jvmArgs += '-XX:MetaspaceSize=128m'        // Start higher to avoid early GCs
+    jvmArgs += '-XX:MaxMetaspaceSize=512m'     // Allow room for JFoenix/WebRTC overhead
     
     // ─────────────────────────────────────────────────────────────────────────────
-    // CODE CACHE (JIT compiled code)
+    // CODE CACHE (Fix for CodeCache GC Pauses)
     // ─────────────────────────────────────────────────────────────────────────────
-    jvmArgs += '-XX:ReservedCodeCacheSize=64m'
-    jvmArgs += '-XX:InitialCodeCacheSize=16m'
+    jvmArgs += '-XX:ReservedCodeCacheSize=256m' // Increased from 64m
+    jvmArgs += '-XX:InitialCodeCacheSize=32m'
     
     // ─────────────────────────────────────────────────────────────────────────────
     // NETTY / gRPC OPTIMIZATION
