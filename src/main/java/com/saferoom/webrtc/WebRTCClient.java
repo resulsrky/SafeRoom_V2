@@ -46,7 +46,6 @@ public class WebRTCClient {
     private static String currentMicName = "";
     private static String currentSpeakerName = "";
     private static volatile boolean isMonitoring = false;
-
     // Virtual Thread executor for async WebRTC operations (ICE, signaling,
     // DataChannel)
     private static ExecutorService webrtcExecutor;
@@ -116,7 +115,6 @@ public class WebRTCClient {
             AudioDevice defaultSpeaker = MediaDevices.getDefaultAudioRenderDevice();
             if (defaultSpeaker != null)
                 currentSpeakerName = defaultSpeaker.getName();
-
             initialized = true;
             startDeviceMonitor();
             System.out.println("[WebRTC] ═══════════════════════════════════════════════════════════");
@@ -458,32 +456,22 @@ public class WebRTCClient {
             stunServer.urls.add("stun:stun.l.google.com:19302");
             stunServer.urls.add("stun:stun1.l.google.com:19302");
             stunServer.urls.add("stun:stun2.l.google.com:19302");
+            stunServer.urls.add("stun:stun3.l.google.com:19302");
+            stunServer.urls.add("stun:stun4.l.google.com:19302");
             iceServers.add(stunServer);
 
-            // TURN server (for symmetric NAT - REQUIRED for cross-network calls)
-            // Using free OpenRelay TURN servers
-            RTCIceServer turnServer = new RTCIceServer();
-            turnServer.urls.add("turn:openrelay.metered.ca:80");
-            turnServer.urls.add("turn:openrelay.metered.ca:443");
-            turnServer.urls.add("turn:openrelay.metered.ca:443?transport=tcp");
-            turnServer.username = "openrelayproject";
-            turnServer.password = "openrelayproject";
-            iceServers.add(turnServer);
-
-            // Alternative TURN (backup)
-            RTCIceServer turnServer2 = new RTCIceServer();
-            turnServer2.urls.add("turn:relay.metered.ca:80");
-            turnServer2.urls.add("turn:relay.metered.ca:443");
-            turnServer2.urls.add("turn:relay.metered.ca:443?transport=tcp");
-            turnServer2.username = "e8dd65b92c62d5e948d06b16";
-            turnServer2.password = "uWdWNmkhvyqTEj3I";
-            iceServers.add(turnServer2);
+            // ⚠️ TURN SERVERS REMOVED by request (Pure P2P Mode)
+            // Note: Communication between symmetric NATs will likely fail.
 
             System.out.printf("[WebRTC] Configured %d ICE servers (STUN + TURN)%n", iceServers.size());
 
             RTCConfiguration config = new RTCConfiguration();
             config.iceServers = iceServers;
 
+            // ⚡ FAST P2P OPTIMIZATIONS ⚡
+            config.bundlePolicy = RTCBundlePolicy.MAX_BUNDLE; // Multiplex audio/video on one port quickly
+            config.rtcpMuxPolicy = RTCRtcpMuxPolicy.REQUIRE; // Require RTCP Mux (standard, faster)
+                                                             // paths
             // Create peer connection
             peerConnection = factory.createPeerConnection(config, new PeerConnectionObserver() {
                 @Override
@@ -613,13 +601,24 @@ public class WebRTCClient {
                             System.out.println("[WebRTC] Offer created and set as local description");
                             String sdp = description.sdp;
 
+                            // ⚡ MINIMIZE SDP
+                            // Strip unused codecs/extensions for faster transmission
+                            String optimizedSdp = SDPUtils.mungeSDP(description.sdp);
+
+                            // ⚡ FIX ONE-WAY VIDEO RACE
+                            // Force 'sendrecv' even if track isn't fully attached yet (Early Offer)
+                            optimizedSdp = SDPUtils.enforceSendRecv(optimizedSdp, "video");
+
+                            System.out.printf("[WebRTC] Optimized SDP from %d bytes to %d bytes%n",
+                                    description.sdp.length(), optimizedSdp.length());
+
                             // Log video codec info from SDP
-                            logSdpVideoCodecs(sdp, "OFFER");
+                            logSdpVideoCodecs(optimizedSdp, "OFFER");
 
                             if (onLocalSDPCallback != null) {
-                                onLocalSDPCallback.accept(sdp);
+                                onLocalSDPCallback.accept(optimizedSdp);
                             }
-                            future.complete(sdp);
+                            future.complete(optimizedSdp);
                         }
 
                         @Override
@@ -671,13 +670,25 @@ public class WebRTCClient {
                             System.out.println("[WebRTC] Answer created and set as local description");
                             String sdp = description.sdp;
 
+                            // ⚡ MINIMIZE SDP
+                            // Strip unused codecs/extensions for faster transmission
+                            String optimizedSdp = SDPUtils.mungeSDP(description.sdp);
+
+                            // ⚡ FIX ONE-WAY VIDEO RACE
+                            // Force 'sendrecv' in Answer too
+                            optimizedSdp = SDPUtils.enforceSendRecv(optimizedSdp, "video");
+
+                            System.out.printf("[WebRTC] Optimized SDP from %d bytes to %d bytes%n",
+                                    description.sdp.length(), optimizedSdp.length());
+
                             // Log video codec info from SDP
-                            logSdpVideoCodecs(sdp, "ANSWER");
+                            logSdpVideoCodecs(optimizedSdp, "ANSWER");
 
                             if (onLocalSDPCallback != null) {
-                                onLocalSDPCallback.accept(sdp);
+                                onLocalSDPCallback.accept(optimizedSdp);
                             }
-                            future.complete(sdp);
+
+                            future.complete(optimizedSdp);
                         }
 
                         @Override
@@ -831,6 +842,23 @@ public class WebRTCClient {
         // DON'T call onConnectionClosedCallback here - causes infinite recursion
         // CallManager.cleanup() already calls this method, no need for callback loop
 
+        // Stop audio devices to prevent ghost threads
+        if (audioDeviceModule != null) {
+            try {
+                if (recordingStarted) {
+                    audioDeviceModule.stopRecording();
+                    recordingStarted = false;
+                    System.out.println("[WebRTC] 🎙️ Recording stopped");
+                }
+                if (playoutStarted) {
+                    audioDeviceModule.stopPlayout();
+                    playoutStarted = false;
+                    System.out.println("[WebRTC] 🔊 Playout stopped");
+                }
+            } catch (Exception e) {
+                System.err.printf("[WebRTC] Error stopping audio devices: %s%n", e.getMessage());
+            }
+        }
         System.out.println("[WebRTC] Connection closed");
     }
 
