@@ -249,7 +249,7 @@ public class VideoPanel extends Canvas {
         // Calculate aspect-correct draw dimensions
         double canvasWidth = getWidth();
         double canvasHeight = getHeight();
-        double videoAspect = (double) width / height;a
+        double videoAspect = (double) width / height;
         double canvasAspect = canvasWidth / canvasHeight;
 
         double drawWidth;
