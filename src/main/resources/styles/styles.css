@@ -2289,40 +2289,6 @@
 
 .friend-activity-modern {
   -fx-text-fill: #60a5fa;
-  -fx-font-size: 12px;
-  -fx-font-weight: 600;
-}
-
-/* ========== ACTION BUTTONS ========== */
-.friend-action-modern {
-  -fx-background-color: rgba(51, 65, 85, 0.6);
-  -fx-background-radius: 8px;
-  -fx-padding: 8px;
-  -fx-cursor: hand;
-  -fx-min-width: 36px;
-  -fx-min-height: 36px;
-  -fx-max-width: 36px;
-  -fx-max-height: 36px;
-  -fx-transition: all 0.2s ease;
-}
-
-.friend-action-modern:hover {
-  -fx-background-color: rgba(59, 130, 246, 0.8);
-
-}
-
-.action-icon-modern {
-  -fx-icon-color: #94a3b8;
-  -fx-icon-size: 16px;
-}
-
-.friend-action-modern:hover .action-icon-modern {
-  -fx-icon-color: white;
-}
-
-/* ========== PENDING REQUEST BUTTONS ========== */
-.pending-accept-btn-modern {
-  -fx-background-color: #0b592d;
   -fx-background-radius: 8px;
   -fx-text-fill: white;
   -fx-font-size: 12px;
@@ -3108,15 +3074,55 @@
 }
 
 .settings-combo-box {
-  -fx-background-color: #1e2b3b;
-  -fx-border-color: #475569;
-  -fx-border-radius: 8px;
+  -fx-background-color: #1e293b;
   -fx-background-radius: 8px;
+  -fx-border-color: #334155;
+  -fx-border-radius: 8px;
+  -fx-border-width: 1px;
   -fx-text-fill: white;
-  -jfx-focus-color: transparent;
-  -jfx-unfocus-color: transparent;
+  -fx-font-size: 14px;
+  -fx-padding: 10px 15px;
+  -fx-pref-height: 45px;
+  -jfx-focus-color: #5865f2;
+  -jfx-unfocus-color: #334155;
 }
 
+.settings-combo-box:hover {
+  -fx-border-color: #475569;
+  -fx-background-color: #283548;
+}
+
+.settings-combo-box .combo-box-popup .list-view {
+  -fx-background-color: #1e293b;
+  -fx-background-radius: 8px;
+  -fx-border-color: #334155;
+  -fx-border-width: 1px;
+  -fx-border-radius: 8px;
+  -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.5), 15, 0, 0, 5);
+}
+
+.settings-combo-box .combo-box-popup .list-cell {
+  -fx-background-color: transparent;
+  -fx-text-fill: white;
+  -fx-padding: 12px 16px;
+  -fx-font-size: 14px;
+  -fx-background-radius: 4px;
+}
+
+.settings-combo-box .combo-box-popup .list-cell:hover {
+  -fx-background-color: #334155;
+}
+
+.settings-combo-box .combo-box-popup .list-cell:filled:selected {
+  -fx-background-color: #5865f2;
+  -fx-text-fill: white;
+}
+
+.settings-combo-box:disabled {
+  -fx-opacity: 0.5;
+}
+
+/* JFoenix combo box styles (for compatibility) */
 .jfx-combo-box-popup .list-view {
   -fx-background-color: #1e2b3b;
   -fx-background-radius: 8px;
@@ -4225,11 +4231,7 @@
   -fx-cursor: hand;
 }
 
-.voice-user-avatar {
-  -fx-text-fill: white;
-  -fx-font-size: 12px;
-  -fx-font-weight: 600;
-}
+/* Legacy voice-user styles moved to server_styles.css */
 
 .voice-mic-icon {
   -fx-fill: #10b981;
@@ -4687,568 +4689,7 @@
    DISCORD-LIKE SERVER INTERFACE STYLES
    ================================================================= */
 
-/* Main Server Container */
-.server-pane {
-  -fx-background-color: #1e2b3b;
-  -fx-background-radius: 12px;
-  /* Match main app rounded corners */
-}
-
-/* ========== LEFT SIDEBAR - CHANNELS ========== */
-.channels-sidebar {
-  -fx-background-color: #0f172a;
-  -fx-border-color: #334155;
-  -fx-border-width: 0 1px 0 0;
-  -fx-background-radius: 12px 0px 0px 12px;
-  /* Rounded left corners for server sidebar */
-}
-
-/* Server Header */
-.server-header {
-  -fx-background-color: #0f172a;
-  -fx-border-color: #334155;
-  -fx-border-width: 0 0 1px 0;
-  -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 4, 0, 0, 2);
-}
-
-.server-avatar {
-  -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #3b82f6 0%, #a855f7 100%);
-  -fx-background-radius: 12px;
-  -fx-pref-width: 48px;
-  -fx-pref-height: 48px;
-  -fx-alignment: CENTER;
-}
-
-.server-icon {
-  -fx-icon-color: white;
-  -fx-icon-size: 24px;
-}
-
-.server-name {
-  -fx-text-fill: white;
-  -fx-font-size: 18px;
-  -fx-font-weight: bold;
-}
-
-.server-members {
-  -fx-text-fill: #94a3b8;
-  -fx-font-size: 12px;
-}
-
-/* Channels Container */
-.channels-scroll {
-  -fx-background-color: transparent;
-}
-
-.channels-scroll .viewport {
-  -fx-background-color: transparent;
-}
-
-.channels-container {
-  -fx-background-color: transparent;
-}
-
-/* Channel Category Headers */
-.channel-category-header {
-  -fx-cursor: hand;
-  -fx-padding: 8px 0px;
-}
-
-.category-arrow {
-  -fx-icon-color: #64748b;
-  -fx-icon-size: 12px;
-}
-
-.category-icon {
-  -fx-icon-color: #64748b;
-  -fx-icon-size: 16px;
-}
-
-.category-label {
-  -fx-text-fill: #64748b;
-  -fx-font-size: 12px;
-  -fx-font-weight: bold;
-  -fx-letter-spacing: 0.5px;
-}
-
-.icon-button-tiny {
-  -fx-background-color: transparent;
-  -fx-padding: 4px;
-  -fx-cursor: hand;
-  -fx-background-radius: 4px;
-}
-
-.icon-button-tiny:hover {
-  -fx-background-color: #334155;
-}
-
-.tiny-icon {
-  -fx-icon-color: #94a3b8;
-  -fx-icon-size: 10px;
-}
-
-/* Voice Channel Items */
-.voice-channel-item {
-  -fx-background-color: transparent;
-  -fx-background-radius: 8px;
-  -fx-padding: 6px 8px;
-  -fx-cursor: hand;
-  -fx-spacing: 8px;
-}
-
-.voice-channel-item:hover {
-  -fx-background-color: #1e2b3b;
-}
-
-.voice-channel-item.channel-active {
-  -fx-background-color: rgba(59, 130, 246, 0.2);
-  -fx-border-color: #3b82f6;
-  -fx-border-width: 1px;
-  -fx-border-radius: 8px;
-}
-
-.channel-icon {
-  -fx-icon-color: #94a3b8;
-  -fx-icon-size: 16px;
-}
-
-.voice-channel-item.channel-active .channel-icon {
-  -fx-icon-color: #3b82f6;
-}
-
-.channel-name {
-  -fx-text-fill: #cbd5e1;
-  -fx-font-size: 14px;
-  -fx-font-weight: 500;
-}
-
-.voice-channel-item.channel-active .channel-name {
-  -fx-text-fill: white;
-  -fx-font-weight: 600;
-}
-
-.voice-users-indicator {
-  -fx-background-color: #2563eb;
-  -fx-background-radius: 10px;
-  -fx-padding: 2px 6px;
-  -fx-alignment: CENTER;
-}
-
-.voice-user-count {
-  -fx-text-fill: white;
-  -fx-font-size: 10px;
-  -fx-font-weight: bold;
-}
-
-/* Text Channel Items */
-.text-channel-item {
-  -fx-background-color: transparent;
-  -fx-background-radius: 8px;
-  -fx-padding: 6px 8px;
-  -fx-cursor: hand;
-  -fx-spacing: 8px;
-}
-
-.text-channel-item:hover {
-  -fx-background-color: #1e2b3b;
-}
-
-.text-channel-item.channel-active {
-  -fx-background-color: rgba(59, 130, 246, 0.2);
-  -fx-border-color: #3b82f6;
-  -fx-border-width: 1px;
-  -fx-border-radius: 8px;
-}
-
-.text-channel-item.channel-active .channel-icon {
-  -fx-icon-color: #3b82f6;
-}
-
-.text-channel-item.channel-active .channel-name {
-  -fx-text-fill: white;
-  -fx-font-weight: 600;
-}
-
-.notification-badge {
-  -fx-background-color: #ef4444;
-  -fx-background-radius: 10px;
-  -fx-padding: 2px 6px;
-  -fx-alignment: CENTER;
-}
-
-.notification-count {
-  -fx-text-fill: white;
-  -fx-font-size: 10px;
-  -fx-font-weight: bold;
-}
-
-/* User Info Bottom */
-.user-info-bottom {
-  -fx-background-color: #0f172a;
-  -fx-border-color: #334155;
-  -fx-border-width: 1px 0 0 0;
-}
-
-.user-avatar-small {
-  -fx-background-color: #a855f7;
-  -fx-background-radius: 20px;
-  -fx-pref-width: 32px;
-  -fx-pref-height: 32px;
-  -fx-alignment: CENTER;
-}
-
-.user-avatar-text {
-  -fx-text-fill: white;
-  -fx-font-size: 14px;
-  -fx-font-weight: bold;
-}
-
-.current-user-name {
-  -fx-text-fill: white;
-  -fx-font-size: 14px;
-  -fx-font-weight: bold;
-}
-
-.current-user-status {
-  -fx-text-fill: #4ade80;
-  -fx-font-size: 12px;
-}
-
-/* ========== MAIN CONTENT AREA ========== */
-.main-content-area {
-  -fx-background-color: #1e2b3b;
-}
-
-/* Default Channel View */
-.default-channel-view {
-  -fx-background-color: #1e2b3b;
-}
-
-.default-channel-icon {
-  -fx-icon-color: #64748b;
-  -fx-icon-size: 64px;
-}
-
-.default-channel-title {
-  -fx-text-fill: white;
-  -fx-font-size: 24px;
-  -fx-font-weight: bold;
-}
-
-.default-channel-subtitle {
-  -fx-text-fill: #94a3b8;
-  -fx-font-size: 16px;
-}
-
-/* Text Chat View */
-.text-chat-view {
-  -fx-background-color: #1e2b3b;
-}
-
-.current-channel-icon {
-  -fx-icon-color: #3b82f6;
-  -fx-icon-size: 20px;
-}
-
-.current-channel-name {
-  -fx-text-fill: white;
-  -fx-font-size: 18px;
-  -fx-font-weight: bold;
-}
-
-.current-channel-topic {
-  -fx-text-fill: #94a3b8;
-  -fx-font-size: 14px;
-}
-
-.messages-list {
-  -fx-background-color: transparent;
-}
-
-.messages-list .list-cell {
-  -fx-background-color: transparent;
-  -fx-text-fill: #cbd5e1;
-  -fx-padding: 8px 0;
-}
-
-.message-input {
-  -fx-background-color: #334155;
-  -fx-background-radius: 20px;
-  -fx-border-color: #475569;
-  -fx-border-radius: 20px;
-  -fx-text-fill: white;
-  -fx-prompt-text-fill: #94a3b8;
-  -fx-font-size: 14px;
-  -fx-padding: 12px 16px;
-}
-
-.message-input:focused {
-  -fx-border-color: #3b82f6;
-}
-
-.input-icon {
-  -fx-icon-color: #94a3b8;
-  -fx-icon-size: 18px;
-}
-
-/* Voice Chat View */
-.voice-chat-view {
-  -fx-background-color: #1e2b3b;
-}
-
-.voice-room-icon {
-  -fx-icon-color: #3b82f6;
-  -fx-icon-size: 64px;
-}
-
-.voice-room-name {
-  -fx-text-fill: white;
-  -fx-font-size: 24px;
-  -fx-font-weight: bold;
-}
-
-.voice-room-info {
-  -fx-text-fill: #94a3b8;
-  -fx-font-size: 16px;
-}
-
-.voice-users-scroll {
-  -fx-background-color: transparent;
-}
-
-.voice-users-scroll .viewport {
-  -fx-background-color: transparent;
-}
-
-.voice-users-container {
-  -fx-background-color: transparent;
-}
-
-.voice-user-item {
-  -fx-background-color: #0f172a;
-  -fx-background-radius: 12px;
-  -fx-border-color: #334155;
-  -fx-border-radius: 12px;
-  -fx-border-width: 1px;
-  -fx-padding: 16px;
-  -fx-spacing: 8px;
-  -fx-alignment: CENTER;
-  -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 4, 0, 0, 2);
-}
-
-.voice-user-avatar {
-  -fx-background-color: #334155;
-  -fx-background-radius: 32px;
-  -fx-pref-width: 64px;
-  -fx-pref-height: 64px;
-  -fx-alignment: CENTER;
-}
-
-.voice-user-avatar-text {
-  -fx-text-fill: white;
-  -fx-font-size: 24px;
-  -fx-font-weight: bold;
-}
-
-.voice-user-name {
-  -fx-text-fill: white;
-  -fx-font-size: 14px;
-  -fx-font-weight: bold;
-}
-
-.voice-user-mic {
-  -fx-icon-color: #4ade80;
-  -fx-icon-size: 16px;
-}
-
-.voice-user-mic.muted {
-  -fx-icon-color: #ef4444;
-}
-
-.voice-controls {
-  -fx-background-color: #0f172a;
-  -fx-background-radius: 12px;
-  -fx-border-color: #334155;
-  -fx-border-radius: 12px;
-  -fx-border-width: 1px;
-  -fx-padding: 16px;
-}
-
-.voice-control-btn {
-  -fx-background-color: #334155;
-  -fx-background-radius: 25px;
-  -fx-padding: 12px;
-  -fx-cursor: hand;
-  -fx-pref-width: 50px;
-  -fx-pref-height: 50px;
-}
-
-.voice-control-btn:hover {
-  -fx-background-color: #475569;
-}
-
-.voice-control-btn.muted {
-  -fx-background-color: #ef4444;
-}
-
-.voice-control-btn.deafened {
-  -fx-background-color: #f59e0b;
-}
-
-.voice-control-btn.leave-btn {
-  -fx-background-color: #ef4444;
-}
-
-.voice-control-btn.leave-btn:hover {
-  -fx-background-color: #dc2626;
-}
-
-.voice-control-icon {
-  -fx-icon-color: white;
-  -fx-icon-size: 20px;
-}
-
-/* ========== RIGHT SIDEBAR - USERS ========== */
-.users-sidebar {
-  -fx-background-color: #0f172a;
-  -fx-border-color: #334155;
-  -fx-border-width: 0 0 0 1px;
-  -fx-background-radius: 0px 12px 12px 0px;
-  /* Rounded right corners for users sidebar */
-}
-
-.users-header {
-  -fx-background-color: #0f172a;
-  -fx-border-color: #334155;
-  -fx-border-width: 0 0 1px 0;
-}
-
-.users-header-title {
-  -fx-text-fill: white;
-  -fx-font-size: 16px;
-  -fx-font-weight: bold;
-}
-
-.users-count {
-  -fx-text-fill: #94a3b8;
-  -fx-font-size: 14px;
-  -fx-font-weight: bold;
-}
-
-.users-scroll {
-  -fx-background-color: transparent;
-}
-
-.users-scroll .viewport {
-  -fx-background-color: transparent;
-}
-
-.users-container {
-  -fx-background-color: transparent;
-}
-
-.users-category-header {
-  -fx-cursor: hand;
-  -fx-padding: 8px 0;
-}
-
-.users-category-count {
-  -fx-text-fill: #64748b;
-  -fx-font-size: 12px;
-  -fx-font-weight: bold;
-}
-
-.user-item {
-  -fx-background-color: transparent;
-  -fx-background-radius: 8px;
-  -fx-padding: 6px 8px;
-  -fx-cursor: hand;
-  -fx-spacing: 8px;
-}
-
-.user-item:hover {
-  -fx-background-color: #1e2b3b;
-}
-
-.user-avatar-tiny {
-  -fx-background-color: #334155;
-  -fx-background-radius: 16px;
-  -fx-pref-width: 28px;
-  -fx-pref-height: 28px;
-  -fx-alignment: CENTER;
-}
-
-.user-avatar-text-tiny {
-  -fx-text-fill: white;
-  -fx-font-size: 12px;
-  -fx-font-weight: bold;
-}
-
-.user-status-container {
-  -fx-alignment: BOTTOM_RIGHT;
-}
-
-.user-status-dot {
-  -fx-background-radius: 6px;
-  -fx-pref-width: 10px;
-  -fx-pref-height: 10px;
-  -fx-border-color: #0f172a;
-  -fx-border-width: 2px;
-  -fx-border-radius: 6px;
-  -fx-translate-x: 8px;
-  -fx-translate-y: 8px;
-}
-
-.status-online {
-  -fx-text-fill: #22c55e;
-  /* Green text for online */
-  -fx-background-color: transparent;
-  /* No background */
-}
-
-.status-idle {
-  -fx-text-fill: #fbbf24;
-  /* Yellow text for idle */
-  -fx-background-color: transparent;
-  /* No background */
-}
-
-.status-dnd {
-  -fx-text-fill: #ef4444;
-  /* Red text for DND */
-  -fx-background-color: transparent;
-  /* No background */
-}
-
-.status-busy {
-  -fx-text-fill: #ef4444;
-  /* Red text for Busy */
-  -fx-background-color: transparent;
-  /* No background */
-}
-
-.status-offline {
-  -fx-text-fill: #6b7280;
-  /* Gray text for offline */
-  -fx-background-color: transparent;
-  /* No background */
-}
-
-.user-name-small {
-  -fx-text-fill: #e2e8f0;
-  -fx-font-size: 13px;
-  -fx-font-weight: 500;
-}
-
-.user-role-icon {
-  -fx-icon-color: #f59e0b;
-  -fx-icon-size: 12px;
-}
-
-.user-activity {
-  -fx-text-fill: #64748b;
-  -fx-font-size: 11px;
-}
+/* Server interface styles have been moved to server_styles.css */
 
 /* =================================================================
    USER INFO POPUP STYLES
@@ -5264,7 +4705,9 @@
 }
 
 .user-info-avatar-container {
-  -fx-alignment: BOTTOM_RIGHT;
+  -fx-alignment: CENTER;
+  -fx-background-color: transparent;
+  -fx-border-width: 0;
 }
 
 .user-info-avatar {
@@ -5272,13 +4715,39 @@
   -fx-background-radius: 48px;
   -fx-pref-width: 96px;
   -fx-pref-height: 96px;
+  -fx-min-width: 96px;
+  -fx-min-height: 96px;
+  -fx-max-width: 96px;
+  -fx-max-height: 96px;
   -fx-alignment: CENTER;
+  -fx-border-width: 3px;
+  -fx-border-radius: 48px;
+  -fx-border-color: transparent;
+  -fx-background-insets: 0;
+}
+
+.avatar-online {
+  -fx-border-color: #22c55e;
+}
+
+.avatar-idle {
+  -fx-border-color: #fbbf24;
+}
+
+.avatar-dnd {
+  -fx-border-color: #ef4444;
+}
+
+.avatar-offline {
+  -fx-border-color: #6b7280;
 }
 
 .user-info-avatar-text {
   -fx-text-fill: white;
   -fx-font-size: 36px;
   -fx-font-weight: bold;
+  -fx-underline: false;
+  -fx-strikethrough: false;
 }
 
 .user-info-status-indicator {
@@ -5296,6 +4765,8 @@
   -fx-text-fill: white;
   -fx-font-size: 20px;
   -fx-font-weight: bold;
+  -fx-alignment: center;
+  -fx-text-alignment: center;
 }
 
 .user-info-role-icon {
@@ -5306,6 +4777,8 @@
 .user-info-status-text {
   -fx-text-fill: #94a3b8;
   -fx-font-size: 14px;
+  -fx-alignment: center;
+  -fx-text-alignment: center;
 }
 
 .popup-separator {
@@ -5914,6 +5387,7 @@
   -fx-background-color: linear-gradient(to bottom, #28CA42 0%, #1FA832 100%);
 }
 
+
 /* =================================================================
    PERFORMANCE OPTIMIZED STYLES
    - No dropshadow on hover (GPU expensive)
@@ -5943,4 +5417,153 @@
   -fx-border-color: #3a3d41;
   -fx-border-radius: 8;
   -fx-border-width: 1;
+}
+
+
+/* =================================================================
+   CHAT PANEL STYLES (Discord-like)
+   ================================================================= */
+
+.messages-list {
+  -fx-background-color: transparent;
+  -fx-padding: 0;
+}
+
+.messages-list .viewport {
+  -fx-background-color: transparent;
+}
+
+.messages-list .list-cell {
+  -fx-background-color: transparent;
+  -fx-padding: 0;
+  -fx-border-width: 0;
+}
+
+.messages-list .list-cell:filled:selected:focused,
+.messages-list .list-cell:filled:selected {
+  -fx-background-color: rgba(255, 255, 255, 0.05);
+}
+
+.messages-list .list-cell:hover {
+  -fx-background-color: rgba(4, 4, 5, 0.07);
+}
+
+.message-input-area {
+  -fx-background-color: #36393f;
+  -fx-border-color: #202225;
+  -fx-border-width: 1px 0 0 0;
+}
+
+.message-input {
+  -fx-background-color: #40444b;
+  -fx-text-fill: #dcddde;
+  -fx-prompt-text-fill: #72767d;
+  -fx-background-radius: 8px;
+  -fx-border-width: 0;
+  -fx-padding: 10px;
+  -fx-font-size: 14px;
+}
+
+.message-input:focused {
+  -fx-background-color: #40444b;
+  -fx-border-width: 0;
+  -fx-effect: none;
+}
+
+.input-icon {
+  -fx-icon-color: #b9bbbe;
+  -fx-icon-size: 20px;
+}
+
+.icon-button:hover .input-icon {
+  -fx-icon-color: #dcddde;
+}
+
+/* =================================================================
+   VOICE PANEL STYLES (Discord-like)
+   ================================================================= */
+
+.voice-users-container {
+  -fx-padding: 20px;
+  -fx-background-color: transparent;
+}
+
+.voice-user-item {
+  -fx-background-color: #2f3136;
+  -fx-background-radius: 8px;
+  -fx-padding: 15px;
+  -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 5, 0, 0, 2);
+  -fx-min-width: 120px;
+  -fx-min-height: 120px;
+  -fx-alignment: center;
+  -fx-cursor: hand;
+  -fx-border-color: transparent;
+  -fx-border-width: 2px;
+  -fx-border-radius: 8px;
+}
+
+.voice-user-item:hover {
+  -fx-background-color: #36393f;
+}
+
+.voice-user-item.speaking {
+  -fx-border-color: #3ba55c;
+  -fx-effect: dropshadow(gaussian, #3ba55c, 10, 0, 0, 0);
+}
+
+.voice-user-avatar {
+  -fx-background-color: #5865F2;
+  -fx-background-radius: 50%;
+  -fx-pref-width: 60px;
+  -fx-pref-height: 60px;
+  -fx-min-width: 60px;
+  -fx-min-height: 60px;
+}
+
+.voice-user-avatar-text {
+  -fx-text-fill: white;
+  -fx-font-size: 24px;
+  -fx-font-weight: bold;
+}
+
+.voice-user-name {
+  -fx-text-fill: white;
+  -fx-font-size: 14px;
+  -fx-font-weight: bold;
+}
+
+.voice-user-mic {
+  -fx-icon-color: #b9bbbe;
+  -fx-icon-size: 16px;
+}
+
+.voice-user-item.muted .voice-user-mic {
+  -fx-icon-color: #ed4245;
+  /* Red for muted */
+  -fx-icon-literal: 'fas-microphone-slash';
+}
+
+/* Message List View - Ensure dark background */
+.list-view {
+  -fx-background-color: transparent;
+  -fx-control-inner-background: transparent;
+  -fx-background-insets: 0;
+  -fx-padding: 0;
+}
+
+.list-cell {
+  -fx-background-color: transparent;
+  -fx-padding: 0;
+  -fx-text-fill: white;
+}
+
+.list-cell:filled:selected:focused,
+.list-cell:filled:selected {
+  -fx-background-color: transparent;
+  -fx-text-fill: white;
+}
+
+.list-cell:even,
+.list-cell:odd {
+  -fx-background-color: transparent;
 }

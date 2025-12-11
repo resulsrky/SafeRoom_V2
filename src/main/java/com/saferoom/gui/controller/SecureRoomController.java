@@ -59,6 +59,11 @@ public class SecureRoomController {
     private VideoPanel cameraPreview;
     private VideoDeviceSource videoSource;
     private VideoTrack videoTrack;
+    
+    // Selected devices
+    private VideoDevice selectedCamera;
+    private dev.onvoid.webrtc.media.audio.AudioDevice selectedMicrophone;
+    private dev.onvoid.webrtc.media.audio.AudioDevice selectedSpeaker;
 
     /**
      * Ana controller referansını ayarlar (geri dönüş için)
@@ -76,13 +81,15 @@ public class SecureRoomController {
         // Root pane'i bulup sürükleme işlevini etkinleştir
         // Bu view'da herhangi bir pane referansı olmadığı için, scene yüklendikten sonra eklenecek
         
-        audioInputBox.getItems().addAll("Default - MacBook Pro Microphone", "External USB Mic");
-        audioOutputBox.getItems().addAll("Default - MacBook Pro Speakers", "Bluetooth Headphones");
-        cameraSourceBox.getItems().addAll("FaceTime HD Camera", "External Webcam");
-
-        audioInputBox.getSelectionModel().selectFirst();
-        audioOutputBox.getSelectionModel().selectFirst();
-        cameraSourceBox.getSelectionModel().selectFirst();
+        // Populate with real system devices
+        populateAudioInputDevices();
+        populateAudioOutputDevices();
+        populateCameraDevices();
+        
+        // Add selection change listeners
+        cameraSourceBox.setOnAction(e -> handleCameraSelection());
+        audioInputBox.setOnAction(e -> handleMicrophoneSelection());
+        audioOutputBox.setOnAction(e -> handleSpeakerSelection());
 
         backButton.setOnAction(event -> handleBack());
         initiateButton.setOnAction(event -> handleInitiate());
@@ -211,15 +218,17 @@ public class SecureRoomController {
                 return;
             }
             
-            // Get available cameras
-            List<VideoDevice> cameras = MediaDevices.getVideoCaptureDevices();
-            if (cameras.isEmpty()) {
-                System.err.println("[SecureRoom] No cameras found!");
-                return;
+            // Use selected camera (or first available if none selected)
+            VideoDevice camera = selectedCamera;
+            if (camera == null) {
+                List<VideoDevice> cameras = MediaDevices.getVideoCaptureDevices();
+                if (cameras.isEmpty()) {
+                    System.err.println("[SecureRoom] No cameras found!");
+                    return;
+                }
+                camera = cameras.get(0);
+                selectedCamera = camera;
             }
-            
-            // Use first camera
-            VideoDevice camera = cameras.get(0);
             System.out.println("[SecureRoom] Using camera: " + camera.getName());
             
             // Create video source
@@ -367,5 +376,206 @@ public class SecureRoomController {
         if (mainController != null) {
             mainController.returnToMainView();
         }
+    }
+    
+    /**
+     * Populate camera combo box with real system cameras
+     */
+    private void populateCameraDevices() {
+        try {
+            List<VideoDevice> cameras = MediaDevices.getVideoCaptureDevices();
+            cameraSourceBox.getItems().clear();
+            
+            if (cameras.isEmpty()) {
+                cameraSourceBox.getItems().add("No cameras found");
+                cameraSourceBox.setDisable(true);
+                System.out.println("[SecureRoom] No cameras available");
+                return;
+            }
+            
+            for (VideoDevice camera : cameras) {
+                cameraSourceBox.getItems().add(camera.getName());
+            }
+            
+            cameraSourceBox.getSelectionModel().selectFirst();
+            selectedCamera = cameras.get(0);
+            
+            System.out.printf("[SecureRoom] Found %d camera(s)%n", cameras.size());
+        } catch (Exception e) {
+            System.err.println("[SecureRoom] Error enumerating cameras: " + e.getMessage());
+            cameraSourceBox.getItems().add("Error loading cameras");
+            cameraSourceBox.setDisable(true);
+        }
+    }
+    
+    /**
+     * Populate microphone combo box with real system audio input devices
+     */
+    private void populateAudioInputDevices() {
+        // Run on background thread to avoid COM threading issues on Windows
+        new Thread(() -> {
+            try {
+                List<dev.onvoid.webrtc.media.audio.AudioDevice> microphones = 
+                    MediaDevices.getAudioCaptureDevices();
+                
+                // Update UI on JavaFX thread
+                javafx.application.Platform.runLater(() -> {
+                    audioInputBox.getItems().clear();
+                    
+                    if (microphones.isEmpty()) {
+                        audioInputBox.getItems().add("No microphones found");
+                        audioInputBox.setDisable(true);
+                        System.out.println("[SecureRoom] No microphones available");
+                        return;
+                    }
+                    
+                    for (dev.onvoid.webrtc.media.audio.AudioDevice mic : microphones) {
+                        audioInputBox.getItems().add(mic.getName());
+                    }
+                    
+                    audioInputBox.getSelectionModel().selectFirst();
+                    if (!microphones.isEmpty()) {
+                        selectedMicrophone = microphones.get(0);
+                    }
+                    
+                    System.out.printf("[SecureRoom] Found %d microphone(s)%n", microphones.size());
+                });
+            } catch (Exception e) {
+                System.err.println("[SecureRoom] Error enumerating microphones: " + e.getMessage());
+                javafx.application.Platform.runLater(() -> {
+                    audioInputBox.getItems().clear();
+                    audioInputBox.getItems().add("Error loading microphones");
+                    audioInputBox.setDisable(true);
+                });
+            }
+        }, "AudioInputEnumeration").start();
+    }
+    
+    /**
+     * Populate speaker combo box with real system audio output devices
+     */
+    private void populateAudioOutputDevices() {
+        // Run on background thread to avoid COM threading issues on Windows
+        new Thread(() -> {
+            try {
+                List<dev.onvoid.webrtc.media.audio.AudioDevice> speakers = 
+                    MediaDevices.getAudioRenderDevices();
+                
+                // Update UI on JavaFX thread
+                javafx.application.Platform.runLater(() -> {
+                    audioOutputBox.getItems().clear();
+                    
+                    if (speakers.isEmpty()) {
+                        audioOutputBox.getItems().add("No speakers found");
+                        audioOutputBox.setDisable(true);
+                        System.out.println("[SecureRoom] No speakers available");
+                        return;
+                    }
+                    
+                    for (dev.onvoid.webrtc.media.audio.AudioDevice speaker : speakers) {
+                        audioOutputBox.getItems().add(speaker.getName());
+                    }
+                    
+                    audioOutputBox.getSelectionModel().selectFirst();
+                    if (!speakers.isEmpty()) {
+                        selectedSpeaker = speakers.get(0);
+                    }
+                    
+                    System.out.printf("[SecureRoom] Found %d speaker(s)%n", speakers.size());
+                });
+            } catch (Exception e) {
+                System.err.println("[SecureRoom] Error enumerating speakers: " + e.getMessage());
+                javafx.application.Platform.runLater(() -> {
+                    audioOutputBox.getItems().clear();
+                    audioOutputBox.getItems().add("Error loading speakers");
+                    audioOutputBox.setDisable(true);
+                });
+            }
+        }, "AudioOutputEnumeration").start();
+    }
+    
+    /**
+     * Handle camera selection change
+     */
+    private void handleCameraSelection() {
+        int selectedIndex = cameraSourceBox.getSelectionModel().getSelectedIndex();
+        if (selectedIndex < 0) return;
+        
+        try {
+            List<VideoDevice> cameras = MediaDevices.getVideoCaptureDevices();
+            if (selectedIndex < cameras.size()) {
+                selectedCamera = cameras.get(selectedIndex);
+                System.out.println("[SecureRoom] Camera selected: " + selectedCamera.getName());
+                
+                // Restart preview with new camera if currently active
+                if (cameraToggle.isSelected() && videoSource != null) {
+                    stopCameraPreview();
+                    startCameraPreview();
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[SecureRoom] Error changing camera: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle microphone selection change
+     */
+    private void handleMicrophoneSelection() {
+        int selectedIndex = audioInputBox.getSelectionModel().getSelectedIndex();
+        if (selectedIndex < 0) return;
+        
+        try {
+            List<dev.onvoid.webrtc.media.audio.AudioDevice> microphones = 
+                MediaDevices.getAudioCaptureDevices();
+            if (selectedIndex < microphones.size()) {
+                selectedMicrophone = microphones.get(selectedIndex);
+                System.out.println("[SecureRoom] Microphone selected: " + selectedMicrophone.getName());
+                // Microphone will be applied when joining the meeting
+            }
+        } catch (Exception e) {
+            System.err.println("[SecureRoom] Error changing microphone: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle speaker selection change
+     */
+    private void handleSpeakerSelection() {
+        int selectedIndex = audioOutputBox.getSelectionModel().getSelectedIndex();
+        if (selectedIndex < 0) return;
+        
+        try {
+            List<dev.onvoid.webrtc.media.audio.AudioDevice> speakers = 
+                MediaDevices.getAudioRenderDevices();
+            if (selectedIndex < speakers.size()) {
+                selectedSpeaker = speakers.get(selectedIndex);
+                System.out.println("[SecureRoom] Speaker selected: " + selectedSpeaker.getName());
+                // Speaker will be applied when joining the meeting
+            }
+        } catch (Exception e) {
+            System.err.println("[SecureRoom] Error changing speaker: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Get selected camera device
+     */
+    public VideoDevice getSelectedCamera() {
+        return selectedCamera;
+    }
+    
+    /**
+     * Get selected microphone device
+     */
+    public dev.onvoid.webrtc.media.audio.AudioDevice getSelectedMicrophone() {
+        return selectedMicrophone;
+    }
+    
+    /**
+     * Get selected speaker device
+     */
+    public dev.onvoid.webrtc.media.audio.AudioDevice getSelectedSpeaker() {
+        return selectedSpeaker;
     }
 }

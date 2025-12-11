@@ -11,38 +11,44 @@
 <?import javafx.scene.layout.Pane?>
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
+<?import javafx.scene.layout.FlowPane?>
 <?import org.kordamp.ikonli.javafx.FontIcon?>
 
-<BorderPane fx:id="serverPane" stylesheets="@../styles/styles.css" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.saferoom.gui.controller.ServerController">
+<StackPane stylesheets="@../styles/styles.css,@../styles/server_styles.css" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.saferoom.gui.controller.ServerController">
+    <BorderPane fx:id="serverPane">
 
     <!-- Left Sidebar - Channels -->
     <left>
         <VBox fx:id="channelsSidebar" styleClass="channels-sidebar" prefWidth="240.0">
             <!-- Server Header -->
-            <HBox fx:id="serverHeader" styleClass="server-header" alignment="CENTER_LEFT" spacing="10.0">
+            <VBox fx:id="serverHeader" styleClass="server-header" spacing="5.0">
                 <padding>
                     <Insets bottom="10.0" left="15.0" right="15.0" top="15.0" />
                 </padding>
-                <StackPane styleClass="server-avatar">
-                    <FontIcon fx:id="serverIcon" iconLiteral="fas-shield-alt" styleClass="server-icon" />
-                </StackPane>
-                <VBox spacing="2.0">
-                    <Label fx:id="serverNameLabel" styleClass="server-name" text="Server Name" />
-                    <Label fx:id="serverMembersLabel" styleClass="server-members" text="256 members" />
-                </VBox>
-                <Pane HBox.hgrow="ALWAYS" />
-                <Button fx:id="serverSettingsBtn" mnemonicParsing="false" styleClass="icon-button-small">
-                    <graphic>
-                        <FontIcon iconLiteral="fas-cog" styleClass="small-icon" />
-                    </graphic>
-                </Button>
-            </HBox>
+                <HBox alignment="CENTER_LEFT" spacing="10.0">
+                    <StackPane styleClass="server-avatar">
+                        <FontIcon fx:id="serverIcon" iconLiteral="fas-shield-alt" styleClass="server-icon" />
+                    </StackPane>
+                    <VBox spacing="2.0" HBox.hgrow="ALWAYS">
+                        <Label fx:id="serverMembersLabel" styleClass="server-members" text="256 members" />
+                        <HBox alignment="CENTER_LEFT" spacing="5.0">
+                             <Label fx:id="serverPrivacyBadge" styleClass="server-privacy-badge" text="PRIVATE" />
+                        </HBox>
+                    </VBox>
+                    <Button fx:id="serverSettingsBtn" mnemonicParsing="false" styleClass="icon-button-small">
+                        <graphic>
+                            <FontIcon iconLiteral="fas-cog" styleClass="small-icon" />
+                        </graphic>
+                    </Button>
+                </HBox>
+                <Label fx:id="serverNameLabel" styleClass="server-name" text="Server Name" />
+            </VBox>
 
             <!-- Channels Container -->
             <ScrollPane fx:id="channelsScrollPane" styleClass="channels-scroll" fitToWidth="true" VBox.vgrow="ALWAYS">
-                <VBox fx:id="channelsContainer" styleClass="channels-container" spacing="5.0">
+                <VBox fx:id="channelsContainer" styleClass="channels-container" spacing="2.0">
                     <padding>
-                        <Insets bottom="10.0" left="15.0" right="15.0" top="5.0" />
+                        <Insets bottom="5.0" left="15.0" right="15.0" top="5.0" />
                     </padding>
 
                     <!-- Voice Channels Section -->
@@ -52,7 +58,7 @@
                             <FontIcon iconLiteral="fas-volume-up" styleClass="category-icon" />
                             <Label styleClass="category-label" text="VOICE CHANNELS" />
                             <Pane HBox.hgrow="ALWAYS" />
-                            <Button mnemonicParsing="false" styleClass="icon-button-tiny">
+                            <Button fx:id="addVoiceSectionBtn" mnemonicParsing="false" styleClass="icon-button-tiny" onAction="#handleAddVoiceSection">
                                 <graphic>
                                     <FontIcon iconLiteral="fas-plus" styleClass="tiny-icon" />
                                 </graphic>
@@ -66,8 +72,9 @@
                                 <Label styleClass="channel-name" text="General" />
                                 <Pane HBox.hgrow="ALWAYS" />
                                 <VBox fx:id="voiceGeneralUsers" styleClass="voice-users-indicator" visible="false" spacing="1.0">
-                                    <Label styleClass="voice-user-count" text="3" />
+                                    <Label styleClass="voice-user-count" text="0/12" />
                                 </VBox>
+                                
                             </HBox>
 
                             <HBox fx:id="voiceMeeting" styleClass="voice-channel-item" spacing="8.0" alignment="CENTER_LEFT">
@@ -75,7 +82,7 @@
                                 <Label styleClass="channel-name" text="Meeting Room" />
                                 <Pane HBox.hgrow="ALWAYS" />
                                 <VBox fx:id="voiceMeetingUsers" styleClass="voice-users-indicator" visible="false" spacing="1.0">
-                                    <Label styleClass="voice-user-count" text="5" />
+                                    <Label styleClass="voice-user-count" text="0/12" />
                                 </VBox>
                             </HBox>
 
@@ -89,15 +96,12 @@
 
                     <!-- Text Channels Section -->
                     <VBox fx:id="textChannelsSection" spacing="3.0">
-                        <padding>
-                            <Insets top="15.0" />
-                        </padding>
                         <HBox alignment="CENTER_LEFT" spacing="5.0" styleClass="channel-category-header">
                             <FontIcon iconLiteral="fas-chevron-down" styleClass="category-arrow" />
-                            <FontIcon iconLiteral="fas-hashtag" styleClass="category-icon" />
+                            <FontIcon iconLiteral="fas-comment" styleClass="category-icon" />
                             <Label styleClass="category-label" text="TEXT CHANNELS" />
                             <Pane HBox.hgrow="ALWAYS" />
-                            <Button mnemonicParsing="false" styleClass="icon-button-tiny">
+                            <Button fx:id="addTextSectionBtn" mnemonicParsing="false" styleClass="icon-button-tiny" onAction="#handleAddTextSection">
                                 <graphic>
                                     <FontIcon iconLiteral="fas-plus" styleClass="tiny-icon" />
                                 </graphic>
@@ -107,7 +111,7 @@
                         <!-- Text Channel Items -->
                         <VBox fx:id="textChannelsList" spacing="2.0">
                             <HBox fx:id="textGeneral" styleClass="text-channel-item" spacing="8.0" alignment="CENTER_LEFT">
-                                <FontIcon iconLiteral="fas-hashtag" styleClass="channel-icon" />
+                                <FontIcon iconLiteral="fas-comment" styleClass="channel-icon" />
                                 <Label styleClass="channel-name" text="general" />
                                 <Pane HBox.hgrow="ALWAYS" />
                                 <VBox fx:id="textGeneralNotification" styleClass="notification-badge" visible="true">
@@ -116,13 +120,13 @@
                             </HBox>
 
                             <HBox fx:id="textAnnouncements" styleClass="text-channel-item" spacing="8.0" alignment="CENTER_LEFT">
-                                <FontIcon iconLiteral="fas-bullhorn" styleClass="channel-icon" />
+                                <FontIcon iconLiteral="fas-comment" styleClass="channel-icon" />
                                 <Label styleClass="channel-name" text="announcements" />
                                 <Pane HBox.hgrow="ALWAYS" />
                             </HBox>
 
                             <HBox fx:id="textTeam" styleClass="text-channel-item" spacing="8.0" alignment="CENTER_LEFT">
-                                <FontIcon iconLiteral="fas-hashtag" styleClass="channel-icon" />
+                                <FontIcon iconLiteral="fas-comment" styleClass="channel-icon" />
                                 <Label styleClass="channel-name" text="team-chat" />
                                 <Pane HBox.hgrow="ALWAYS" />
                                 <VBox fx:id="textTeamNotification" styleClass="notification-badge" visible="true">
@@ -131,13 +135,48 @@
                             </HBox>
 
                             <HBox fx:id="textPrivate" styleClass="text-channel-item" spacing="8.0" alignment="CENTER_LEFT">
-                                <FontIcon iconLiteral="fas-lock" styleClass="channel-icon" />
+                                <FontIcon iconLiteral="fas-comment" styleClass="channel-icon" />
                                 <Label styleClass="channel-name" text="private" />
                                 <Pane HBox.hgrow="ALWAYS" />
                             </HBox>
                         </VBox>
                     </VBox>
+
+                    <!-- File Channels Section -->
+                    <VBox fx:id="fileChannelsSection" spacing="3.0">
+                        <padding>
+                            <Insets top="5.0" />
+                        </padding>
+                        <HBox alignment="CENTER_LEFT" spacing="5.0" styleClass="channel-category-header">
+                            <FontIcon iconLiteral="fas-chevron-down" styleClass="category-arrow" />
+                            <FontIcon iconLiteral="fas-folder" styleClass="category-icon" />
+                            <Label styleClass="category-label" text="FILE CHANNELS" />
+                            <Pane HBox.hgrow="ALWAYS" />
+                            <Button fx:id="addFileSectionBtn" mnemonicParsing="false" styleClass="icon-button-tiny" onAction="#handleAddFileSection">
+                                <graphic>
+                                    <FontIcon iconLiteral="fas-plus" styleClass="tiny-icon" />
+                                </graphic>
+                            </Button>
+                        </HBox>
+
+                        <!-- File Channel Items -->
+                        <VBox fx:id="fileChannelsList" spacing="2.0">
+                            <HBox fx:id="fileResources" styleClass="text-channel-item" spacing="8.0" alignment="CENTER_LEFT">
+                                <FontIcon iconLiteral="fas-file-alt" styleClass="channel-icon" />
+                                <Label styleClass="channel-name" text="resources" />
+                                <Pane HBox.hgrow="ALWAYS" />
+                            </HBox>
+
+                            <HBox fx:id="fileProject" styleClass="text-channel-item" spacing="8.0" alignment="CENTER_LEFT">
+                                <FontIcon iconLiteral="fas-file-code" styleClass="channel-icon" />
+                                <Label styleClass="channel-name" text="project-files" />
+                                <Pane HBox.hgrow="ALWAYS" />
+                            </HBox>
+                        </VBox>
+                    </VBox>
                 </VBox>
+
+                
             </ScrollPane>
 
             <!-- User Info Bottom -->
@@ -145,9 +184,6 @@
                 <padding>
                     <Insets bottom="10.0" left="15.0" right="15.0" top="10.0" />
                 </padding>
-                <StackPane styleClass="user-avatar-small">
-                    <Label fx:id="currentUserAvatar" styleClass="user-avatar-text" text="U" />
-                </StackPane>
                 <VBox spacing="1.0">
                     <Label fx:id="currentUserName" styleClass="current-user-name" text="Username" />
                     <Label fx:id="currentUserStatus" styleClass="current-user-status" text="Online" />
@@ -160,7 +196,11 @@
                 </Button>
                 <Button fx:id="deafenBtn" mnemonicParsing="false" styleClass="icon-button-small">
                     <graphic>
-                        <FontIcon iconLiteral="fas-headphones" styleClass="small-icon" />
+                        <StackPane>
+                            <FontIcon iconLiteral="fas-headphones" styleClass="small-icon" />
+                            <FontIcon iconLiteral="fas-slash" styleClass="slash-icon-shadow" visible="false" />
+                            <FontIcon iconLiteral="fas-slash" styleClass="slash-icon" visible="false" />
+                        </StackPane>
                     </graphic>
                 </Button>
                 <Button fx:id="settingsBtn" mnemonicParsing="false" styleClass="icon-button-small">
@@ -177,10 +217,22 @@
         <StackPane fx:id="mainContentArea" styleClass="main-content-area">
             
             <!-- Default Channel View -->
-            <VBox fx:id="defaultChannelView" styleClass="default-channel-view" alignment="CENTER" spacing="20.0">
-                <FontIcon iconLiteral="fas-hashtag" styleClass="default-channel-icon" />
-                <Label styleClass="default-channel-title" text="Welcome to the server!" />
-                <Label styleClass="default-channel-subtitle" text="Select a channel to start chatting or join a voice channel to talk." />
+            <VBox fx:id="defaultChannelView" styleClass="default-channel-view" spacing="0.0">
+                <HBox alignment="CENTER_RIGHT" styleClass="default-view-header">
+                    <padding>
+                        <Insets bottom="10.0" left="20.0" right="20.0" top="10.0" />
+                    </padding>
+                    <Button fx:id="toggleUsersBtnDefault" mnemonicParsing="false" styleClass="icon-button">
+                        <graphic>
+                            <FontIcon iconLiteral="fas-bars" styleClass="header-icon" />
+                        </graphic>
+                    </Button>
+                </HBox>
+                <VBox alignment="CENTER" spacing="20.0" VBox.vgrow="ALWAYS">
+                    <FontIcon iconLiteral="fas-hashtag" styleClass="default-channel-icon" />
+                    <Label styleClass="default-channel-title" text="Welcome to the server!" />
+                    <Label styleClass="default-channel-subtitle" text="Select a channel to start chatting or join a voice channel to talk." />
+                </VBox>
             </VBox>
 
             <!-- Text Chat View -->
@@ -202,6 +254,11 @@
                         <Button mnemonicParsing="false" styleClass="icon-button">
                             <graphic>
                                 <FontIcon iconLiteral="fas-bell" styleClass="header-icon" />
+                            </graphic>
+                        </Button>
+                        <Button fx:id="toggleUsersBtn" mnemonicParsing="false" styleClass="icon-button">
+                            <graphic>
+                                <FontIcon iconLiteral="fas-bars" styleClass="header-icon" />
                             </graphic>
                         </Button>
                     </HBox>
@@ -230,22 +287,25 @@
             </BorderPane>
 
             <!-- Voice Chat View -->
-            <VBox fx:id="voiceChatView" styleClass="voice-chat-view" visible="false" spacing="20.0" alignment="CENTER">
-                <padding>
-                    <Insets bottom="50.0" left="50.0" right="50.0" top="50.0" />
-                </padding>
+            <VBox fx:id="voiceChatView" styleClass="voice-chat-view" visible="false" VBox.vgrow="ALWAYS">
                 
-                <VBox alignment="CENTER" spacing="10.0">
-                    <FontIcon iconLiteral="fas-volume-up" styleClass="voice-room-icon" />
-                    <Label fx:id="voiceChannelName" styleClass="voice-room-name" text="General Voice" />
-                    <Label fx:id="voiceChannelInfo" styleClass="voice-room-info" text="Connected users can hear each other" />
-                </VBox>
+                <!-- Voice Channel Header (similar to chat header) -->
+                <HBox styleClass="channel-header" alignment="CENTER_LEFT" spacing="10.0">
+                    <padding>
+                        <Insets top="12.0" bottom="12.0" left="16.0" right="16.0" />
+                    </padding>
+                    <FontIcon iconLiteral="fas-volume-up" styleClass="channel-header-icon" />
+                    <Label fx:id="voiceChannelName" styleClass="channel-header-text" text="General" />
+                </HBox>
 
                 <!-- Voice Users Grid -->
                 <ScrollPane fx:id="voiceUsersScrollPane" styleClass="voice-users-scroll" fitToWidth="true" VBox.vgrow="ALWAYS">
-                    <VBox fx:id="voiceUsersContainer" styleClass="voice-users-container" spacing="15.0" alignment="CENTER">
+                    <FlowPane fx:id="voiceUsersContainer" styleClass="voice-users-container" hgap="20.0" vgap="20.0" alignment="CENTER">
+                        <padding>
+                            <Insets top="10.0" left="10.0" right="10.0" bottom="10.0" />
+                        </padding>
                         <!-- Voice users will be dynamically added here -->
-                    </VBox>
+                    </FlowPane>
                 </ScrollPane>
 
                 <!-- Voice Controls -->
@@ -257,7 +317,11 @@
                     </Button>
                     <Button fx:id="toggleDeafenBtn" mnemonicParsing="false" styleClass="voice-control-btn">
                         <graphic>
-                            <FontIcon iconLiteral="fas-headphones" styleClass="voice-control-icon" />
+                            <StackPane>
+                                <FontIcon iconLiteral="fas-headphones" styleClass="voice-control-icon" />
+                                <FontIcon iconLiteral="fas-slash" styleClass="slash-icon-shadow-large" visible="false" />
+                                <FontIcon iconLiteral="fas-slash" styleClass="slash-icon-large" visible="false" />
+                            </StackPane>
                         </graphic>
                     </Button>
                     <Button fx:id="shareScreenBtn" mnemonicParsing="false" styleClass="voice-control-btn">
@@ -332,4 +396,11 @@
         </VBox>
     </right>
 
-</BorderPane>
+    </BorderPane>
+
+    <!-- Popup Overlay Container -->
+    <StackPane fx:id="popupOverlay" visible="false" managed="false" style="-fx-background-color: rgba(0, 0, 0, 0.5);">
+        <StackPane fx:id="popupContainer" maxHeight="-Infinity" maxWidth="-Infinity" />
+    </StackPane>
+
+</StackPane>

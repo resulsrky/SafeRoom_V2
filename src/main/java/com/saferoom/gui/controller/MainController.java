@@ -118,6 +118,21 @@ public class MainController {
     private List<MenuItem> mainMenuItems = new ArrayList<>();
     private List<MenuItem> statusMenuItems = new ArrayList<>();
     private boolean showingStatusSheet = false;
+    private List<java.util.function.Consumer<UserStatus>> statusListeners = new ArrayList<>();
+
+    public void addStatusListener(java.util.function.Consumer<UserStatus> listener) {
+        statusListeners.add(listener);
+    }
+
+    public void clearStatusListeners() {
+        statusListeners.clear();
+    }
+
+    private void notifyStatusListeners(UserStatus status) {
+        for (java.util.function.Consumer<UserStatus> listener : statusListeners) {
+            listener.accept(status);
+        }
+    }
 
     private String getCurrentUserName() {
         return UserSession.getInstance().getDisplayName();
@@ -128,6 +143,9 @@ public class MainController {
     }
 
     private WindowStateManager windowStateManager = new WindowStateManager();
+
+    // Track the last view loader to return from settings
+    private Runnable lastActiveViewLoader;
 
     @FXML
     public void initialize() {
@@ -276,6 +294,7 @@ public class MainController {
                     UserStatus.OFFLINE.getStyleClass());
             statusDot.getStyleClass().add(status.getStyleClass());
             currentStatus = status;
+            notifyStatusListeners(status);
             boolean reopenUser = userMenu != null && userMenu.isShowing();
             if (userMenu != null) {
                 userMenu.hide();
@@ -490,6 +509,14 @@ public class MainController {
         handleDashboard();
     }
 
+    public void returnFromSettings() {
+        if (lastActiveViewLoader != null) {
+            lastActiveViewLoader.run();
+        } else {
+            handleDashboard();
+        }
+    }
+
     public void hideSidebarForFullScreen() {
         if (mainPane != null && mainPane.getLeft() != null) {
             mainPane.getLeft().setVisible(false);
@@ -579,17 +606,21 @@ public class MainController {
     }
 
     private void handleDashboard() {
+        lastActiveViewLoader = this::handleDashboard;
         setActiveButton(dashboardButton);
         loadView("DashBoardView.fxml");
     }
 
     public void handleRooms() {
+        lastActiveViewLoader = this::handleRooms;
         setActiveButton(roomsButton);
         loadView("RoomsView.fxml");
     }
 
     public void handleMessages() {
+        lastActiveViewLoader = this::handleMessages;
         setActiveButton(messagesButton);
+        clearStatusListeners();
         try {
             FXMLLoader loader = new FXMLLoader(
                     Objects.requireNonNull(MainApp.class.getResource("/view/MessagesView.fxml")));
@@ -604,13 +635,15 @@ public class MainController {
     }
 
     public void handleFriends() {
+        lastActiveViewLoader = this::handleFriends;
         setActiveButton(friendsButton);
         loadView("FriendsView.fxml");
     }
 
     public void handleFileVault() {
+        lastActiveViewLoader = this::handleFileVault;
         setActiveButton(fileVaultButton);
-        loadView("SecureFilesView.fxml");
+        loadView("FileVaultView.fxml");
     }
 
     public void switchToMessages() {
@@ -619,6 +652,7 @@ public class MainController {
     }
 
     public void handleProfile(String username) {
+        clearStatusListeners();
         try {
             FXMLLoader loader = new FXMLLoader(
                     Objects.requireNonNull(MainApp.class.getResource("/view/ProfileView.fxml")));
@@ -633,32 +667,20 @@ public class MainController {
         }
     }
 
-    public void loadSecureRoomView() {
-        clearActiveButton();
-        loadFullScreenView("SecureRoomView.fxml", true);
-    }
-
-    public void loadJoinMeetView() {
-        clearActiveButton();
-        loadFullScreenView("JoinMeetView.fxml", false);
-    }
-
-    public void loadServerView(String serverName, String serverIcon) {
-        setActiveButton(roomsButton);
+    private void loadView(String fxmlFile) {
+        clearStatusListeners();
         try {
-            FXMLLoader loader = new FXMLLoader(MainApp.class.getResource("/view/ServerView.fxml"));
+            FXMLLoader loader = new FXMLLoader(MainApp.class.getResource("/view/" + fxmlFile));
             Parent root = loader.load();
-            ServerController controller = loader.getController();
-            controller.enterServer(serverName, serverIcon);
-            controller.setMainController(this);
             contentArea.getChildren().setAll(root);
         } catch (IOException e) {
             e.printStackTrace();
-            showErrorInContentArea("ServerView.fxml yüklenemedi.");
+            showErrorInContentArea(fxmlFile + " yüklenemedi: " + e.getMessage());
         }
     }
 
     private void loadFullScreenView(String fxmlFile, boolean isSecureRoom) {
+        clearStatusListeners();
         try {
             FXMLLoader loader = new FXMLLoader(MainApp.class.getResource("/view/" + fxmlFile));
             Parent root = loader.load();
@@ -672,20 +694,41 @@ public class MainController {
             hideSidebarForFullScreen();
             contentArea.getChildren().setAll(root);
         } catch (IOException e) {
+            System.err.println("[MainController] ❌ Failed to load " + fxmlFile);
             e.printStackTrace();
-            showErrorInContentArea(fxmlFile + " yüklenemedi.");
+            if (e.getCause() != null) {
+                System.err.println("[MainController] Caused by: " + e.getCause());
+                e.getCause().printStackTrace();
+            }
+            showErrorInContentArea(fxmlFile + " yüklenemedi.\nHata: " + e.getMessage());
         }
     }
 
-    private void loadView(String fxmlFile) {
+    public void loadServerView(String serverName, String serverIcon, boolean isPrivate, boolean isCustom) {
+        lastActiveViewLoader = () -> loadServerView(serverName, serverIcon, isPrivate, isCustom);
+        setActiveButton(roomsButton);
+        clearStatusListeners();
         try {
-            FXMLLoader loader = new FXMLLoader(Objects.requireNonNull(MainApp.class.getResource("/view/" + fxmlFile)));
+            FXMLLoader loader = new FXMLLoader(MainApp.class.getResource("/view/ServerView.fxml"));
             Parent root = loader.load();
+            ServerController controller = loader.getController();
+            controller.enterServer(serverName, serverIcon, isPrivate, isCustom);
+            controller.setMainController(this);
             contentArea.getChildren().setAll(root);
-        } catch (IOException | NullPointerException e) {
+        } catch (IOException e) {
             e.printStackTrace();
-            showErrorInContentArea("Görünüm yüklenemedi: " + fxmlFile);
+            showErrorInContentArea("ServerView.fxml yüklenemedi.");
         }
+    }
+
+    public void loadJoinMeetView() {
+        clearActiveButton();
+        loadFullScreenView("JoinMeetView.fxml", false);
+    }
+
+    public void loadSecureRoomView() {
+        clearActiveButton();
+        loadFullScreenView("SecureRoomView.fxml", true);
     }
 
     private void showErrorInContentArea(String message) {
@@ -741,8 +784,13 @@ public class MainController {
                                 currentActiveCallDialog = new ActiveCallDialog(
                                         callInfo.callerUsername, callInfo.callId, callInfo.videoEnabled, callManager);
                                 currentActiveCallDialog.show();
-                                // NOTE: Local video will be attached via onLocalTracksReadyCallback
-                                // because tracks are added AFTER offer is received (deferred)
+                                if (callInfo.videoEnabled) {
+                                    dev.onvoid.webrtc.media.video.VideoTrack localVideo = callManager
+                                            .getLocalVideoTrack();
+                                    if (localVideo != null) {
+                                        currentActiveCallDialog.attachLocalVideo(localVideo);
+                                    }
+                                }
                             });
                         } else {
                             callManager.rejectCall(callInfo.callId);
