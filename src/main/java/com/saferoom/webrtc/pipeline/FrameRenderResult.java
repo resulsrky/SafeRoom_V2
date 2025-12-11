@@ -3,53 +3,52 @@ package com.saferoom.webrtc.pipeline;
 import dev.onvoid.webrtc.media.video.I420Buffer;
 
 import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Immutable container for a single video frame ready for painting on the FX thread.
+ * Immutable container for a single video frame ready for painting on the FX
+ * thread.
  * 
  * <h2>Optimizasyon Notları (v2.0)</h2>
  * <ul>
- *   <li>Row-based bulk ByteBuffer read: JNI call sayısı width*height → height'a düştü</li>
- *   <li>ThreadLocal row buffers: Her frame için allocation yok</li>
- *   <li>Inline clamp: Method call overhead kaldırıldı</li>
- *   <li>Pre-computed UV indices: Döngü içi division azaltıldı</li>
+ * <li><b>Buffer Pooling:</b> Uses DirectByteBuffer from ArgbBufferPool to avoid
+ * heap allocation.</li>
+ * <li>Row-based bulk ByteBuffer read.</li>
+ * <li>Pre-computed UV indices.</li>
  * </ul>
- * 
- * <h2>Performans Karşılaştırması (640x480 @ 30 FPS)</h2>
- * <pre>
- * Eski yöntem: ~12ms/frame, 921,600 ByteBuffer.get() çağrısı
- * Yeni yöntem: ~3-4ms/frame, 480 ByteBuffer.get() çağrısı (row bazlı)
- * </pre>
  */
 public final class FrameRenderResult {
 
     private static final ArgbBufferPool BUFFER_POOL = new ArgbBufferPool();
-    
+
     // ═══════════════════════════════════════════════════════════════════════════════
-    // THREAD-LOCAL ROW BUFFERS
-    // Pre-allocated for 1080p (1920x1080), reused across frames
-    // Avoids per-frame allocation and reduces GC pressure
+    // THREAD-LOCAL ROW BUFFERS (DIRECT BYTE BUFFER)
     // ═══════════════════════════════════════════════════════════════════════════════
     private static final int MAX_WIDTH = 1920;
     private static final int MAX_UV_WIDTH = (MAX_WIDTH + 1) / 2;
-    
-    private static final ThreadLocal<byte[]> TL_Y_ROW = ThreadLocal.withInitial(() -> new byte[MAX_WIDTH]);
-    
-    // Cached UV rows for 4:2:0 subsampling (reuse across 2 Y rows)
-    private static final ThreadLocal<byte[]> TL_U_CACHED = ThreadLocal.withInitial(() -> new byte[MAX_UV_WIDTH]);
-    private static final ThreadLocal<byte[]> TL_V_CACHED = ThreadLocal.withInitial(() -> new byte[MAX_UV_WIDTH]);
+
+    // Use DirectByteBuffer for intermediate row storage to avoid Java Heap
+    // allocations
+    private static final ThreadLocal<ByteBuffer> TL_Y_ROW_DIRECT = ThreadLocal
+            .withInitial(() -> ByteBuffer.allocateDirect(MAX_WIDTH));
+
+    private static final ThreadLocal<ByteBuffer> TL_U_CACHED_DIRECT = ThreadLocal
+            .withInitial(() -> ByteBuffer.allocateDirect(MAX_UV_WIDTH));
+    private static final ThreadLocal<ByteBuffer> TL_V_CACHED_DIRECT = ThreadLocal
+            .withInitial(() -> ByteBuffer.allocateDirect(MAX_UV_WIDTH));
 
     private final int width;
     private final int height;
-    private final int[] argbPixels;
+    // Main pixel storage - DirectByteBuffer
+    private final ByteBuffer buffer;
     private final long timestampNs;
     private final AtomicBoolean released = new AtomicBoolean(false);
 
-    private FrameRenderResult(int width, int height, int[] argbPixels, long timestampNs) {
+    private FrameRenderResult(int width, int height, ByteBuffer buffer, long timestampNs) {
         this.width = width;
         this.height = height;
-        this.argbPixels = argbPixels;
+        this.buffer = buffer;
         this.timestampNs = timestampNs;
     }
 
@@ -61,8 +60,8 @@ public final class FrameRenderResult {
         return height;
     }
 
-    public int[] getArgbPixels() {
-        return argbPixels;
+    public ByteBuffer getBuffer() {
+        return buffer;
     }
 
     public long getTimestampNs() {
@@ -70,31 +69,25 @@ public final class FrameRenderResult {
     }
 
     /**
-     * Convert I420 (YUV 4:2:0) buffer to ARGB format.
+     * Convert I420 (YUV 4:2:0) buffer to ARGB format in a DirectByteBuffer.
      * 
-     * <h3>Optimizasyon Detayları:</h3>
-     * <ol>
-     *   <li><b>Bulk Read:</b> Her satır için tek ByteBuffer.get() çağrısı</li>
-     *   <li><b>Row Cache:</b> UV satırları 2 Y satırı için yeniden kullanılır (4:2:0)</li>
-     *   <li><b>Inline Math:</b> clamp() yerine Math.max/min (JIT optimizes better)</li>
-     *   <li><b>No Division in Loop:</b> UV indexleri önceden hesaplanır</li>
-     * </ol>
-     * 
-     * @param buffer I420 video frame buffer from WebRTC
+     * @param buffer      I420 video frame buffer from WebRTC
      * @param timestampNs Frame timestamp in nanoseconds
      * @return Paint-ready FrameRenderResult
      */
     public static FrameRenderResult fromI420(I420Buffer buffer, long timestampNs) {
         int width = buffer.getWidth();
         int height = buffer.getHeight();
-        
+
         // Validate dimensions
         if (width > MAX_WIDTH || height > MAX_WIDTH) {
-            // Fall back to legacy method for very large frames
             return fromI420Legacy(buffer, timestampNs);
         }
-        
-        int[] argb = BUFFER_POOL.acquire(width, height);
+
+        // Acquire DirectByteBuffer (pooled)
+        ByteBuffer argbByteBuffer = BUFFER_POOL.acquire(width, height);
+        // Create an IntBuffer view for convenient int-based writing
+        IntBuffer argbIntBuffer = argbByteBuffer.asIntBuffer();
 
         ByteBuffer yPlane = buffer.getDataY();
         ByteBuffer uPlane = buffer.getDataU();
@@ -103,69 +96,90 @@ public final class FrameRenderResult {
         int yStride = buffer.getStrideY();
         int uStride = buffer.getStrideU();
         int vStride = buffer.getStrideV();
-        
-        // Get thread-local row buffers
-        byte[] yRow = TL_Y_ROW.get();
-        byte[] uRow = TL_U_CACHED.get();
-        byte[] vRow = TL_V_CACHED.get();
-        
+
+        // Get thread-local DIRECT row buffers
+        ByteBuffer yRow = TL_Y_ROW_DIRECT.get();
+        ByteBuffer uRow = TL_U_CACHED_DIRECT.get();
+        ByteBuffer vRow = TL_V_CACHED_DIRECT.get();
+
+        yRow.clear();
+        uRow.clear();
+        vRow.clear();
+
         int halfWidth = (width + 1) / 2;
-        
-        // ═══════════════════════════════════════════════════════════════════════════
-        // OPTIMIZED ROW-BASED CONVERSION
-        // Instead of width*height ByteBuffer.get() calls, we do height bulk reads
-        // ═══════════════════════════════════════════════════════════════════════════
-        
+
         for (int y = 0; y < height; y++) {
-            // ✅ BULK READ: Single JNI call for entire Y row
-            yPlane.position(y * yStride);
-            yPlane.get(yRow, 0, width);
-            
-            // ✅ UV CACHING: Read UV rows only on even Y lines (4:2:0 subsampling)
-            // UV row is reused for y and y+1
+            // ✅ ZERO-COPY ROW READ: Copy from I420 DirectBuffer to Row DirectBuffer
+            // This avoids creating a byte[] on the Java Heap
+
+            // Limit source buffer to the row width to allow bulk put
+            int yPos = y * yStride;
+            yPlane.position(yPos);
+            yPlane.limit(yPos + width);
+            yRow.position(0);
+            yRow.put(yPlane); // Native memcpy mostly
+            // Restore limit ? No need if we set it again next loop, but good practice if
+            // shared
+            // Actually I420Buffer interface implies we own the buffer pointers during this
+            // call
+
+            // ✅ UV CACHING
             if ((y & 1) == 0) {
                 int uvY = y / 2;
-                uPlane.position(uvY * uStride);
-                uPlane.get(uRow, 0, halfWidth);
-                vPlane.position(uvY * vStride);
-                vPlane.get(vRow, 0, halfWidth);
-            }
-            
-            // ✅ ROW PROCESSING: Local array access is much faster than ByteBuffer.get()
-            int rowOffset = y * width;
-            for (int x = 0; x < width; x++) {
-                int uvX = x >> 1; // Faster than x / 2
-                
-                // YUV to RGB conversion (BT.601 standard)
-                int Y = (yRow[x] & 0xFF) - 16;
-                int U = (uRow[uvX] & 0xFF) - 128;
-                int V = (vRow[uvX] & 0xFF) - 128;
 
-                // ✅ INLINE CLAMP: JIT optimizes Math.max/min better than method calls
+                int uPos = uvY * uStride;
+                uPlane.position(uPos);
+                uPlane.limit(uPos + halfWidth);
+                uRow.position(0);
+                uRow.put(uPlane);
+
+                int vPos = uvY * vStride;
+                vPlane.position(vPos);
+                vPlane.limit(vPos + halfWidth);
+                vRow.position(0);
+                vRow.put(vPlane);
+            }
+
+            int rowOffset = y * width;
+
+            // Read from DirectByteBuffer (off-heap)
+            // Note: .get(index) on DirectBuffer is slightly slower than array access
+            // but eliminates GC pressure which is the priority here.
+            for (int x = 0; x < width; x++) {
+                int uvX = x >> 1;
+
+                int Y = (yRow.get(x) & 0xFF) - 16;
+                int U = (uRow.get(uvX) & 0xFF) - 128;
+                int V = (vRow.get(uvX) & 0xFF) - 128;
+
                 int R = Math.max(0, Math.min(255, (298 * Y + 409 * V + 128) >> 8));
                 int G = Math.max(0, Math.min(255, (298 * Y - 100 * U - 208 * V + 128) >> 8));
                 int B = Math.max(0, Math.min(255, (298 * Y + 516 * U + 128) >> 8));
 
-                argb[rowOffset + x] = 0xFF000000 | (R << 16) | (G << 8) | B;
+                int argb = 0xFF000000 | (R << 16) | (G << 8) | B;
+
+                argbIntBuffer.put(rowOffset + x, argb);
             }
         }
-        
-        // ✅ Reset buffer positions for reuse
-        yPlane.rewind();
-        uPlane.rewind();
-        vPlane.rewind();
 
-        return new FrameRenderResult(width, height, argb, timestampNs);
+        // Reset buffers for safety (though normally garbage/overwritten)
+        yPlane.clear();
+        uPlane.clear();
+        vPlane.clear();
+
+        argbByteBuffer.rewind();
+
+        return new FrameRenderResult(width, height, argbByteBuffer, timestampNs);
     }
-    
+
     /**
      * Legacy per-pixel conversion method.
-     * Used as fallback for frames larger than MAX_WIDTH.
      */
     private static FrameRenderResult fromI420Legacy(I420Buffer buffer, long timestampNs) {
         int width = buffer.getWidth();
         int height = buffer.getHeight();
-        int[] argb = BUFFER_POOL.acquire(width, height);
+        ByteBuffer argbByteBuffer = BUFFER_POOL.acquire(width, height);
+        IntBuffer argbIntBuffer = argbByteBuffer.asIntBuffer();
 
         ByteBuffer yPlane = buffer.getDataY();
         ByteBuffer uPlane = buffer.getDataU();
@@ -189,20 +203,22 @@ public final class FrameRenderResult {
                 int G = Math.max(0, Math.min(255, (298 * Y - 100 * U - 208 * V + 128) >> 8));
                 int B = Math.max(0, Math.min(255, (298 * Y + 516 * U + 128) >> 8));
 
-                argb[y * width + x] = 0xFF000000 | (R << 16) | (G << 8) | B;
+                int argb = 0xFF000000 | (R << 16) | (G << 8) | B;
+                argbIntBuffer.put(y * width + x, argb);
             }
         }
 
-        return new FrameRenderResult(width, height, argb, timestampNs);
+        argbByteBuffer.rewind();
+        return new FrameRenderResult(width, height, argbByteBuffer, timestampNs);
     }
 
     /**
-     * Return the underlying pixel buffer to the pool once the frame has been painted.
+     * Return the underlying pixel buffer to the pool once the frame has been
+     * painted.
      */
     public void release() {
         if (released.compareAndSet(false, true)) {
-            BUFFER_POOL.release(width, height, argbPixels);
+            BUFFER_POOL.release(width, height, buffer);
         }
     }
 }
-

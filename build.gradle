@@ -309,14 +309,6 @@ tasks.withType(Test).configureEach {
 tasks.withType(JavaExec).configureEach {
     jvmArgs += '--enable-preview'
     
-    // JFR Profiling: ./gradlew run -Pjfr=post_opt
-    if (project.hasProperty('jfr')) {
-        def jfrFile = "${projectDir}/profiling/${project.property('jfr')}.jfr"
-        file("${projectDir}/profiling").mkdirs()
-        jvmArgs += "-XX:StartFlightRecording=filename=${jfrFile},dumponexit=true,settings=profile"
-        println "🎬 JFR: ${jfrFile}"
-    }
-    
     // ─────────────────────────────────────────────────────────────────────────────
     // JFR PROFILING (optional)
     // Usage: ./gradlew run -Pjfr=pre_opt  → creates profiling/pre_opt.jfr
@@ -332,17 +324,28 @@ tasks.withType(JavaExec).configureEach {
     // ─────────────────────────────────────────────────────────────────────────────
     // HEAP CONFIGURATION
     // ─────────────────────────────────────────────────────────────────────────────
-    jvmArgs += '-Xms32m'              // Start small (32MB)
-    jvmArgs += '-Xmx384m'             // Max 384MB heap (reduced from 512)
+    // Setting min=max prevents heap resizing overhead during connection establishment
+    // OPTIMIZATION: Reduced from 2g to 256m/512m to fit in 300MB-600MB RAM target
+    jvmArgs += '-Xms256m'
+    jvmArgs += '-Xmx512m'
     
     // ─────────────────────────────────────────────────────────────────────────────
-    // GARBAGE COLLECTOR (G1GC optimized for low latency)
+    // GARBAGE COLLECTOR (G1GC optimized for low latency media)
     // ─────────────────────────────────────────────────────────────────────────────
     jvmArgs += '-XX:+UseG1GC'
-    jvmArgs += '-XX:MaxGCPauseMillis=50'
-    jvmArgs += '-XX:G1HeapRegionSize=1m'
-    jvmArgs += '-XX:+UseStringDeduplication'     // Deduplicate strings (saves ~5-10%)
+    jvmArgs += '-XX:G1HeapRegionSize=4m'       // Critical for 1080p frames (~1.2MB) to avoid humongous allocations
+    jvmArgs += '-XX:MaxGCPauseMillis=10'       // Aggressive low-latency target
+    jvmArgs += '-XX:ParallelGCThreads=4'       // Optimized for query/video processing
+    jvmArgs += '-XX:ConcGCThreads=2'
+    
+    // Tuning Young Generation (Less aggressive to prevent 20ms+ Evac pauses)
+    jvmArgs += '-XX:+UnlockExperimentalVMOptions'
+    jvmArgs += '-XX:G1NewSizePercent=20'       // Was 30 - Reduced to lower pause impact
+    jvmArgs += '-XX:G1MaxNewSizePercent=40'    // Was 60 - Cap burst size
     jvmArgs += '-XX:InitiatingHeapOccupancyPercent=45'
+    jvmArgs += '-XX:+DisableExplicitGC'
+    
+    jvmArgs += '-XX:+UseStringDeduplication'
     
     // ─────────────────────────────────────────────────────────────────────────────
     // THREAD STACK SIZE (DEFAULT 1MB → 512KB per thread)
@@ -351,16 +354,16 @@ tasks.withType(JavaExec).configureEach {
     jvmArgs += '-Xss512k'
     
     // ─────────────────────────────────────────────────────────────────────────────
-    // METASPACE LIMITS
+    // METASPACE LIMITS (Fix for Metadata GC Pauses)
     // ─────────────────────────────────────────────────────────────────────────────
-    jvmArgs += '-XX:MetaspaceSize=32m'
-    jvmArgs += '-XX:MaxMetaspaceSize=128m'
+    jvmArgs += '-XX:MetaspaceSize=128m'        // Start higher to avoid early GCs
+    jvmArgs += '-XX:MaxMetaspaceSize=512m'     // Allow room for JFoenix/WebRTC overhead
     
     // ─────────────────────────────────────────────────────────────────────────────
-    // CODE CACHE (JIT compiled code)
+    // CODE CACHE (Fix for CodeCache GC Pauses)
     // ─────────────────────────────────────────────────────────────────────────────
-    jvmArgs += '-XX:ReservedCodeCacheSize=64m'
-    jvmArgs += '-XX:InitialCodeCacheSize=16m'
+    jvmArgs += '-XX:ReservedCodeCacheSize=256m' // Increased from 64m
+    jvmArgs += '-XX:InitialCodeCacheSize=32m'
     
     // ─────────────────────────────────────────────────────────────────────────────
     // NETTY / gRPC OPTIMIZATION
@@ -406,7 +409,6 @@ tasks.withType(JavaExec).configureEach {
     jvmArgs += '-XX:+UseCompressedOops'           // Compressed object pointers
     jvmArgs += '-XX:+UseCompressedClassPointers'  // Compressed class pointers
     jvmArgs += '-XX:+OptimizeStringConcat'        // String concat optimization
-    jvmArgs += '-XX:TieredStopAtLevel=1'          // Only C1 compiler (faster startup, less code cache)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -578,8 +578,31 @@ public class MainController {
     }
 
     private void handleClose() {
+        // Stop heartbeat
+        try {
+            String currentUsername = UserSession.getInstance().getDisplayName();
+            com.saferoom.gui.utils.HeartbeatService.getInstance().stopHeartbeat(currentUsername);
+        } catch (Exception e) {
+            System.err.println("Error stopping heartbeat: " + e.getMessage());
+        }
+
+        // Cleanup WebRTC resources
+        try {
+            if (CallManager.getInstance().isInitialized()) {
+                System.out.println("[MainController] 🛑 Disposing CallManager...");
+                CallManager.getInstance().dispose();
+            }
+        } catch (Exception e) {
+            System.err.println("Error disposing CallManager: " + e.getMessage());
+        }
+
         Stage stage = (Stage) mainPane.getScene().getWindow();
         stage.close();
+
+        // Force exit to kill any lingering native threads (WebRTC)
+        System.out.println("[MainController] 🚪 Exiting application logic, forcing process exit...");
+        Platform.exit();
+        System.exit(0);
     }
 
     private void handleDashboard() {
@@ -778,6 +801,20 @@ public class MainController {
                 }
             });
         });
+
+        // 🎥 Attach local video when tracks are actually ready
+        callManager.setOnLocalTracksReadyCallback(() -> {
+            Platform.runLater(() -> {
+                if (currentActiveCallDialog != null) {
+                    dev.onvoid.webrtc.media.video.VideoTrack localVideo = callManager.getLocalVideoTrack();
+                    if (localVideo != null) {
+                        System.out.println("[MainController] 🎥 Attaching local video (tracks now ready)");
+                        currentActiveCallDialog.attachLocalVideo(localVideo);
+                    }
+                }
+            });
+        });
+
         callManager.setOnCallEndedCallback(callId -> {
             Platform.runLater(() -> {
                 if (currentActiveCallDialog != null) {
