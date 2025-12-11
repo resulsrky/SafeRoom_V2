@@ -643,7 +643,7 @@ public class MainController {
     public void handleFileVault() {
         lastActiveViewLoader = this::handleFileVault;
         setActiveButton(fileVaultButton);
-        loadView("FileVaultView.fxml");
+        loadView("SecureFilesView.fxml");
     }
 
     public void switchToMessages() {

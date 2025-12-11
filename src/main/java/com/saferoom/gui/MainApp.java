@@ -20,21 +20,24 @@ public class MainApp extends Application {
     public void start(Stage primaryStage) throws IOException {
         Parent root = FXMLLoader.load(Objects.requireNonNull(MainApp.class.getResource("/view/LoginView.fxml")));
 
-        // Use TRANSPARENT for better cross-platform compatibility and to remove white corners
+        // Use TRANSPARENT for better cross-platform compatibility and to remove white
+        // corners
         primaryStage.setTitle("SafeRoom - Login");
 
         Scene scene = new Scene(root);
         scene.setFill(javafx.scene.paint.Color.TRANSPARENT);
-        
+
         // Stage'i de transparent yap (beyaz köşeleri önlemek için)
         primaryStage.initStyle(StageStyle.TRANSPARENT);
 
-        // DEGISIKLIK: CSS dosyasinin adi, projenizdeki 'styles.css' ile eslesmesi icin guncellendi.
+        // DEGISIKLIK: CSS dosyasinin adi, projenizdeki 'styles.css' ile eslesmesi icin
+        // guncellendi.
         String cssPath = "/styles/styles.css";
         URL cssUrl = MainApp.class.getResource(cssPath);
 
         if (cssUrl == null) {
-            System.err.println("HATA: CSS dosyası bulunamadı. Lütfen 'resources/styles/' klasöründe 'styles.css' adında bir dosya olduğundan emin olun.");
+            System.err.println(
+                    "HATA: CSS dosyası bulunamadı. Lütfen 'resources/styles/' klasöründe 'styles.css' adında bir dosya olduğundan emin olun.");
         } else {
             scene.getStylesheets().add(cssUrl.toExternalForm());
         }
@@ -48,6 +51,16 @@ public class MainApp extends Application {
             primaryStage.setX(event.getScreenX() - xOffset);
             primaryStage.setY(event.getScreenY() - yOffset);
         });
+
+        // Initialize FileVaultService
+        try {
+            String homeDir = System.getProperty("user.home");
+            java.nio.file.Path appDataDir = java.nio.file.Paths.get(homeDir, "SafeRoom_Data");
+            com.saferoom.filevault.service.FileVaultService.initialize(appDataDir.toString());
+        } catch (Exception e) {
+            System.err.println("Failed to initialize FileVaultService: " + e.getMessage());
+            e.printStackTrace();
+        }
 
         primaryStage.setResizable(true);
         primaryStage.setScene(scene);
