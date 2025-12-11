@@ -554,28 +554,41 @@ public class P2PConnectionManager {
                 return;
             }
             
-            // Configure STUN/TURN servers for NAT traversal
+            // ═══════════════════════════════════════════════════════════════
+            // ICE Server Configuration (same as WebRTCClient for consistency)
+            // ═══════════════════════════════════════════════════════════════
             List<RTCIceServer> iceServers = new ArrayList<>();
             
-            // Google STUN servers
+            // STUN servers (free, for simple NAT traversal)
             RTCIceServer stunServer = new RTCIceServer();
             stunServer.urls.add("stun:stun.l.google.com:19302");
             stunServer.urls.add("stun:stun1.l.google.com:19302");
             stunServer.urls.add("stun:stun2.l.google.com:19302");
             iceServers.add(stunServer);
             
-            // TODO: Add TURN server for symmetric NAT
-            // RTCIceServer turnServer = new RTCIceServer();
-            // turnServer.urls.add("turn:your-turn-server.com:3478");
-            // turnServer.username = "username";
-            // turnServer.password = "password";
-            // iceServers.add(turnServer);
+            // TURN server (for symmetric NAT - REQUIRED for cross-network calls)
+            RTCIceServer turnServer = new RTCIceServer();
+            turnServer.urls.add("turn:openrelay.metered.ca:80");
+            turnServer.urls.add("turn:openrelay.metered.ca:443");
+            turnServer.urls.add("turn:openrelay.metered.ca:443?transport=tcp");
+            turnServer.username = "openrelayproject";
+            turnServer.password = "openrelayproject";
+            iceServers.add(turnServer);
+            
+            // Alternative TURN (backup)
+            RTCIceServer turnServer2 = new RTCIceServer();
+            turnServer2.urls.add("turn:relay.metered.ca:80");
+            turnServer2.urls.add("turn:relay.metered.ca:443");
+            turnServer2.urls.add("turn:relay.metered.ca:443?transport=tcp");
+            turnServer2.username = "e8dd65b92c62d5e948d06b16";
+            turnServer2.password = "uWdWNmkhvyqTEj3I";
+            iceServers.add(turnServer2);
             
             RTCConfiguration config = new RTCConfiguration();
             config.iceServers = iceServers;
-            config.iceTransportPolicy = RTCIceTransportPolicy.ALL;  // Try all candidates (relay, srflx, host)
+            config.iceTransportPolicy = RTCIceTransportPolicy.ALL;
             
-            System.out.printf("[P2P] Configuring peer connection with %d ICE servers%n", iceServers.size());
+            System.out.printf("[P2P] Configuring peer connection with %d ICE servers (STUN + TURN)%n", iceServers.size());
             
             // Create peer connection
             peerConnection = factory.createPeerConnection(config, new PeerConnectionObserver() {

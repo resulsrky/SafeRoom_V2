@@ -1788,37 +1788,60 @@
 }
 
 /* --- MESAJ BALONCUKLARI (GENEL) --- */
-.message-bubble {
-  -fx-padding: 12px 16px;
-  -fx-text-fill: white;
-  -fx-max-width: 70%;
-  -fx-font-size: 14px;
-  -fx-font-family: "Segoe UI", sans-serif;
-
-  /* Hafif bir gölge ekleyerek derinlik katalım */
+.message-bubble-text {
+  -fx-padding: 10px 14px;
   -fx-effect: dropshadow(three-pass-box, rgba(0, 0, 0, 0.4), 3, 0, 0, 1);
+  -fx-font-size: 14px;
+  -fx-font-family: "Segoe UI", "Helvetica", sans-serif;
 }
 
+.message-text {
+  -fx-font-smoothing_type: lcd;
+}
 
-
-.message-bubble-sent,
-.file-message-bubble.file-bubble-sent {
+.message-bubble-sent {
   -fx-background-color: linear-gradient(to bottom right, #4b3a63 0%, #342943 100%);
-  -fx-background-radius: 10px 10px 0px 10px;
+  -fx-background-radius: 10px 0px 10px 10px;
 }
 
-.message-bubble-received,
-.file-message-bubble.file-bubble-received {
-  -fx-background-color: linear-gradient(to bottom right, #1f1b28 0%, #16131c 100%);
-  -fx-background-radius: 10px 10px 10px 0px;
+.message-bubble-sent .message-text {
+  -fx-fill: white;
 }
+
+.message-bubble-received {
+  -fx-background-color: linear-gradient(to bottom right, #1f1b28 0%, #16131c 100%);
+  -fx-background-radius: 0px 10px 10px 10px;
+}
+
+.message-bubble-received .message-text {
+  -fx-fill: #e5e5e5;
+}
+
+
+/* =============================================================================
+   3. DOSYA MESAJI BALONLARI
+   ============================================================================= */
 
 .file-message-bubble {
   -fx-padding: 12px;
-  -fx-background-radius: 14px;
   -fx-spacing: 6px;
   -fx-effect: dropshadow(three-pass-box, rgba(0, 0, 0, 0.35), 6, 0, 0, 2);
 }
+
+.file-bubble-sent {
+  -fx-background-color: linear-gradient(to bottom right, #4b3a63 0%, #342943 100%);
+  -fx-background-radius: 10px 0px 10px 10px;
+
+}
+
+.file-bubble-received {
+  -fx-background-color: linear-gradient(to bottom right, #1f1b28 0%, #16131c 100%);
+  -fx-background-radius: 0px 10px 10px 10px;
+}
+
+/* =============================================================================
+   4. DOSYA İÇERİK DETAYLARI
+   ============================================================================= */
 
 .file-thumbnail,
 .file-generic-thumb {
@@ -1834,33 +1857,33 @@
 }
 
 .file-card-icon {
-  -fx-font-size: 20px;
+  -fx-font-size: 24px;
   -fx-text-fill: #f8fafc;
 }
 
 .file-name {
   -fx-text-fill: white;
-  -fx-font-weight: 600;
+  -fx-font-weight: bold;
+  -fx-font-size: 13px;
 }
 
-.file-size {
-  -fx-text-fill: #94a3b8;
-  -fx-font-size: 12px;
-}
-
+.file-size,
 .file-status {
   -fx-text-fill: #94a3b8;
-  -fx-font-size: 12px;
+  -fx-font-size: 11px;
 }
+
 
 .image-overlay {
   -fx-alignment: center;
+  -fx-background-radius: 12px;
 }
 
 .image-overlay-text {
   -fx-text-fill: white;
   -fx-font-weight: bold;
   -fx-font-size: 16px;
+  -fx-effect: dropshadow(one-pass-box, black, 2, 1.0, 0, 0);
 }
 
 .interactive-thumb {

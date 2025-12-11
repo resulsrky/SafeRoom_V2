@@ -53,31 +53,33 @@ final class WebRTCPlatformConfig {
         
         if (factory == null) {
             System.out.println("[WebRTC] Factory null - using default codec order");
-            return new WebRTCPlatformConfig(mac || windows, windows, List.of(), platformName);
+            return new WebRTCPlatformConfig(false, windows, List.of(), platformName);
         }
 
         RTCRtpCapabilities senderCaps = factory.getRtpSenderCapabilities(MediaType.VIDEO);
         
-        // Both macOS and Windows benefit from H264 hardware encoding
-        if (mac || windows) {
-            List<RTCRtpCodecCapability> sorted = reorderCodecs(senderCaps, true);
-            if (!sorted.isEmpty()) {
-                System.out.printf("[WebRTC] %s → prioritizing %s for hardware encoding%n",
-                    platformName, sorted.get(0).getName());
-                printAvailableCodecs(sorted);
-            } else {
-                System.out.printf("[WebRTC] %s detected but codec capabilities unavailable%n", platformName);
+        // ═══════════════════════════════════════════════════════════════
+        // CROSS-PLATFORM: Let WebRTC auto-negotiate codecs
+        // Don't force VP8-only as Windows may have issues with software VP8
+        // Just reorder to prefer VP8 but keep all codecs available
+        // ═══════════════════════════════════════════════════════════════
+        
+        List<RTCRtpCodecCapability> sorted = reorderCodecsKeepAll(senderCaps);
+        
+        if (!sorted.isEmpty()) {
+            System.out.printf("[WebRTC] %s → All codecs available (VP8 preferred)%n", platformName);
+            System.out.println("[WebRTC] Codec priority:");
+            for (int i = 0; i < Math.min(5, sorted.size()); i++) {
+                RTCRtpCodecCapability codec = sorted.get(i);
+                if (codec != null && codec.getName() != null) {
+                    System.out.printf("  [%d] %s%n", i + 1, codec.getName());
+                }
             }
-            return new WebRTCPlatformConfig(true, windows, sorted, platformName);
+        } else {
+            System.out.printf("[WebRTC] %s detected but codec capabilities unavailable%n", platformName);
         }
         
-        // Linux: VP8/VP9 preferred (better VAAPI support for some cards)
-        List<RTCRtpCodecCapability> sorted = reorderCodecs(senderCaps, false);
-        if (!sorted.isEmpty()) {
-            System.out.printf("[WebRTC] Linux → using %s (VP8/VP9 preferred)%n", sorted.get(0).getName());
-            printAvailableCodecs(sorted);
-        }
-        return new WebRTCPlatformConfig(false, false, sorted, platformName);
+        return new WebRTCPlatformConfig(false, windows, sorted, platformName);
     }
 
     static WebRTCPlatformConfig empty() {
@@ -132,12 +134,10 @@ final class WebRTCPlatformConfig {
     }
 
     /**
-     * Reorder codecs based on platform preference.
-     * @param capabilities RTP capabilities from factory
-     * @param preferH264 true to prioritize H264 (macOS/Windows), false for VP8/VP9 (Linux)
+     * Reorder codecs - VP8 first but KEEP ALL codecs available.
+     * This allows fallback to H264 if VP8 fails on either platform.
      */
-    private static List<RTCRtpCodecCapability> reorderCodecs(RTCRtpCapabilities capabilities, 
-                                                              boolean preferH264) {
+    private static List<RTCRtpCodecCapability> reorderCodecsKeepAll(RTCRtpCapabilities capabilities) {
         if (capabilities == null || capabilities.getCodecs() == null) {
             return List.of();
         }
@@ -167,21 +167,13 @@ final class WebRTCPlatformConfig {
             return name != null && name.toUpperCase(Locale.ROOT).contains("VP9");
         };
 
-        if (preferH264) {
-            // H264 first, then VP8, then VP9, then others
-            codecs.sort((a, b) -> {
-                int scoreA = isH264.test(a) ? 3 : isVP8.test(a) ? 2 : isVP9.test(a) ? 1 : 0;
-                int scoreB = isH264.test(b) ? 3 : isVP8.test(b) ? 2 : isVP9.test(b) ? 1 : 0;
-                return Integer.compare(scoreB, scoreA);
-            });
-        } else {
-            // VP8 first, then VP9, then H264, then others
-            codecs.sort((a, b) -> {
-                int scoreA = isVP8.test(a) ? 3 : isVP9.test(a) ? 2 : isH264.test(a) ? 1 : 0;
-                int scoreB = isVP8.test(b) ? 3 : isVP9.test(b) ? 2 : isH264.test(b) ? 1 : 0;
-                return Integer.compare(scoreB, scoreA);
-            });
-        }
+        // VP8 first, then H264 (for hardware fallback), then VP9, then others
+        // Keep ALL codecs - don't filter any out
+        codecs.sort((a, b) -> {
+            int scoreA = isVP8.test(a) ? 4 : isH264.test(a) ? 3 : isVP9.test(a) ? 2 : 1;
+            int scoreB = isVP8.test(b) ? 4 : isH264.test(b) ? 3 : isVP9.test(b) ? 2 : 1;
+            return Integer.compare(scoreB, scoreA);
+        });
         
         return Collections.unmodifiableList(codecs);
     }
