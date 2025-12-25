@@ -632,81 +632,79 @@ public class CallManager {
      * This ensures proper transceiver direction matching (SEND_RECV not SEND_ONLY)
      */
     private void handleOffer(WebRTCSignal signal) {
-        // Run on virtual thread with lock to ensure sequential state updates
-        executor.submit(() -> {
-            signalingLock.lock();
-            try {
-                logger.info("Received SDP offer");
+        logger.info("[CallManager] Received SDP offer");
 
-                // Set remote description FIRST
-                webrtcClient.setRemoteDescription("offer", signal.getSdp());
+        // Set remote description FIRST (Async)
+        webrtcClient.setRemoteDescription("offer", signal.getSdp()).thenAccept(v -> {
+            logger.info("[CallManager] Remote description set successfully (async callback)");
 
-                // 🔧 If we're the callee (incoming call accepted), create answer now
-                if (!isOutgoingCall && currentState == CallState.CONNECTING) {
-                    // ═══════════════════════════════════════════════════════════════
-                    // CRITICAL FIX: Add tracks AFTER setRemoteDescription
-                    // This ensures transceivers are properly matched for SEND_RECV
-                    // If tracks are added BEFORE, they become SEND_ONLY and can't receive
-                    // ═══════════════════════════════════════════════════════════════
+            // 🔧 If we're the callee (incoming call accepted), create answer now
+            if (!isOutgoingCall && currentState == CallState.CONNECTING) {
+                // ═══════════════════════════════════════════════════════════════
+                // CRITICAL FIX: Add tracks AFTER setRemoteDescription
+                // This ensures transceivers are properly matched for SEND_RECV
+                // If tracks are added BEFORE, they become SEND_ONLY and can't receive
+                // ═══════════════════════════════════════════════════════════════
 
-                    if (!tracksAddedForIncomingCall) {
-                        logger.info("🎥 Adding media tracks AFTER remote offer (correct order)...");
+                if (!tracksAddedForIncomingCall) {
+                    logger.info("[CallManager] 🎥 Adding media tracks AFTER remote offer (correct order)...");
 
-                        List<CompletableFuture<Void>> trackFutures = new ArrayList<>();
+                    List<CompletableFuture<Void>> trackFutures = new ArrayList<>();
 
-                        if (pendingAudioEnabled) {
-                            logger.info("Adding audio track...");
-                            trackFutures.add(webrtcClient.addAudioTrack());
-                        }
-
-                        if (pendingVideoEnabled) {
-                            logger.info("Adding video track...");
-                            trackFutures.add(webrtcClient.addVideoTrack()
-                                    .orTimeout(5, TimeUnit.SECONDS)
-                                    .thenRun(() -> {
-                                        registerCameraWithScreenShareController();
-                                    }).exceptionally(e -> {
-                                        logger.error("Failed to add video track (timeout or error): " + e.getMessage(),
-                                                e);
-                                        return null;
-                                    }));
-                        }
-
-                        tracksAddedForIncomingCall = true;
-
-                        // 🎥 Notify GUI that local tracks are ready (for CALLEE)
-                        if (onLocalTracksReadyCallback != null) {
-                            logger.info("🎥 Local tracks ready (callee) - notifying GUI");
-                            onLocalTracksReadyCallback.run();
-                        }
-
-                        // Wait for tracks, then create answer
-                        CompletableFuture.allOf(trackFutures.toArray(new CompletableFuture[0]))
-                                .thenRun(() -> {
-                                    logger.info(String.format("Media setup complete. Audio track: %s, Video track: %s",
-                                            webrtcClient.getLocalAudioTrack() != null ? "READY" : "NONE",
-                                            webrtcClient.getLocalVideoTrack() != null ? "READY" : "NONE"));
-
-                                    logger.info("Creating SDP answer (after tracks added)...");
-                                    webrtcClient.createAnswer()
-                                            .orTimeout(5, TimeUnit.SECONDS) // Fix: Timeout
-                                            .thenAccept(sdp -> {
-                                                // Send ANSWER to caller
-                                                signalingClient.sendAnswer(currentCallId, remoteUsername, sdp);
-                                                logger.info("Answer sent to caller");
-                                            }).exceptionally(ex -> {
-                                                logger.error("Failed to create answer: " + ex.getMessage(), ex);
-                                                return null;
-                                            });
-                                });
+                    if (pendingAudioEnabled) {
+                        logger.info("[CallManager] Adding audio track...");
+                        trackFutures.add(webrtcClient.addAudioTrack());
                     }
-                }
 
-                // 🧊 Replay any buffered ICE candidates that arrived before OFFER
-                drainPendingIceCandidates();
-            } finally {
-                signalingLock.unlock();
+                    if (pendingVideoEnabled) {
+                        logger.info("[CallManager] Adding video track...");
+                        trackFutures.add(webrtcClient.addVideoTrack()
+                                .orTimeout(5, TimeUnit.SECONDS)
+                                .thenRun(() -> {
+                                    registerCameraWithScreenShareController();
+                                }).exceptionally(e -> {
+                                    logger.error("Failed to add video track (timeout or error): " + e.getMessage(), e);
+                                    return null;
+                                }));
+                    }
+
+                    tracksAddedForIncomingCall = true;
+
+                    // 🎥 Notify GUI that local tracks are ready (for CALLEE)
+                    if (onLocalTracksReadyCallback != null) {
+                        logger.info("[CallManager] 🎥 Local tracks ready (callee) - notifying GUI");
+                        onLocalTracksReadyCallback.run();
+                    }
+
+                    // Wait for tracks, then create answer
+                    CompletableFuture.allOf(trackFutures.toArray(new CompletableFuture[0]))
+                            .thenRun(() -> {
+                                logger.info(String.format("Media setup complete. Audio track: %s, Video track: %s",
+                                        webrtcClient.getLocalAudioTrack() != null ? "READY" : "NONE",
+                                        webrtcClient.getLocalVideoTrack() != null ? "READY" : "NONE"));
+
+                                logger.info("[CallManager] Creating SDP answer (after tracks added)...");
+                                webrtcClient.createAnswer()
+                                        .orTimeout(5, TimeUnit.SECONDS)
+                                        .thenAccept(sdp -> {
+                                            // Send ANSWER to caller
+                                            signalingClient.sendAnswer(currentCallId, remoteUsername, sdp);
+                                            logger.info("[CallManager] Answer sent to caller");
+                                        }).exceptionally(ex -> {
+                                            logger.error("[CallManager] Failed to create answer: " + ex.getMessage(),
+                                                    ex);
+                                            return null;
+                                        });
+                            });
+                }
             }
+
+            // 🧊 Replay any buffered ICE candidates that arrived before OFFER
+            drainPendingIceCandidates();
+
+        }).exceptionally(e -> {
+            logger.error(String.format("[CallManager] ❌ Failed to set remote description: %s", e.getMessage()), e);
+            return null;
         });
     }
 
@@ -736,13 +734,6 @@ public class CallManager {
             }
         });
     }
-
-    /**
-     * Handle ICE candidate
-     */
-    // 🛑 REMOVED DUPLICATE METHOD
-    // public void addIceCandidate(WebRTCSignal signal) is defined below
-    // private void handleIceCandidate(WebRTCSignal signal) delegates to it
 
     /**
      * Handle ICE candidate

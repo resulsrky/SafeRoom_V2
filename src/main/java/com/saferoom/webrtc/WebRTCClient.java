@@ -819,12 +819,17 @@ public class WebRTCClient {
     /**
      * Set remote SDP (offer or answer)
      */
-    public void setRemoteDescription(String sdpType, String sdp) {
+    /**
+     * Set remote SDP (offer or answer)
+     */
+    public CompletableFuture<Void> setRemoteDescription(String sdpType, String sdp) {
         logger.info(String.format("Setting remote %s", sdpType));
+        CompletableFuture<Void> future = new CompletableFuture<>();
 
         if (peerConnection == null) {
             logger.warn("Peer connection null - skipping");
-            return;
+            future.complete(null);
+            return future;
         }
 
         try {
@@ -837,17 +842,22 @@ public class WebRTCClient {
             peerConnection.setRemoteDescription(description, new SetSessionDescriptionObserver() {
                 @Override
                 public void onSuccess() {
-                    logger.info("Remote description set");
+                    logger.info("Remote description set successfully");
+                    future.complete(null);
                 }
 
                 @Override
                 public void onFailure(String error) {
                     logger.error("Failed to set remote description: " + error, null);
+                    future.completeExceptionally(new Exception(error));
                 }
             });
         } catch (Exception e) {
             logger.error("Exception setting remote description: " + e.getMessage(), e);
+            future.completeExceptionally(e);
         }
+
+        return future;
     }
 
     /**
